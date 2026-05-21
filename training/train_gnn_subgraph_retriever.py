@@ -1,6 +1,7 @@
 import argparse
 import json
 import random
+import string
 import sys
 from pathlib import Path
 from collections import defaultdict
@@ -178,6 +179,7 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
         dataset = infer_dataset_name(example_id, first)
         hop = infer_hop(example_id, first)
         answer_type = infer_answer_type(example_id, first)
+        answer = first.get("answer", first.get("Answer", ""))
 
         candidate_axioms = reconstruct_candidate_axioms(ex_rows)
         axiom_to_idx = {ax: i for i, ax in enumerate(candidate_axioms)}
@@ -240,6 +242,7 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                     ),
                     "dataset": dataset,
                     "hop": hop,
+                    "answer": row.get("answer", row.get("Answer", answer)),
                     "answer_type": answer_type,
                     "task_type": row.get("task_type", row.get("Task Type", "")),
                 }
@@ -263,6 +266,7 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                 "example_id": example_id,
                 "dataset": dataset,
                 "hop": hop,
+                "answer": answer,
                 "answer_type": answer_type,
                 "question": question,
                 "sparql_query": sparql_query,
@@ -279,35 +283,321 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
 # Model scoring helpers
 # =========================================================
 
+_ARTICLES = {"a", "an", "the"}
 
-def adjusted_score(
-    row: Dict,
-    score_mode: str = "neural",
-    size_penalty: float = 0.01,
-) -> float:
-    """
-    Ranking-time score.
 
-    For GNN, default should be neural while the ranker is learning completeness.
-    Minimality adjustment can be tested after the GNN starts retrieving complete supports.
+def _normalize_text_for_chain(text: str) -> str:
+    text = str(text or "").lower()
+    text = text.translate(str.maketrans("", "", string.punctuation))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _tokens_for_chain(text: str) -> List[str]:
+    return [
+        t
+        for t in _normalize_text_for_chain(text).split()
+        if t and t not in _ARTICLES and len(t) > 1
+    ]
+
+
+def _token_set_for_chain(text: str) -> Set[str]:
+    return set(_tokens_for_chain(text))
+
+
+def _parse_sent_unit(unit: str) -> Tuple[str, int, str]:
     """
+    SENT::Page Title::3::sentence text
+    -> title, sentence index, sentence text
+    """
+    parts = str(unit).split("::", 3)
+    if len(parts) == 4 and parts[0] == "SENT":
+        title = parts[1]
+        try:
+            idx = int(parts[2])
+        except Exception:
+            idx = -1
+        sent = parts[3]
+        return title, idx, sent
+    return "", -1, str(unit)
+
+
+def _is_text_dataset(row: Dict[str, Any]) -> bool:
+    dataset = str(row.get("dataset", "") or row.get("source_dataset", ""))
+    return dataset in {
+        "HotpotQA",
+        "2WikiMultiHopQA",
+        "2WikiMultihopQA",
+        "MuSiQue",
+        "Musique",
+    }
+
+
+def _question_title_coverage(question: str, units: List[str]) -> float:
+    """
+    How much of the question is covered by page titles in the candidate?
+    Useful because HotpotQA/2Wiki questions often mention entities whose
+    pages should appear in support.
+    """
+    q_tokens = _token_set_for_chain(question)
+    if not q_tokens:
+        return 0.0
+
+    title_tokens: Set[str] = set()
+    for u in units:
+        title, _, _ = _parse_sent_unit(u)
+        title_tokens |= _token_set_for_chain(title)
+
+    return len(q_tokens & title_tokens) / max(len(q_tokens), 1)
+
+
+def _candidate_question_overlap(question: str, units: List[str]) -> float:
+    q_tokens = _token_set_for_chain(question)
+    if not q_tokens:
+        return 0.0
+
+    cand_text = " ".join(units)
+    c_tokens = _token_set_for_chain(cand_text)
+
+    return len(q_tokens & c_tokens) / max(len(q_tokens), 1)
+
+
+def _answer_overlap(answer: str, units: List[str]) -> float:
+    """
+    Gold-free at inference only if answer is known. For dataset evaluation,
+    answer is known in the row. For real deployment, disable this or replace
+    with answer-candidate generation signal.
+
+    For yes/no answers, do not reward literal 'yes'/'no'.
+    """
+    ans = _normalize_text_for_chain(answer)
+    if not ans or ans in {"yes", "no", "noanswer"}:
+        return 0.0
+
+    cand = _normalize_text_for_chain(" ".join(units))
+
+    if ans and ans in cand:
+        return 1.0
+
+    a_tokens = _token_set_for_chain(ans)
+    c_tokens = _token_set_for_chain(cand)
+
+    if not a_tokens:
+        return 0.0
+
+    return len(a_tokens & c_tokens) / max(len(a_tokens), 1)
+
+
+def _cross_page_score(units: List[str]) -> float:
+    titles = []
+    for u in units:
+        title, _, _ = _parse_sent_unit(u)
+        if title:
+            titles.append(title)
+
+    unique_titles = len(set(titles))
+
+    if unique_titles >= 3:
+        return 1.0
+    if unique_titles == 2:
+        return 0.8
+    if unique_titles == 1:
+        return 0.2
+    return 0.0
+
+
+def _bridge_overlap_score(units: List[str]) -> float:
+    """
+    Measures whether titles/entities from one sentence appear in another
+    sentence. This approximates chain connectivity:
+      Page A sentence mentions entity B,
+      Page B sentence gives next evidence.
+    """
+    parsed = [_parse_sent_unit(u) for u in units]
+    if len(parsed) < 2:
+        return 0.0
+
+    titles = [title for title, _, _ in parsed if title]
+    sentences = [sent for _, _, sent in parsed]
+
+    if not titles or not sentences:
+        return 0.0
+
+    hits = 0
+    possible = 0
+
+    for i, title in enumerate(titles):
+        title_tokens = _token_set_for_chain(title)
+        if not title_tokens:
+            continue
+
+        for j, sent in enumerate(sentences):
+            if i == j:
+                continue
+
+            possible += 1
+            sent_tokens = _token_set_for_chain(sent)
+
+            # partial title overlap is enough, because titles can be long
+            if title_tokens & sent_tokens:
+                hits += 1
+
+    if possible == 0:
+        return 0.0
+
+    return hits / possible
+
+
+def _comparison_question_score(question: str, units: List[str]) -> float:
+    """
+    For comparison questions, reward candidates covering multiple pages/entities.
+    2Wiki often asks: same country? same occupation? who is older? etc.
+    """
+    q = _normalize_text_for_chain(question)
+
+    comparison_markers = [
+        "same",
+        "both",
+        "older",
+        "younger",
+        "larger",
+        "smaller",
+        "earlier",
+        "later",
+        "more",
+        "less",
+        "which",
+        "who",
+        "are",
+        "did",
+        "do",
+    ]
+
+    is_comparison = any(m in q.split() for m in comparison_markers)
+    if not is_comparison:
+        return 0.0
+
+    titles = []
+    for u in units:
+        title, _, _ = _parse_sent_unit(u)
+        if title:
+            titles.append(title)
+
+    unique_titles = len(set(titles))
+
+    # Comparison support usually needs evidence for two or more entities.
+    if unique_titles >= 4:
+        return 1.0
+    if unique_titles == 3:
+        return 0.85
+    if unique_titles == 2:
+        return 0.65
+    return 0.0
+
+
+def _size_chain_penalty(units: List[str]) -> float:
+    """
+    Penalize excessive context, but allow 2Wiki-style 4-hop support.
+    """
+    size = len(units)
+
+    if size <= 2:
+        return 0.0
+    if size == 3:
+        return 0.002
+    if size == 4:
+        return 0.004
+
+    return 0.010 * (size - 4)
+
+
+def nesyqa_text_chain_adjustment(row: Dict[str, Any]) -> float:
+    """
+    Text-specific symbolic reranking adjustment.
+
+    Designed for HotpotQA / 2Wiki sentence evidence.
+
+    Rewards:
+      - question/title coverage
+      - question/candidate overlap
+      - cross-page support
+      - bridge connectivity between titles and sentences
+      - comparison-question coverage
+      - answer-bearing evidence when answer is not yes/no
+
+    Penalizes:
+      - excessive support size
+      - duplicate-page-only candidates
+    """
+    question = str(row.get("question", ""))
+    answer = str(row.get("answer", ""))
+    units = row.get("subgraph_units", []) or []
+
+    if not units:
+        return 0.0
+
+    q_title = _question_title_coverage(question, units)
+    q_overlap = _candidate_question_overlap(question, units)
+    answer_sig = _answer_overlap(answer, units)
+    cross_page = _cross_page_score(units)
+    bridge = _bridge_overlap_score(units)
+    comparison = _comparison_question_score(question, units)
+    size_pen = _size_chain_penalty(units)
+
+    titles = [_parse_sent_unit(u)[0] for u in units if _parse_sent_unit(u)[0]]
+    unique_titles = len(set(titles))
+    duplicate_page_pen = 0.0
+    if len(units) >= 2 and unique_titles <= 1:
+        duplicate_page_pen = 0.010
+
+    return (
+        0.030 * q_title
+        + 0.020 * q_overlap
+        + 0.020 * cross_page
+        + 0.025 * bridge
+        + 0.020 * comparison
+        + 0.020 * answer_sig
+        - size_pen
+        - duplicate_page_pen
+    )
+
+
+def adjusted_score(row, score_mode="neural", size_penalty=0.01):
+    if score_mode == "neural":
+        return float(row["score"])
+
     if score_mode == "minimality_adjusted":
-        return row["score"] - size_penalty * row["subgraph_size"]
+        return float(row["score"]) - size_penalty * int(
+            row.get("subgraph_size", len(row.get("subgraph_units", [])))
+        )
 
     if score_mode == "completeness_adjusted":
         feats = row.get("symbolic_features", [])
         fact_rule_mix = feats[4] if len(feats) > 4 else 0.0
         has_query_property_rule = feats[2] if len(feats) > 2 else 0.0
-        oversize_penalty = max(0, row["subgraph_size"] - 2)
+        subgraph_size = int(
+            row.get("subgraph_size", len(row.get("subgraph_units", [])))
+        )
+        oversize_penalty = max(0, subgraph_size - 2)
 
         return (
-            row["score"]
-            + 0.02 * fact_rule_mix
-            + 0.02 * has_query_property_rule
-            - 0.005 * oversize_penalty
+            float(row["score"])
+            + 0.02 * float(fact_rule_mix)
+            + 0.02 * float(has_query_property_rule)
+            - 0.005 * float(oversize_penalty)
         )
 
-    return row["score"]
+    if score_mode == "nesyqa_compact":
+        if _is_text_dataset(row):
+            return float(row["score"]) + nesyqa_text_compact_adjustment(row)
+        return float(row["score"]) + nesyqa_compact_adjustment(row)
+
+    if score_mode == "nesyqa_text_chain":
+        if _is_text_dataset(row):
+            return float(row["score"]) + nesyqa_text_chain_adjustment(row)
+        return float(row["score"]) + nesyqa_compact_adjustment(row)
+
+    raise ValueError(f"Unknown score_mode: {score_mode}")
 
 
 def encode_example_graph(
@@ -704,6 +994,52 @@ def nesyqa_compact_adjustment(
     )
 
 
+def _is_text_dataset(row):
+    dataset = str(row.get("dataset", "") or row.get("source_dataset", ""))
+    return dataset in {"HotpotQA", "2WikiMultiHopQA", "2WikiMultihopQA"}
+
+
+def nesyqa_text_compact_adjustment(
+    row,
+    question_overlap_bonus=0.020,
+    answer_overlap_bonus=0.015,
+    cross_page_bonus=0.020,
+    multi_sentence_bonus=0.015,
+    size_penalty=0.006,
+):
+    """
+    Gold-free compact symbolic adjustment for text-based multi-hop QA.
+
+    Expects symbolic_features:
+      0 question-token overlap
+      1 answer-token overlap
+      2 unique page ratio
+      3 cross-page indicator
+      4 multi-sentence indicator
+      5 size normalized
+      6 average sentence position
+      7 title-question overlap
+    """
+    feats = row.get("symbolic_features", [])
+    units = row.get("subgraph_units", [])
+    size = int(row.get("subgraph_size", len(units)))
+
+    q_overlap = feats[0] if len(feats) > 0 else 0.0
+    answer_overlap = feats[1] if len(feats) > 1 else 0.0
+    cross_page = feats[3] if len(feats) > 3 else 0.0
+    multi_sentence = feats[4] if len(feats) > 4 else 0.0
+
+    oversize = max(0, size - 2)
+
+    return (
+        question_overlap_bonus * float(q_overlap)
+        + answer_overlap_bonus * float(answer_overlap)
+        + cross_page_bonus * float(cross_page)
+        + multi_sentence_bonus * float(multi_sentence)
+        - size_penalty * float(oversize)
+    )
+
+
 def compute_adjusted_score(
     row: Dict[str, Any],
     neural_score: float,
@@ -714,12 +1050,13 @@ def compute_adjusted_score(
     Final score used for ranking candidate support subgraphs.
     """
     size = subgraph_size(row)
+    base_score = float(neural_score)
 
     if score_mode == "neural":
-        return float(neural_score)
+        return base_score
 
     if score_mode == "minimality_adjusted":
-        return float(neural_score) - size_penalty * size
+        return base_score - size_penalty * size
 
     if score_mode == "completeness_adjusted":
         feats = row.get("symbolic_features", [])
@@ -731,14 +1068,23 @@ def compute_adjusted_score(
         oversize_penalty = max(0, size - 2)
 
         return (
-            float(neural_score)
+            base_score
             + 0.02 * float(fact_rule_mix_value)
             + 0.02 * float(has_query_property_rule)
             - 0.005 * float(oversize_penalty)
         )
 
     if score_mode == "nesyqa_compact":
-        return float(neural_score) + nesyqa_compact_adjustment(row)
+        if _is_text_dataset(row):
+            return base_score + nesyqa_text_compact_adjustment(row)
+
+        return base_score + nesyqa_compact_adjustment(row)
+
+    if score_mode == "nesyqa_text_chain":
+        if _is_text_dataset(row):
+            return base_score + nesyqa_text_chain_adjustment(row)
+
+        return base_score + nesyqa_compact_adjustment(row)
 
     raise ValueError(f"Unknown score_mode: {score_mode}")
 
@@ -891,6 +1237,7 @@ def evaluate(
                 {
                     "example_id": example["example_id"],
                     "question": example["question"],
+                    "answer": example.get("answer", ""),
                     "top1_subgraph_units": top1["subgraph_units"],
                     "top1_score": top1["score"],
                     "top1_adjusted_score": top1["adjusted_score"],
@@ -1262,6 +1609,7 @@ def parse_args():
             "minimality_adjusted",
             "completeness_adjusted",
             "nesyqa_compact",
+            "nesyqa_text_chain",
         ],
     )
     parser.add_argument("--size-penalty", type=float, default=0.01)

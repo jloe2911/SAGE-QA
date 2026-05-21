@@ -397,6 +397,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--results-root", default="outputs/final_results")
     parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=None,
+        help=(
+            "Dataset result directories to collect. Defaults to all result "
+            "directories under --results-root except logs."
+        ),
+    )
+    parser.add_argument(
         "--output-csv", default="outputs/final_results/final_summary.csv"
     )
     parser.add_argument(
@@ -408,7 +417,17 @@ def main():
 
     all_rows = []
 
-    for dataset_name in ["FamilyOWL_1hop", "FamilyOWL_2hop"]:
+    dataset_names = args.datasets
+    if dataset_names is None:
+        if not root.exists():
+            raise RuntimeError(f"Results root does not exist: {root}")
+        dataset_names = [
+            path.name
+            for path in sorted(root.iterdir())
+            if path.is_dir() and path.name != "logs"
+        ]
+
+    for dataset_name in dataset_names:
         dataset_dir = root / dataset_name
 
         if not dataset_dir.exists():
@@ -424,16 +443,13 @@ def main():
     model_order = {
         "Random Subgraph": 0,
         "Random Axiom": 1,
-        "Lexical Axiom": 2,
-        "Lexical Subgraph": 3,
+        "Lexical Subgraph": 2,
+        "Lexical Axiom": 3,
         "GNN Subgraph": 4,
         "NeSyQA": 5,
     }
 
-    dataset_order = {
-        "FamilyOWL_1hop": 0,
-        "FamilyOWL_2hop": 1,
-    }
+    dataset_order = {name: i for i, name in enumerate(dataset_names)}
 
     type_order = {
         "ALL": 0,

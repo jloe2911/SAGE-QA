@@ -207,8 +207,11 @@ marimo/_lsp/
 __marimo__/
 
 # Experiment data and artifacts
-FamilyOWL_*.json
 data/FamilyOWL_*/
-data/*_subgraph_retrieval.jsonl
+data/OWL2Bench_*/
+data/HotpotQA/
+data/2WikiMultiHopQA/
+data/raw/
 outputs/
 checkpoints/
+plots/
