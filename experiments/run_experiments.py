@@ -536,21 +536,56 @@ def count_llm_answers(path: Path) -> Dict[str, int]:
     }
 
 
-def load_retrieval_metrics_from_test_metrics(
-    method_out_dir: Path, top_k: int
-) -> Dict[str, float]:
-    path = method_out_dir / "test_metrics.json"
+def load_retrieval_metrics(method_out_dir: Path, top_k: int) -> Dict[str, float]:
+    metrics_path = method_out_dir / "test_metrics.json"
 
-    if not path.exists():
+    if metrics_path.exists():
+        with metrics_path.open("r", encoding="utf-8") as f:
+            m = json.load(f)
+
+        exact = m.get(f"exact_hit@{top_k}")
+        contained = m.get(f"contains_gold_hit@{top_k}")
+        support_f1 = m.get(f"best_set_f1@{top_k}")
+
+        if exact is not None and contained is not None and support_f1 is not None:
+            return {
+                f"exact@{top_k}": exact,
+                f"contained@{top_k}": contained,
+                f"support_set_f1@{top_k}": support_f1,
+            }
+
+    details_path = method_out_dir / "test_details.json"
+
+    if not details_path.exists():
         return {}
 
-    with path.open("r", encoding="utf-8") as f:
-        m = json.load(f)
+    with details_path.open("r", encoding="utf-8") as f:
+        details = json.load(f)
+
+    if not details:
+        return {}
+
+    exact_scores = []
+    contained_scores = []
+    f1_scores = []
+
+    for ex in details:
+        top = ex.get("top5", [])[:top_k]
+
+        exact_scores.append(
+            float(any(c.get("exact_match_any_gold", False) for c in top))
+        )
+        contained_scores.append(
+            float(any(c.get("contains_any_gold_explanation", False) for c in top))
+        )
+        f1_scores.append(
+            max([float(c.get("best_set_f1_to_gold", 0.0)) for c in top] or [0.0])
+        )
 
     return {
-        f"exact@{top_k}": m.get(f"exact_hit@{top_k}"),
-        f"contained@{top_k}": m.get(f"contains_gold_hit@{top_k}"),
-        f"support_set_f1@{top_k}": m.get(f"best_set_f1@{top_k}"),
+        f"exact@{top_k}": sum(exact_scores) / len(exact_scores),
+        f"contained@{top_k}": sum(contained_scores) / len(contained_scores),
+        f"support_set_f1@{top_k}": sum(f1_scores) / len(f1_scores),
     }
 
 
@@ -769,7 +804,7 @@ def run_experiment(args) -> None:
 
             llm_stats = count_llm_answers(llm_answers_path) if not args.dry_run else {}
 
-            retrieval_metrics = load_retrieval_metrics_from_test_metrics(
+            retrieval_metrics = load_retrieval_metrics(
                 method_out_dir=method_out_dir,
                 top_k=args.top_k,
             )
