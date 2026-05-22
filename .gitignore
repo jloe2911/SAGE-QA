@@ -208,10 +208,9 @@ __marimo__/
 
 # Experiment data and artifacts
 data/FamilyOWL_*/
-data/OWL2Bench_*/
 data/HotpotQA/
 data/2WikiMultiHopQA/
-data/raw/
+data/raw/*
+!data/raw/family.zip
 outputs/
 checkpoints/
-plots/

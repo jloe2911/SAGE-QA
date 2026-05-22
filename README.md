@@ -13,6 +13,32 @@ On Windows PowerShell:
 .venv\Scripts\Activate.ps1
 ```
 
+## Input Data
+
+Raw input files live under `data/raw/`. The repository tracks only the small
+OWL input archive at `data/raw/family.zip`; extract it before building the OWL
+retrieval datasets:
+
+```powershell
+Expand-Archive -Path data/raw/family.zip -DestinationPath data/raw -Force
+```
+
+HotpotQA and 2WikiMultiHopQA are not committed. Download their parquet inputs
+from Hugging Face into the paths expected by the text-QA builders:
+
+```powershell
+hf download hotpotqa/hotpot_qa distractor/ `
+  --repo-type dataset `
+  --local-dir data/raw/hotpot_qa
+
+hf download framolfese/2WikiMultihopQA data/ `
+  --repo-type dataset `
+  --local-dir data/raw/2WikiMultihopQA
+```
+
+The builders read these raw benchmark files and write processed retrieval
+datasets to the other directories under `data/`.
+
 ## Build OWL Retrieval Data
 
 OWL-style datasets are built from the project benchmark JSON files. This is a
