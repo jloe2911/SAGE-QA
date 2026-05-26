@@ -76,34 +76,70 @@ def get_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
 
 
 def build_prompt(question: str, support_units: List[str]) -> str:
-    evidence_lines = []
+    reasoning_lines = []
     for i, unit in enumerate(support_units, start=1):
         title, idx, sent = parse_sentence_unit(unit)
         if title and idx >= 0:
-            evidence_lines.append(f"[{i}] ({title}, sentence {idx}) {sent}")
+            reasoning_lines.append(f"[{i}] {title} -> sentence {idx} -> {sent}")
         else:
-            evidence_lines.append(f"[{i}] {sent}")
+            reasoning_lines.append(f"[{i}] Evidence -> {sent}")
 
-    evidence = "\n".join(evidence_lines)
+    reasoning_context = (
+        "\n".join(reasoning_lines)
+        if reasoning_lines
+        else "No retrieved reasoning paths."
+    )
 
-    return f"""You are answering a HotpotQA multi-hop question.
+    return f"""You are answering a multi-hop question using retrieved reasoning paths.
 
-Use only the provided evidence. Do not use outside knowledge.
-Return a short answer, not a full sentence, unless the answer is yes or no.
-Then provide a brief explanation grounded in the evidence.
+Reasoning Paths:
+{reasoning_context}
 
 Question:
 {question}
 
-Evidence:
-{evidence}
+Instructions:
+- Use only the reasoning paths above. Do not use outside knowledge.
+- First identify the minimal path evidence needed to answer, but do not show hidden reasoning outside JSON.
+Return the shortest possible answer:
+- For yes/no questions, answer exactly "yes" or "no".
+- For entity, title, date, number, or place questions, copy the exact answer span from the evidence when possible.
+- For multiple answers, separate items with semicolons.
+- If the reasoning paths are insufficient, answer "unknown".
+- Provide a one-sentence explanation grounded in the reasoning paths.
 
-Return valid JSON with exactly these keys:
+Return valid JSON only, with exactly these keys:
 {{
   "answer": "...",
   "explanation": "..."
 }}
 """
+
+
+def is_yes_no_question(question: str) -> bool:
+    return bool(
+        re.match(
+            r"^\s*(is|are|was|were|do|does|did|has|have|had|can|could|should|would)\b",
+            str(question or "").lower(),
+        )
+    )
+
+
+def normalize_generated_answer(question: str, answer: str) -> str:
+    answer = str(answer or "").strip()
+    if not answer:
+        return answer
+
+    if is_yes_no_question(question):
+        normalized = answer.lower()
+        if normalized in {"yes", "true"} or normalized.startswith("yes,"):
+            return "yes"
+        if normalized in {"no", "false"} or normalized.startswith("no,"):
+            return "no"
+
+    if answer.lower() in {"unknown", "insufficient information"}:
+        return "unknown"
+    return answer
 
 
 def extract_json_object(text: str) -> Dict[str, Any]:
@@ -247,7 +283,9 @@ def generate_answers(
                 raise ValueError(f"Unknown backend: {backend}")
 
             parsed = extract_json_object(raw)
-            predicted_answer = str(parsed.get("answer", "")).strip()
+            predicted_answer = normalize_generated_answer(
+                question, str(parsed.get("answer", "")).strip()
+            )
             explanation = str(parsed.get("explanation", "")).strip()
 
             row = {

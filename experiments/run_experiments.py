@@ -76,11 +76,26 @@ METHODS = {
         "score_mode": "nesyqa_text_chain",
         "valid_for": ["text"],
     },
+    "gnn_rag": {
+        "display": "GNN-RAG",
+        "needs_training": False,
+        "details_subdir": "gnn_rag",
+        "score_mode": None,
+        "valid_for": ["text", "owl"],
+        "gnn_rag": True,
+    },
     "nesyqa_compact": {
         "display": "NeSyQA Compact",
         "needs_training": True,
         "details_subdir": "gnn_nesyqa_compact",
         "score_mode": "nesyqa_compact",
+        "valid_for": ["owl"],
+    },
+    "nesyqa_proof": {
+        "display": "NeSyQA Proof",
+        "needs_training": True,
+        "details_subdir": "gnn_nesyqa_proof",
+        "score_mode": "nesyqa_proof",
         "valid_for": ["owl"],
     },
 }
@@ -167,6 +182,32 @@ def write_json(path: Path, obj) -> None:
         json.dump(obj, f, indent=2, ensure_ascii=False)
 
 
+def jsonl_example_ids(path: Path) -> set[str]:
+    ids = set()
+    if not path.exists():
+        return ids
+
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                row = json.loads(line)
+                example_id = row.get("example_id")
+                if example_id:
+                    ids.add(str(example_id))
+
+    return ids
+
+
+def details_example_ids(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+
+    with path.open("r", encoding="utf-8") as f:
+        rows = json.load(f)
+
+    return {str(row["example_id"]) for row in rows if row.get("example_id")}
+
+
 def load_metrics_json(path: Path) -> Dict[str, float]:
     with path.open("r", encoding="utf-8") as f:
         obj = json.load(f)
@@ -186,7 +227,7 @@ def default_methods_for_dataset(dataset_type: str) -> List[str]:
     if dataset_type == "text":
         return ["lexical_subgraph", "gnn_neural", "nesyqa_text_chain"]
     if dataset_type == "owl":
-        return ["lexical_subgraph", "gnn_neural", "nesyqa_compact"]
+        return ["lexical_subgraph", "gnn_neural", "nesyqa_compact", "nesyqa_proof"]
     raise ValueError(f"Unknown dataset type: {dataset_type}")
 
 
@@ -362,10 +403,26 @@ def run_llm_generation(
     skip_llm_if_exists: bool,
     resume_llm: bool,
     max_llm_examples: int,
+    answer_only_paths: List[Path] | None = None,
 ) -> None:
+    existing_answer_only = [
+        str(path) for path in answer_only_paths or [] if path.exists()
+    ]
+
     if output_jsonl.exists() and skip_llm_if_exists:
-        log(f"LLM answers already exist, skipping: {output_jsonl}")
-        return
+        needed_ids = details_example_ids(details_path)
+        for path in answer_only_paths or []:
+            needed_ids.update(jsonl_example_ids(path))
+
+        if needed_ids and not needed_ids.issubset(jsonl_example_ids(output_jsonl)):
+            log(
+                f"LLM answers exist but are missing current examples; "
+                f"continuing generation: {output_jsonl}"
+            )
+            resume_llm = True
+        else:
+            log(f"LLM answers already exist, skipping: {output_jsonl}")
+            return
 
     if not os.getenv("OPENAI_API_KEY") and not dry_run:
         raise EnvironmentError(
@@ -398,6 +455,9 @@ def run_llm_generation(
     if max_llm_examples > 0:
         cmd.extend(["--max-examples", str(max_llm_examples)])
 
+    if existing_answer_only:
+        cmd.extend(["--answer-only", *existing_answer_only])
+
     if resume_llm and cfg["type"] == "owl":
         cmd.append("--resume")
 
@@ -406,6 +466,228 @@ def run_llm_generation(
         f"top_k={top_k}, model={reader_model}"
     )
     run_cmd(cmd, dry_run=dry_run)
+
+
+def run_gnn_rag_generation(
+    dataset_key: str,
+    cfg: Dict,
+    details_path: Path,
+    output_jsonl: Path,
+    top_k: int,
+    reader_model: str,
+    retriever_epochs: int,
+    dry_run: bool,
+    resume_llm: bool,
+    max_llm_examples: int,
+    text_max_candidates: int = 5,
+    answer_only_paths: List[Path] | None = None,
+) -> None:
+    if not os.getenv("OPENAI_API_KEY") and not dry_run:
+        raise EnvironmentError(
+            "OPENAI_API_KEY is not set in this terminal. "
+            "Set it before running GNN-RAG generation."
+        )
+
+    repo_root = Path.cwd()
+    gnn_rag_repo = repo_root / "third_party" / "GNN-RAG"
+    gnn_root = gnn_rag_repo / "gnn"
+    llm_root = gnn_rag_repo / "llm"
+    ensure_file(gnn_root / "main.py", "GNN-RAG retriever")
+    ensure_file(
+        llm_root / "src" / "qa_prediction" / "predict_answer.py", "GNN-RAG predictor"
+    )
+
+    adapter_dataset = f"nesyqa-{dataset_key}"
+    gnn_data_dir = gnn_root / "data" / adapter_dataset
+    gnn_checkpoint_dir = gnn_root / "checkpoint" / adapter_dataset
+    gnn_experiment = f"rearev_lstm_{adapter_dataset}"
+    gnn_info_path = gnn_checkpoint_dir / f"{gnn_experiment}_test.info"
+    llm_data_dir = llm_root / "data" / adapter_dataset
+    llm_gnn_dir = llm_root / "results" / "gnn" / adapter_dataset / "rearev-lstm"
+    predict_root = llm_root / "results" / "NeSyQA-GNN-RAG"
+    raw_predictions = (
+        predict_root
+        / adapter_dataset
+        / reader_model
+        / "test"
+        / "no_rule"
+        / "False"
+        / "predictions.jsonl"
+    )
+
+    if cfg["type"] == "text":
+        prepare_cmd = [
+            sys.executable,
+            "data_processing/prepare_text_gnn_rag.py",
+            "--data-dir",
+            cfg["data_dir"],
+            "--gnn-data-dir",
+            str(gnn_data_dir),
+            "--details-output",
+            str(details_path),
+            "--max-candidates",
+            str(max(1, text_max_candidates)),
+        ]
+        log(f"Preparing text data for upstream GNN-RAG: dataset={cfg['display']}")
+    else:
+        prepare_cmd = [
+            sys.executable,
+            "data_processing/prepare_familyowl_gnn_rag.py",
+            "--data-dir",
+            cfg["data_dir"],
+            "--gnn-data-dir",
+            str(gnn_data_dir),
+            "--details-output",
+            str(details_path),
+        ]
+        log(f"Preparing FamilyOWL data for upstream GNN-RAG: dataset={cfg['display']}")
+
+    run_cmd(prepare_cmd, dry_run=dry_run)
+
+    if not dry_run:
+        gnn_checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    train_cmd = [
+        sys.executable,
+        str(gnn_root / "main.py"),
+        "ReaRev",
+        "--entity_dim",
+        "50",
+        "--num_epoch",
+        str(max(1, retriever_epochs)),
+        "--batch_size",
+        "8",
+        "--eval_every",
+        "1",
+        "--data_folder",
+        str(gnn_data_dir) + os.sep,
+        "--lm",
+        "lstm",
+        "--num_iter",
+        "2",
+        "--num_ins",
+        "2",
+        "--num_gnn",
+        "3",
+        "--relation_word_emb",
+        "false",
+        "--checkpoint_dir",
+        str(gnn_checkpoint_dir),
+        "--experiment_name",
+        gnn_experiment,
+        "--name",
+        adapter_dataset,
+    ]
+    log(f"Training upstream GNN-RAG retriever: dataset={cfg['display']}")
+    run_cmd(train_cmd, dry_run=dry_run)
+
+    eval_cmd = [
+        sys.executable,
+        str(gnn_root / "main.py"),
+        "ReaRev",
+        "--entity_dim",
+        "50",
+        "--data_folder",
+        str(gnn_data_dir) + os.sep,
+        "--lm",
+        "lstm",
+        "--num_iter",
+        "2",
+        "--num_ins",
+        "2",
+        "--num_gnn",
+        "3",
+        "--relation_word_emb",
+        "false",
+        "--checkpoint_dir",
+        str(gnn_checkpoint_dir),
+        "--experiment_name",
+        gnn_experiment,
+        "--load_experiment",
+        f"{gnn_experiment}-final.ckpt",
+        "--is_eval",
+        "--name",
+        adapter_dataset,
+    ]
+    log(f"Evaluating upstream GNN-RAG retriever: dataset={cfg['display']}")
+    run_cmd(eval_cmd, dry_run=dry_run)
+
+    if not dry_run:
+        ensure_file(gnn_info_path, "GNN-RAG retriever test.info")
+        llm_data_dir.mkdir(parents=True, exist_ok=True)
+        llm_gnn_dir.mkdir(parents=True, exist_ok=True)
+        for split in ("test",):
+            (llm_data_dir / f"{split}.json").write_text(
+                (gnn_data_dir / f"{split}.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (llm_gnn_dir / f"{split}.json").write_text(
+                (gnn_data_dir / f"{split}.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+        (llm_gnn_dir / "test.info").write_text(
+            gnn_info_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+    log(
+        f"Running upstream GNN-RAG predictor: dataset={cfg['display']}, "
+        f"model={reader_model}"
+    )
+    predict_cmd = [
+        sys.executable,
+        "src/qa_prediction/predict_answer.py",
+        "--data_path",
+        "data",
+        "--d",
+        adapter_dataset,
+        "--split",
+        "test",
+        "--model_name",
+        reader_model,
+        "--prompt_path",
+        "prompts/llama2_predict.txt",
+        "--rule_path_g1",
+        str(Path("results") / "gnn" / adapter_dataset / "rearev-lstm" / "test.info"),
+        "--rule_path_g2",
+        "None",
+        "--predict_path",
+        str(Path("results") / "NeSyQA-GNN-RAG"),
+        "-n",
+        "1",
+    ]
+
+    if not resume_llm:
+        predict_cmd.append("--force")
+
+    print("\n" + "=" * 100, flush=True)
+    log("RUN:")
+    print(" ".join(predict_cmd), flush=True)
+    print("=" * 100, flush=True)
+
+    if not dry_run:
+        env = child_env()
+        env["PYTHONPATH"] = str(llm_root / "src")
+        env["HF_HOME"] = str(repo_root / ".cache" / "hf")
+        env["HF_DATASETS_CACHE"] = str(repo_root / ".cache" / "hf" / "datasets")
+        Path(env["HF_DATASETS_CACHE"]).mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(predict_cmd, cwd=llm_root, text=True, env=env)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"GNN-RAG predictor failed for {dataset_key} with exit code {result.returncode}"
+            )
+        ensure_file(raw_predictions, "GNN-RAG raw predictions")
+
+    convert_cmd = [
+        sys.executable,
+        "evaluation/convert_gnn_rag_predictions.py",
+        "--input",
+        str(raw_predictions),
+        "--output",
+        str(output_jsonl),
+    ]
+    log(f"Converting GNN-RAG predictions: {raw_predictions}")
+    run_cmd(convert_cmd, dry_run=dry_run)
 
 
 def export_text_predictions(
@@ -478,10 +760,25 @@ def evaluate_owl_predictions(
     top_k: int,
     dry_run: bool,
     resume: bool,
+    answer_only_paths: List[Path] | None = None,
 ) -> Dict[str, float]:
     if resume and metrics_path.exists():
-        log(f"Reusing OWL metrics: {metrics_path}")
-        return load_metrics_json(metrics_path)
+        metrics = load_metrics_json(metrics_path)
+        expected_answer_only = sum(
+            len(jsonl_example_ids(path))
+            for path in answer_only_paths or []
+            if path.exists()
+        )
+        saved_answer_only = int(metrics.get("answer_only_examples", 0))
+
+        if expected_answer_only and saved_answer_only != expected_answer_only:
+            log(
+                f"OWL metrics exist but answer-only count changed "
+                f"({saved_answer_only} -> {expected_answer_only}); recomputing."
+            )
+        else:
+            log(f"Reusing OWL metrics: {metrics_path}")
+            return metrics
 
     cmd = [
         sys.executable,
@@ -495,6 +792,12 @@ def evaluate_owl_predictions(
         "--output",
         str(metrics_path),
     ]
+
+    existing_answer_only = [
+        str(path) for path in answer_only_paths or [] if path.exists()
+    ]
+    if existing_answer_only:
+        cmd.extend(["--answer-only", *existing_answer_only])
 
     log(f"Evaluating OWL predictions: {details_path}")
     stdout = capture_cmd(cmd, dry_run=dry_run)
@@ -533,6 +836,21 @@ def count_llm_answers(path: Path) -> Dict[str, int]:
             1 for r in rows if not str(r.get("predicted_answer", "")).strip()
         ),
         "llm_errors": sum(1 for r in rows if r.get("error")),
+    }
+
+
+def count_prediction_answers(path: Path) -> Dict[str, int]:
+    if not path.exists():
+        return {"llm_rows": 0, "llm_empty": 0, "llm_errors": 0}
+
+    with path.open("r", encoding="utf-8") as f:
+        pred = json.load(f)
+
+    answers = pred.get("answer", {}) if isinstance(pred, dict) else {}
+    return {
+        "llm_rows": len(answers),
+        "llm_empty": sum(1 for answer in answers.values() if not str(answer).strip()),
+        "llm_errors": 0,
     }
 
 
@@ -608,10 +926,13 @@ def append_result_row(
         "Answer_F1": metrics.get("f1"),
         "Answer_Prec": metrics.get("prec"),
         "Answer_Recall": metrics.get("recall"),
+        "Answer_Examples": metrics.get("answer_examples"),
         "Support_EM": metrics.get("sp_em"),
         "Support_F1": metrics.get("sp_f1"),
         "Support_Prec": metrics.get("sp_prec"),
         "Support_Recall": metrics.get("sp_recall"),
+        "Support_Examples": metrics.get("support_examples"),
+        "Answer_Only_Examples": metrics.get("answer_only_examples"),
         "Joint_EM": metrics.get("joint_em"),
         "Joint_F1": metrics.get("joint_f1"),
         "Joint_Prec": metrics.get("joint_prec"),
@@ -710,7 +1031,13 @@ def run_experiment(args) -> None:
             log(f"METHOD: {method_cfg['display']}")
             print("-" * 100, flush=True)
 
-            if method_key == "lexical_subgraph":
+            if method_cfg.get("gnn_rag"):
+                log(
+                    "GNN-RAG uses the upstream ReaRev retriever on adapted "
+                    "KGQA-style data; skipping local NeSyQA retrieval details."
+                )
+                continue
+            elif method_key == "lexical_subgraph":
                 details_path = run_lexical_details(
                     dataset_key, cfg, dry_run=args.dry_run, resume=args.resume
                 )
@@ -734,20 +1061,22 @@ def run_experiment(args) -> None:
 
         gold_path = None
         if cfg["type"] == "text":
-            first_details = details_by_method[selected_methods[0]]
-            gold_path = export_gold_subset(
-                dataset_key,
-                cfg,
-                first_details,
-                dry_run=args.dry_run,
-                resume=args.resume,
-            )
+            if details_by_method:
+                first_details = next(iter(details_by_method.values()))
+                gold_path = export_gold_subset(
+                    dataset_key,
+                    cfg,
+                    first_details,
+                    dry_run=args.dry_run,
+                    resume=args.resume,
+                )
+            else:
+                gold_path = cfg["gold_file"]
             if not args.dry_run:
                 ensure_file(gold_path, f"{dataset_key} gold file")
 
         for method_key in selected_methods:
             method_cfg = METHODS[method_key]
-            details_path = details_by_method[method_key]
             method_out_dir = Path(cfg["output_dir"]) / method_cfg["details_subdir"]
 
             model_tag = safe_model_name(args.reader_model)
@@ -759,6 +1088,88 @@ def run_experiment(args) -> None:
                 / f"{dataset_key}_predictions_top{args.top_k}_{model_tag}.json"
             )
             metrics_path = method_out_dir / f"metrics_top{args.top_k}_{model_tag}.json"
+            answer_only_paths: List[Path] = []
+            if cfg["type"] == "owl":
+                answer_only_path = (
+                    Path(cfg["data_dir"]) / "test_answer_only_no_explanation.jsonl"
+                )
+                if answer_only_path.exists():
+                    answer_only_paths.append(answer_only_path)
+
+            if method_cfg.get("gnn_rag"):
+                details_path = method_out_dir / "test_details.json"
+                llm_answers_path = (
+                    method_out_dir
+                    / f"llm_answers_gnn_rag_top{args.top_k}_{model_tag}.jsonl"
+                )
+                pred_path = (
+                    method_out_dir
+                    / f"{dataset_key}_predictions_gnn_rag_top{args.top_k}_{model_tag}.json"
+                )
+                metrics_path = (
+                    method_out_dir / f"metrics_gnn_rag_top{args.top_k}_{model_tag}.json"
+                )
+
+                if not args.skip_llm:
+                    run_gnn_rag_generation(
+                        dataset_key=dataset_key,
+                        cfg=cfg,
+                        details_path=details_path,
+                        output_jsonl=llm_answers_path,
+                        top_k=args.top_k,
+                        reader_model=args.reader_model,
+                        retriever_epochs=args.epochs,
+                        dry_run=args.dry_run,
+                        resume_llm=args.resume_llm,
+                        max_llm_examples=args.max_llm_examples,
+                        text_max_candidates=args.gnn_rag_text_max_candidates,
+                        answer_only_paths=answer_only_paths,
+                    )
+
+                if cfg["type"] == "text":
+                    export_text_predictions(
+                        dataset_key=dataset_key,
+                        cfg=cfg,
+                        details_path=details_path,
+                        llm_answers_path=llm_answers_path,
+                        pred_path=pred_path,
+                        top_k=args.top_k,
+                        dry_run=args.dry_run,
+                        resume=args.resume,
+                    )
+                    metrics = evaluate_text_predictions(
+                        pred_path=pred_path,
+                        gold_path=gold_path,
+                        metrics_path=metrics_path,
+                        dry_run=args.dry_run,
+                        resume=args.resume,
+                    )
+                else:
+                    metrics = evaluate_owl_predictions(
+                        details_path=details_path,
+                        llm_answers_path=llm_answers_path,
+                        metrics_path=metrics_path,
+                        top_k=args.top_k,
+                        dry_run=args.dry_run,
+                        resume=False,
+                        answer_only_paths=[],
+                    )
+
+                llm_stats = (
+                    count_llm_answers(llm_answers_path) if not args.dry_run else {}
+                )
+                append_result_row(
+                    results=results,
+                    dataset_key=dataset_key,
+                    method_key=method_key,
+                    metrics=metrics,
+                    llm_stats=llm_stats,
+                    top_k=args.top_k,
+                    reader_model=args.reader_model,
+                )
+                continue
+
+            details_path = details_by_method[method_key]
 
             if not args.skip_llm:
                 run_llm_generation(
@@ -771,6 +1182,7 @@ def run_experiment(args) -> None:
                     skip_llm_if_exists=args.skip_llm_if_exists,
                     resume_llm=args.resume_llm,
                     max_llm_examples=args.max_llm_examples,
+                    answer_only_paths=answer_only_paths,
                 )
 
             if cfg["type"] == "text":
@@ -800,6 +1212,7 @@ def run_experiment(args) -> None:
                     top_k=args.top_k,
                     dry_run=args.dry_run,
                     resume=args.resume,
+                    answer_only_paths=answer_only_paths,
                 )
 
             llm_stats = count_llm_answers(llm_answers_path) if not args.dry_run else {}
@@ -860,6 +1273,7 @@ def main():
     parser.add_argument("--skip-llm-if-exists", action="store_true")
     parser.add_argument("--resume-llm", action="store_true")
     parser.add_argument("--max-llm-examples", type=int, default=0)
+    parser.add_argument("--gnn-rag-text-max-candidates", type=int, default=5)
     parser.add_argument(
         "--resume",
         action="store_true",

@@ -33,6 +33,23 @@ def parse_sent_unit(unit: str) -> Tuple[str, int]:
             idx = -1
         return title, idx
 
+    if len(parts) >= 3 and parts[0] == "EVIDENCE":
+        title = parts[1]
+        try:
+            idx = int(parts[2])
+        except Exception:
+            idx = -1
+        return title, idx
+
+    loose_parts = str(unit).split("::", 2)
+    if len(loose_parts) == 3:
+        title = loose_parts[0]
+        try:
+            idx = int(loose_parts[1])
+        except Exception:
+            idx = -1
+        return title, idx
+
     return str(unit), -1
 
 
@@ -107,6 +124,15 @@ def load_llm_answers(path: str) -> Dict[str, str]:
     return answers
 
 
+def load_llm_rows(path: str) -> Dict[str, Dict[str, Any]]:
+    rows = {}
+    for row in load_jsonl(path):
+        ex_id = row.get("example_id", "")
+        if ex_id:
+            rows[get_2wiki_id(ex_id)] = row
+    return rows
+
+
 def export_predictions(
     details_path: str,
     output_path: str,
@@ -117,8 +143,10 @@ def export_predictions(
     details = load_json(details_path)
 
     llm_answers = {}
+    llm_rows = {}
     if llm_answers_path:
         llm_answers = load_llm_answers(llm_answers_path)
+        llm_rows = load_llm_rows(llm_answers_path)
 
     pred = {
         "answer": {},
@@ -142,6 +170,8 @@ def export_predictions(
         pred["answer"][wiki_id] = answer
 
         units = get_top_support_units(item, top_k=top_k)
+        if not units and wiki_id in llm_rows:
+            units = llm_rows[wiki_id].get("support_units", []) or []
 
         sp_facts: List[List[Any]] = []
         seen_sp: Set[Tuple[str, int]] = set()

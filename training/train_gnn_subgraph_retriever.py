@@ -210,6 +210,11 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
             candidate_rows.append(
                 {
                     "example_id": example_id,
+                    "dataset": dataset,
+                    "source_dataset": dataset,
+                    "hop": hop,
+                    "answer": answer,
+                    "answer_type": answer_type,
                     "question": str(row.get("question") or question),
                     "sparql_query": str(row.get("sparql_query") or sparql_query),
                     "subgraph_units": subgraph_units,
@@ -596,6 +601,9 @@ def adjusted_score(row, score_mode="neural", size_penalty=0.01):
         if _is_text_dataset(row):
             return float(row["score"]) + nesyqa_text_chain_adjustment(row)
         return float(row["score"]) + nesyqa_compact_adjustment(row)
+
+    if score_mode == "nesyqa_proof":
+        return float(row["score"]) + nesyqa_proof_adjustment(row)
 
     raise ValueError(f"Unknown score_mode: {score_mode}")
 
@@ -1040,6 +1048,59 @@ def nesyqa_text_compact_adjustment(
     )
 
 
+def nesyqa_proof_adjustment(
+    row: Dict[str, Any],
+    proof_bonus: float = 0.180,
+    query_unit_bonus: float = 0.030,
+    schema_bonus: float = 0.020,
+    compact_weight: float = 0.350,
+    extra_unit_penalty: float = 0.010,
+) -> float:
+    """
+    Proof-aware symbolic reranking for OWL candidates.
+
+    The large proof bonus is gold-free: it is based on whether the candidate
+    subgraph entails the ASK query under the deterministic OWL proof layer used
+    by answer generation. Smaller terms reward query coverage and compact
+    fact/schema mixtures, then penalize noisy oversized candidates.
+    """
+    if _is_text_dataset(row):
+        return nesyqa_text_chain_adjustment(row)
+
+    units = row.get("subgraph_units", []) or []
+    size = subgraph_size(row)
+    query = str(row.get("sparql_query", "") or row.get("question", ""))
+
+    proof_score = 0.0
+    try:
+        from generation.generate_owl_answers_with_llm import infer_owl_boolean_answer
+
+        if infer_owl_boolean_answer(row, units) is not None:
+            proof_score = 1.0
+    except Exception:
+        proof_score = 0.0
+
+    query_tokens = {
+        t.lower()
+        for t in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", query)
+        if len(t) > 2 and not t.lower().startswith("http")
+    }
+    unit_text = " ".join(str(u).lower() for u in units)
+    query_hits = sum(1 for token in query_tokens if token.lower() in unit_text)
+    query_coverage = query_hits / max(len(query_tokens), 1)
+
+    compact = nesyqa_compact_adjustment(row)
+    oversize = max(0, size - 2)
+
+    return (
+        proof_bonus * proof_score
+        + query_unit_bonus * query_coverage
+        + schema_bonus * fact_rule_mix_symbolic(row)
+        + compact_weight * compact
+        - extra_unit_penalty * oversize
+    )
+
+
 def compute_adjusted_score(
     row: Dict[str, Any],
     neural_score: float,
@@ -1085,6 +1146,9 @@ def compute_adjusted_score(
             return base_score + nesyqa_text_chain_adjustment(row)
 
         return base_score + nesyqa_compact_adjustment(row)
+
+    if score_mode == "nesyqa_proof":
+        return base_score + nesyqa_proof_adjustment(row)
 
     raise ValueError(f"Unknown score_mode: {score_mode}")
 
@@ -1610,6 +1674,7 @@ def parse_args():
             "completeness_adjusted",
             "nesyqa_compact",
             "nesyqa_text_chain",
+            "nesyqa_proof",
         ],
     )
     parser.add_argument("--size-penalty", type=float, default=0.01)

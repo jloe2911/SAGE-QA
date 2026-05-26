@@ -88,6 +88,21 @@ def normalize_explanation(explanation: Iterable[str]) -> List[str]:
     return out
 
 
+def get_gold_explanations(qa: Dict) -> List[List[str]]:
+    gold_explanations = [
+        normalized
+        for explanation in qa.get("Explanations", []) or []
+        if (normalized := normalize_explanation(explanation))
+    ]
+
+    if not gold_explanations:
+        minimum = normalize_explanation(qa.get("Minimum Explanation", []) or [])
+        if minimum:
+            gold_explanations = [minimum]
+
+    return gold_explanations
+
+
 def parse_owl_context(owl_context: str) -> List[str]:
     root = ET.fromstring(owl_context)
     axioms = []
@@ -258,13 +273,35 @@ def relevant_context_axioms(
     return [axiom for _, axiom in scored[:max_context_units]]
 
 
-def infer_split(group_index: int, train_ratio: float, dev_ratio: float) -> str:
-    bucket = group_index % 100
-    if bucket < int(train_ratio * 100):
-        return "train"
-    if bucket < int((train_ratio + dev_ratio) * 100):
-        return "dev"
-    return "test"
+def build_split_map(
+    num_groups: int, train_ratio: float, dev_ratio: float
+) -> Dict[int, str]:
+    if not 0.0 <= train_ratio <= 1.0:
+        raise ValueError(f"train_ratio must be in [0, 1], got {train_ratio}")
+    if not 0.0 <= dev_ratio <= 1.0:
+        raise ValueError(f"dev_ratio must be in [0, 1], got {dev_ratio}")
+    if train_ratio + dev_ratio >= 1.0:
+        raise ValueError(
+            "train_ratio + dev_ratio must leave a non-empty test split "
+            f"(got {train_ratio + dev_ratio})"
+        )
+
+    indices = list(range(num_groups))
+    random.Random(RANDOM_SEED).shuffle(indices)
+
+    train_end = int(num_groups * train_ratio)
+    dev_end = train_end + int(num_groups * dev_ratio)
+
+    split_by_group = {}
+    for rank, group_index in enumerate(indices):
+        if rank < train_end:
+            split_by_group[group_index] = "train"
+        elif rank < dev_end:
+            split_by_group[group_index] = "dev"
+        else:
+            split_by_group[group_index] = "test"
+
+    return split_by_group
 
 
 def build_rows_for_qa(
@@ -288,16 +325,7 @@ def build_rows_for_qa(
     )
     question = str(question)
 
-    gold_explanations = [
-        normalized
-        for explanation in qa.get("Explanations", [])
-        if (normalized := normalize_explanation(explanation))
-    ]
-
-    if not gold_explanations:
-        minimum = normalize_explanation(qa.get("Minimum Explanation", []))
-        if minimum:
-            gold_explanations = [minimum]
+    gold_explanations = get_gold_explanations(qa)
 
     if not gold_explanations:
         return []
@@ -385,30 +413,97 @@ def build_rows_for_qa(
     return rows
 
 
+def build_answer_only_row(
+    source_name: str,
+    group_index: int,
+    qa_index: int,
+    item: Dict,
+    qa: Dict,
+    split: str,
+    max_context_units: int,
+) -> Dict:
+    sparql_query = str(qa.get("SPARQL Query") or "")
+    question = (
+        qa.get("NL Question")
+        or qa.get("ABS Question")
+        or qa.get("Task ID")
+        or sparql_query
+    )
+    question = str(question)
+
+    context_axioms = parse_owl_context(item["OWL Context"])
+    answer_context_units = relevant_context_axioms(
+        context_axioms,
+        question=question,
+        sparql_query=sparql_query,
+        max_context_units=max_context_units,
+    )
+
+    return {
+        "example_id": (
+            f"{source_name}__g{group_index}__q{qa_index}__"
+            f"{qa.get('Task ID', '')}__{question}__{sparql_query}"
+        ),
+        "split": split,
+        "question": question,
+        "sparql_query": sparql_query,
+        "task_type": item.get("Task Type", ""),
+        "answer_type": item.get("Answer Type", ""),
+        "answer": qa.get("Answer"),
+        "source_name": source_name,
+        "group_index": group_index,
+        "qa_index": qa_index,
+        "gold_explanations": [],
+        "gold_units": [],
+        "answer_context_units": answer_context_units,
+        "evaluation_scope": "answer_only",
+        "has_gold_support": False,
+    }
+
+
 def empty_splits() -> Dict[str, List[Dict]]:
     return {"train": [], "dev": [], "test": []}
 
 
 def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
     output = {}
+    answer_only = {}
 
     for input_path in args.input_json:
         source_name = Path(input_path).stem
         print(f"[LOAD] {source_name}: {input_path}")
         data = json.loads(Path(input_path).read_text(encoding="utf-8"))
+        if args.max_groups:
+            data = data[: args.max_groups]
+        split_by_group = build_split_map(
+            num_groups=len(data),
+            train_ratio=args.train_ratio,
+            dev_ratio=args.dev_ratio,
+        )
         source_output = empty_splits()
+        source_answer_only = empty_splits()
 
         for group_index, item in enumerate(data):
-            if args.max_groups and group_index >= args.max_groups:
-                break
-
-            split = infer_split(
-                group_index,
-                train_ratio=args.train_ratio,
-                dev_ratio=args.dev_ratio,
-            )
+            split = split_by_group[group_index]
 
             for qa_index, qa in enumerate(item.get("QAs", [])):
+                has_gold_support = bool(get_gold_explanations(qa))
+                is_binary = (
+                    str(item.get("Answer Type", qa.get("Answer Type", ""))) == "BIN"
+                )
+
+                if not has_gold_support and is_binary:
+                    row = build_answer_only_row(
+                        source_name=source_name,
+                        group_index=group_index,
+                        qa_index=qa_index,
+                        item=item,
+                        qa=qa,
+                        split=split,
+                        max_context_units=args.max_context_units,
+                    )
+                    source_answer_only[split].append(row)
+
                 rows = build_rows_for_qa(
                     source_name=source_name,
                     group_index=group_index,
@@ -427,8 +522,9 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
                 print(f"  processed {group_index + 1}/{len(data)} groups")
 
         output[source_name] = source_output
+        answer_only[source_name] = source_answer_only
 
-    return output
+    return {"support": output, "answer_only": answer_only}
 
 
 def write_jsonl(path: Path, rows: List[Dict]) -> None:
@@ -453,7 +549,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-subgraph-size", type=int, default=3)
     parser.add_argument("--max-context-units", type=int, default=40)
     parser.add_argument("--max-negative-per-example", type=int, default=200)
-    parser.add_argument("--train-ratio", type=float, default=0.8)
+    parser.add_argument("--train-ratio", type=float, default=0.65)
     parser.add_argument("--dev-ratio", type=float, default=0.1)
     parser.add_argument(
         "--combined",
@@ -474,10 +570,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    by_source = build_dataset(args)
+    built = build_dataset(args)
+    by_source = built["support"]
+    answer_only_by_source = built["answer_only"]
     output_dir = Path(args.output_dir)
 
     combined = empty_splits()
+    combined_answer_only = empty_splits()
 
     for source_name, splits in by_source.items():
         for split_name, rows in splits.items():
@@ -487,9 +586,23 @@ def main() -> None:
             )
             combined[split_name].extend(rows)
 
+    for source_name, splits in answer_only_by_source.items():
+        for split_name, rows in splits.items():
+            write_jsonl(
+                output_dir
+                / source_name
+                / f"{split_name}_answer_only_no_explanation.jsonl",
+                rows,
+            )
+            combined_answer_only[split_name].extend(rows)
+
     if args.combined:
         for split_name, rows in combined.items():
             write_jsonl(output_dir / f"{split_name}_subgraph_retrieval.jsonl", rows)
+        for split_name, rows in combined_answer_only.items():
+            write_jsonl(
+                output_dir / f"{split_name}_answer_only_no_explanation.jsonl", rows
+            )
 
 
 if __name__ == "__main__":

@@ -21,6 +21,12 @@ def load_jsonl(path: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def load_answer_only(path: str) -> List[Dict[str, Any]]:
+    if path.endswith(".jsonl"):
+        return load_jsonl(path)
+    return load_json(path)
+
+
 def normalize_answer(s: str) -> str:
     s = normalize_bool_answer(s)
 
@@ -254,9 +260,18 @@ def retrieval_at_k(item: Dict[str, Any], k: int) -> Dict[str, float]:
 
 
 def evaluate(
-    details_path: str, llm_answers_path: str, top_k: int, output_path: str = None
+    details_path: str,
+    llm_answers_path: str,
+    top_k: int,
+    output_path: str = None,
+    answer_only_paths: List[str] = None,
 ) -> Dict[str, Any]:
     details = load_json(details_path)
+    answer_only_paths = answer_only_paths or []
+    for path in answer_only_paths:
+        if Path(path).exists():
+            details.extend(load_answer_only(path))
+
     answer_rows = load_jsonl(llm_answers_path)
 
     answers_by_id = {
@@ -280,6 +295,9 @@ def evaluate(
         f"contained@{top_k}": 0.0,
         f"support_set_f1@{top_k}": 0.0,
         "examples": 0,
+        "answer_examples": 0,
+        "support_examples": 0,
+        "answer_only_examples": 0,
         "missing_answers": 0,
         "empty_predictions": 0,
         "errors": 0,
@@ -294,6 +312,7 @@ def evaluate(
 
         gold_answer = str(item.get("answer", item.get("gold_answer", "")))
         gold_explanations = item.get("gold_explanations", []) or []
+        has_gold_support = bool(gold_explanations)
 
         ans_row = answers_by_id.get(example_id)
         if ans_row is None:
@@ -316,46 +335,60 @@ def evaluate(
             gold_answer,
         )
 
-        # Support metrics using top-k union from details.
-        pred_support = get_top_support_units(item, top_k=top_k)
-        sp = best_support_scores(pred_support, gold_explanations)
+        pred_support = []
+        sp = {"em": None, "f1": None, "prec": None, "recall": None, "best_gold": []}
+        sp_em = sp_f1 = sp_prec = sp_recall = None
+        joint_em = joint_f1 = joint_prec = joint_recall = None
+        ret = None
 
-        sp_em = sp["em"]
-        sp_f1 = sp["f1"]
-        sp_prec = sp["prec"]
-        sp_recall = sp["recall"]
+        if has_gold_support:
+            # Support metrics using top-k union from details.
+            pred_support = get_top_support_units(item, top_k=top_k)
+            if not pred_support and ans_row is not None:
+                pred_support = ans_row.get("support_units", []) or []
+            sp = best_support_scores(pred_support, gold_explanations)
 
-        # Joint metrics, same idea as HotpotQA.
-        joint_prec = ans_prec * sp_prec
-        joint_recall = ans_recall * sp_recall
-        if joint_prec + joint_recall > 0:
-            joint_f1 = 2 * joint_prec * joint_recall / (joint_prec + joint_recall)
-        else:
-            joint_f1 = 0.0
-        joint_em = ans_em * sp_em
+            sp_em = sp["em"]
+            sp_f1 = sp["f1"]
+            sp_prec = sp["prec"]
+            sp_recall = sp["recall"]
 
-        ret = retrieval_at_k(item, k=top_k)
+            # Joint metrics, same idea as HotpotQA.
+            joint_prec = ans_prec * sp_prec
+            joint_recall = ans_recall * sp_recall
+            if joint_prec + joint_recall > 0:
+                joint_f1 = 2 * joint_prec * joint_recall / (joint_prec + joint_recall)
+            else:
+                joint_f1 = 0.0
+            joint_em = ans_em * sp_em
+
+            ret = retrieval_at_k(item, k=top_k)
 
         metrics["em"] += ans_em
         metrics["f1"] += ans_f1
         metrics["prec"] += ans_prec
         metrics["recall"] += ans_recall
 
-        metrics["sp_em"] += sp_em
-        metrics["sp_f1"] += sp_f1
-        metrics["sp_prec"] += sp_prec
-        metrics["sp_recall"] += sp_recall
-
-        metrics["joint_em"] += joint_em
-        metrics["joint_f1"] += joint_f1
-        metrics["joint_prec"] += joint_prec
-        metrics["joint_recall"] += joint_recall
-
-        metrics[f"exact@{top_k}"] += ret[f"exact@{top_k}"]
-        metrics[f"contained@{top_k}"] += ret[f"contained@{top_k}"]
-        metrics[f"support_set_f1@{top_k}"] += ret[f"support_set_f1@{top_k}"]
-
         metrics["examples"] += 1
+        metrics["answer_examples"] += 1
+
+        if has_gold_support:
+            metrics["support_examples"] += 1
+            metrics["sp_em"] += sp_em
+            metrics["sp_f1"] += sp_f1
+            metrics["sp_prec"] += sp_prec
+            metrics["sp_recall"] += sp_recall
+
+            metrics["joint_em"] += joint_em
+            metrics["joint_f1"] += joint_f1
+            metrics["joint_prec"] += joint_prec
+            metrics["joint_recall"] += joint_recall
+
+            metrics[f"exact@{top_k}"] += ret[f"exact@{top_k}"]
+            metrics[f"contained@{top_k}"] += ret[f"contained@{top_k}"]
+            metrics[f"support_set_f1@{top_k}"] += ret[f"support_set_f1@{top_k}"]
+        else:
+            metrics["answer_only_examples"] += 1
 
         per_example.append(
             {
@@ -365,6 +398,8 @@ def evaluate(
                 "predicted_answer": predicted_answer,
                 "answer_em": ans_em,
                 "answer_f1": ans_f1,
+                "has_gold_support": has_gold_support,
+                "evaluation_scope": item.get("evaluation_scope", "support"),
                 "support_em": sp_em,
                 "support_f1": sp_f1,
                 "support_precision": sp_prec,
@@ -386,6 +421,13 @@ def evaluate(
             "f1",
             "prec",
             "recall",
+        ]:
+            metrics[key] /= n
+
+    support_n = metrics["support_examples"]
+
+    if support_n > 0:
+        for key in [
             "sp_em",
             "sp_f1",
             "sp_prec",
@@ -398,7 +440,7 @@ def evaluate(
             f"contained@{top_k}",
             f"support_set_f1@{top_k}",
         ]:
-            metrics[key] /= n
+            metrics[key] /= support_n
 
     result = {
         "metrics": metrics,
@@ -425,6 +467,7 @@ def main():
     parser.add_argument("--llm-answers", type=str, required=True)
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--output", type=str, default=None)
+    parser.add_argument("--answer-only", type=str, nargs="*", default=[])
 
     args = parser.parse_args()
 
@@ -433,6 +476,7 @@ def main():
         llm_answers_path=args.llm_answers,
         top_k=args.top_k,
         output_path=args.output,
+        answer_only_paths=args.answer_only,
     )
 
 

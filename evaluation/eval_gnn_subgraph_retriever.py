@@ -137,6 +137,7 @@ def main():
             "completeness_adjusted",
             "nesyqa_compact",
             "nesyqa_text_chain",
+            "nesyqa_proof",
         ],
         help="Overrides checkpoint score mode.",
     )

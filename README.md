@@ -13,6 +13,17 @@ On Windows PowerShell:
 .venv\Scripts\Activate.ps1
 ```
 
+The experiments use Hugging Face models/tokenizers and OpenAI-backed answer
+generation. Make sure the machine can access Hugging Face, or has the required
+models cached locally. Set `OPENAI_API_KEY` before running any command that
+generates LLM answers:
+
+```powershell
+$env:OPENAI_API_KEY="sk-..."
+```
+
+The GNN-RAG baseline requires the upstream code under `third_party/GNN-RAG`.
+
 ## Input Data
 
 Raw input files live under `data/raw/`. The repository tracks only the small
@@ -52,16 +63,21 @@ directory named after the JSON stem:
 - `data/<dataset>/train_subgraph_retrieval.jsonl`
 - `data/<dataset>/dev_subgraph_retrieval.jsonl`
 - `data/<dataset>/test_subgraph_retrieval.jsonl`
+- `data/<dataset>/*_answer_only_no_explanation.jsonl`
 
 Build from raw benchmark files:
 
 ```powershell
-python data/build_subgraph_training_data.py  --input-json data/raw/family/FamilyOWL_1hop.json --output-dir data
+python data/build_subgraph_training_data.py --input-json data/raw/family/FamilyOWL_1hop.json --output-dir data
 
-python data/build_subgraph_training_data.py  --input-json data/raw/family/FamilyOWL_2hop.json --output-dir data
+python data/build_subgraph_training_data.py --input-json data/raw/family/FamilyOWL_2hop.json --output-dir data
 ```
 
 By default the builder includes gold supports, adds query-aligned OWL context axioms, enumerates connected candidate subgraphs up to size 3, and caps negatives at 200 per example.
+
+Binary QAs without gold explanations are written to the
+`*_answer_only_no_explanation.jsonl` files. They are used only for OWL answer
+EM/F1 and are excluded from support, retrieval, and joint metrics.
 
 ### OWL Dataset Format
 
@@ -76,7 +92,10 @@ Each QA entry should include:
 - `NL Question` or `ABS Question`
 - `SPARQL Query`
 - `Answer`
-- `Explanations` or `Minimum Explanation`
+- `Explanations` or `Minimum Explanation` for support/retrieval examples
+
+Binary QAs may omit explanations when they should be evaluated as answer-only
+examples.
 
 ## Build Text-QA Retrieval Data
 
@@ -136,6 +155,45 @@ The builders write:
 - `data/HotpotQA/dev_subgraph_retrieval.jsonl`
 - `data/HotpotQA/test_subgraph_retrieval.jsonl`
 
+## Reproduce Main Results
+
+After setup and data construction, run the full experiment suite:
+
+```powershell
+python experiments/run_experiments.py `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop `
+  --methods lexical_subgraph,gnn_neural,nesyqa_text_chain,nesyqa_compact,nesyqa_proof,gnn_rag `
+  --top-k 3 `
+  --reader-model gpt-4.1-mini `
+  --epochs 3 `
+  --candidate-batch-size 512
+```
+
+To reuse existing retrieval details, predictions, metrics, and generated LLM
+answers where available:
+
+```powershell
+python experiments/run_experiments.py `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop `
+  --methods lexical_subgraph,gnn_neural,nesyqa_text_chain,nesyqa_compact,nesyqa_proof,gnn_rag `
+  --top-k 3 `
+  --reader-model gpt-4.1-mini `
+  --epochs 3 `
+  --candidate-batch-size 512 `
+  --resume `
+  --skip-llm-if-exists
+```
+
+The final combined result files are written to:
+
+- `outputs/full_results/full_pipeline_results.csv`
+- `outputs/full_results/full_pipeline_results.json`
+
+The text benchmarks use 3,000 training examples and 1,000 test examples by
+default. Runtime depends on hardware, OpenAI API latency, Hugging Face cache
+state, and whether checkpoints already exist. GNN-RAG and LLM answer generation
+are usually the slowest stages.
+
 ## Run Experiments
 
 There is now one experiment runner for both OWL and text-QA datasets:
@@ -175,14 +233,16 @@ Supported dataset keys:
 With `--methods auto`, the runner chooses methods by dataset type:
 
 - text-QA: `lexical_subgraph`, `gnn_neural`, `nesyqa_text_chain`
-- OWL: `lexical_subgraph`, `gnn_neural`, `nesyqa_compact`
+- OWL: `lexical_subgraph`, `gnn_neural`, `nesyqa_compact`, `nesyqa_proof`
 
 Available methods:
 
 - `lexical_subgraph`: lexical sentence-subgraph baseline
 - `gnn_neural`: trained GNN subgraph retriever
 - `nesyqa_text_chain`: GNN retriever plus text-chain symbolic adjustment for HotpotQA/2WikiMultiHopQA
+- `gnn_rag`: upstream GNN-RAG retriever and prediction stage on adapted KGQA-style data
 - `nesyqa_compact`: GNN retriever plus compact symbolic adjustment for OWL datasets
+- `nesyqa_proof`: GNN retriever plus proof-aware symbolic reranking and deterministic OWL proof answering for OWL datasets
 
 Run only text-QA datasets:
 
@@ -197,6 +257,28 @@ python experiments/run_experiments.py `
   --skip-llm-if-exists `
   --resume
 ```
+
+Run the adapted GNN-RAG pipeline:
+
+```powershell
+python experiments/run_experiments.py `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop `
+  --methods gnn_rag `
+  --top-k 3 `
+  --reader-model gpt-4.1-mini `
+  --epochs 3 `
+  --candidate-batch-size 512 `
+  --resume
+```
+
+This baseline adapts each dataset into the upstream `cmavro/GNN-RAG` KGQA data
+format, trains/evaluates the upstream ReaRev retriever, writes its `test.info`,
+calls `third_party/GNN-RAG/llm/src/qa_prediction/predict_answer.py`, then
+converts the upstream `predictions.jsonl` back to the common evaluator. For
+FamilyOWL, ontology evidence units are represented as graph nodes. For HotpotQA
+and 2WikiMultiHopQA, retrieved sentence evidence is represented as a
+text-derived evidence graph; this is a NeSyQA adapter around the upstream
+GNN-RAG pipeline rather than a native GNN-RAG text benchmark setting.
 
 Run only OWL datasets:
 
@@ -222,13 +304,44 @@ Useful options:
 - `--resume-llm`: resume OWL LLM answer generation when supported
 - `--max-llm-examples N`: limit LLM answer generation for debugging
 - `--datasets hotpotqa` or `--datasets familyowl_1hop`: run one dataset
-- `--methods nesyqa_text_chain` or `--methods nesyqa_compact`: run one method
+- `--methods nesyqa_text_chain`, `--methods nesyqa_compact`, or `--methods nesyqa_proof`: run one method
 
 The pipeline writes checkpoints under `checkpoints/`, method outputs under
 `outputs/full_results/<dataset>/`, and combined result files:
 
 - `outputs/full_results/full_pipeline_results.csv`
 - `outputs/full_results/full_pipeline_results.json`
+
+## Error Analysis
+
+The error-analysis script writes a per-example CSV and a JSON summary of error
+categories.
+
+OWL example for NeSyQA Proof on FamilyOWL 2-hop:
+
+```powershell
+python evaluation/error_analysis_support_qa.py `
+  --mode owl `
+  --details outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/test_details.json `
+  --llm-answers outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl `
+  --top-k 3 `
+  --output-csv outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/error_analysis_top3.csv `
+  --output-summary outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/error_analysis_top3_summary.json
+```
+
+Text example for NeSyQA Text-Chain on HotpotQA:
+
+```powershell
+python evaluation/error_analysis_support_qa.py `
+  --mode text `
+  --details outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/test_details.json `
+  --llm-answers outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/llm_answers_top3_gpt_4_1_mini.jsonl `
+  --gold data/HotpotQA/hotpot_test_subset_gold.json `
+  --predictions outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/hotpotqa_predictions_top3_gpt_4_1_mini.json `
+  --top-k 3 `
+  --output-csv outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/error_analysis_top3.csv `
+  --output-summary outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/error_analysis_top3_summary.json
+```
 
 ## License
 
