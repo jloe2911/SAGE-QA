@@ -91,12 +91,40 @@ def reconstruct_candidate_axioms(example_rows: List[Dict]) -> List[str]:
     seen = set()
 
     for row in example_rows:
-        for unit in row.get("subgraph_units", []):
+        graph_units = []
+        graph_units.extend(row.get("subgraph_units", []) or [])
+        graph_units.extend(row.get("graph_context_units", []) or [])
+        graph_units.extend(row.get("kg_evidence_units", []) or [])
+        graph_units.extend(kg_units_from_evidences(row.get("evidences", []) or []))
+
+        for unit in graph_units:
             if unit not in seen:
                 axioms.append(unit)
                 seen.add(unit)
 
     return axioms
+
+
+def clean_kg_part(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").replace("\n", " ")).strip()
+
+
+def kg_units_from_evidences(evidences: Any) -> List[str]:
+    units = []
+    seen = set()
+    if not isinstance(evidences, list):
+        return units
+    for ev in evidences:
+        if not isinstance(ev, list) or len(ev) < 3:
+            continue
+        unit = (
+            f"KG::{clean_kg_part(ev[0])}::"
+            f"{clean_kg_part(ev[1])}::{clean_kg_part(ev[2])}"
+        )
+        if unit not in seen:
+            seen.add(unit)
+            units.append(unit)
+    return units
 
 
 def subgraph_units_to_node_ids(
@@ -195,17 +223,30 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
 
             target = ranking_target(row)
             binary_label = binary_label_from_target(target)
-
-            symbolic_features = compute_subgraph_symbolic_features(
-                question=str(row.get("question") or question),
-                sparql_query=str(row.get("sparql_query") or sparql_query),
-                subgraph_units=subgraph_units,
-                use_gold_features=False,
-                exact_match_any_gold=row.get("exact_match_any_gold", False),
-                contains_any_gold_explanation=row.get(
-                    "contains_any_gold_explanation", False
-                ),
+            kg_bridge_units = (
+                row.get("kg_evidence_units", [])
+                or row.get("graph_context_units", [])
+                or kg_units_from_evidences(row.get("evidences", []) or [])
             )
+
+            if _is_text_dataset(row):
+                # Text-QA builders already emit an inference-safe text feature
+                # vector. Recomputing it with OWL axiom parsing would turn
+                # SENT::... units into mostly-zero KG features.
+                symbolic_features = row.get("symbolic_features", [])
+                if len(symbolic_features) != 8:
+                    symbolic_features = [0.0] * 8
+            else:
+                symbolic_features = compute_subgraph_symbolic_features(
+                    question=str(row.get("question") or question),
+                    sparql_query=str(row.get("sparql_query") or sparql_query),
+                    subgraph_units=subgraph_units,
+                    use_gold_features=False,
+                    exact_match_any_gold=row.get("exact_match_any_gold", False),
+                    contains_any_gold_explanation=row.get(
+                        "contains_any_gold_explanation", False
+                    ),
+                )
 
             candidate_rows.append(
                 {
@@ -221,6 +262,34 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                     "subgraph_node_ids": node_ids,
                     "subgraph_size": len(subgraph_units),
                     "symbolic_features": symbolic_features,
+                    "evidence_representation": row.get(
+                        "evidence_representation",
+                        "sentence_text_with_kg_bridges"
+                        if (_is_text_dataset(row) and kg_bridge_units)
+                        else "sentence_text"
+                        if _is_text_dataset(row)
+                        else "typed_kg",
+                    ),
+                    "has_typed_nodes": bool(
+                        row.get(
+                            "has_typed_nodes",
+                            bool(kg_bridge_units) or not _is_text_dataset(row),
+                        )
+                    ),
+                    "has_structural_edges": bool(
+                        row.get(
+                            "has_structural_edges",
+                            bool(kg_bridge_units) or not _is_text_dataset(row),
+                        )
+                    ),
+                    "kg_bonus_mode": row.get(
+                        "kg_bonus_mode",
+                        "kg_bridge_nodes"
+                        if (_is_text_dataset(row) and kg_bridge_units)
+                        else "disabled_sentence_text"
+                        if _is_text_dataset(row)
+                        else "enabled_typed_kg",
+                    ),
                     # Ranking supervision
                     "rank_target": target,
                     "label": binary_label,
@@ -516,7 +585,7 @@ def _size_chain_penalty(units: List[str]) -> float:
     return 0.010 * (size - 4)
 
 
-def nesyqa_text_chain_adjustment(row: Dict[str, Any]) -> float:
+def sageqa_text_chain_adjustment(row: Dict[str, Any]) -> float:
     """
     Text-specific symbolic reranking adjustment.
 
@@ -577,6 +646,9 @@ def adjusted_score(row, score_mode="neural", size_penalty=0.01):
         )
 
     if score_mode == "completeness_adjusted":
+        if _is_text_dataset(row):
+            return float(row["score"]) + sageqa_text_compact_adjustment(row)
+
         feats = row.get("symbolic_features", [])
         fact_rule_mix = feats[4] if len(feats) > 4 else 0.0
         has_query_property_rule = feats[2] if len(feats) > 2 else 0.0
@@ -592,18 +664,18 @@ def adjusted_score(row, score_mode="neural", size_penalty=0.01):
             - 0.005 * float(oversize_penalty)
         )
 
-    if score_mode == "nesyqa_compact":
+    if score_mode == "sageqa_compact":
         if _is_text_dataset(row):
-            return float(row["score"]) + nesyqa_text_compact_adjustment(row)
-        return float(row["score"]) + nesyqa_compact_adjustment(row)
+            return float(row["score"]) + sageqa_text_compact_adjustment(row)
+        return float(row["score"]) + sageqa_compact_adjustment(row)
 
-    if score_mode == "nesyqa_text_chain":
+    if score_mode == "sageqa_text_chain":
         if _is_text_dataset(row):
-            return float(row["score"]) + nesyqa_text_chain_adjustment(row)
-        return float(row["score"]) + nesyqa_compact_adjustment(row)
+            return float(row["score"]) + sageqa_text_chain_adjustment(row)
+        return float(row["score"]) + sageqa_compact_adjustment(row)
 
-    if score_mode == "nesyqa_proof":
-        return float(row["score"]) + nesyqa_proof_adjustment(row)
+    if score_mode == "sageqa_proof":
+        return float(row["score"]) + sageqa_proof_adjustment(row)
 
     raise ValueError(f"Unknown score_mode: {score_mode}")
 
@@ -964,7 +1036,7 @@ def subgraph_size(row: Dict[str, Any]) -> int:
     return int(row.get("subgraph_size", len(row.get("subgraph_units", []))))
 
 
-def nesyqa_compact_adjustment(
+def sageqa_compact_adjustment(
     row: Dict[str, Any],
     property_bonus: float = 0.025,
     entity_bonus: float = 0.015,
@@ -973,7 +1045,7 @@ def nesyqa_compact_adjustment(
     extra_schema_penalty: float = 0.004,
 ) -> float:
     """
-    Gold-free symbolic adjustment used by the full NeSyQA reranker.
+    Gold-free symbolic adjustment used by the full sageqa reranker.
 
     Rewards:
       - query-property match
@@ -1007,7 +1079,7 @@ def _is_text_dataset(row):
     return dataset in {"HotpotQA", "2WikiMultiHopQA", "2WikiMultihopQA"}
 
 
-def nesyqa_text_compact_adjustment(
+def sageqa_text_compact_adjustment(
     row,
     question_overlap_bonus=0.020,
     answer_overlap_bonus=0.015,
@@ -1048,7 +1120,7 @@ def nesyqa_text_compact_adjustment(
     )
 
 
-def nesyqa_proof_adjustment(
+def sageqa_proof_adjustment(
     row: Dict[str, Any],
     proof_bonus: float = 0.180,
     query_unit_bonus: float = 0.030,
@@ -1065,7 +1137,7 @@ def nesyqa_proof_adjustment(
     fact/schema mixtures, then penalize noisy oversized candidates.
     """
     if _is_text_dataset(row):
-        return nesyqa_text_chain_adjustment(row)
+        return sageqa_text_chain_adjustment(row)
 
     units = row.get("subgraph_units", []) or []
     size = subgraph_size(row)
@@ -1089,7 +1161,7 @@ def nesyqa_proof_adjustment(
     query_hits = sum(1 for token in query_tokens if token.lower() in unit_text)
     query_coverage = query_hits / max(len(query_tokens), 1)
 
-    compact = nesyqa_compact_adjustment(row)
+    compact = sageqa_compact_adjustment(row)
     oversize = max(0, size - 2)
 
     return (
@@ -1120,6 +1192,9 @@ def compute_adjusted_score(
         return base_score - size_penalty * size
 
     if score_mode == "completeness_adjusted":
+        if _is_text_dataset(row):
+            return base_score + sageqa_text_compact_adjustment(row)
+
         feats = row.get("symbolic_features", [])
 
         # Existing symbolic features from dataset construction.
@@ -1135,20 +1210,20 @@ def compute_adjusted_score(
             - 0.005 * float(oversize_penalty)
         )
 
-    if score_mode == "nesyqa_compact":
+    if score_mode == "sageqa_compact":
         if _is_text_dataset(row):
-            return base_score + nesyqa_text_compact_adjustment(row)
+            return base_score + sageqa_text_compact_adjustment(row)
 
-        return base_score + nesyqa_compact_adjustment(row)
+        return base_score + sageqa_compact_adjustment(row)
 
-    if score_mode == "nesyqa_text_chain":
+    if score_mode == "sageqa_text_chain":
         if _is_text_dataset(row):
-            return base_score + nesyqa_text_chain_adjustment(row)
+            return base_score + sageqa_text_chain_adjustment(row)
 
-        return base_score + nesyqa_compact_adjustment(row)
+        return base_score + sageqa_compact_adjustment(row)
 
-    if score_mode == "nesyqa_proof":
-        return base_score + nesyqa_proof_adjustment(row)
+    if score_mode == "sageqa_proof":
+        return base_score + sageqa_proof_adjustment(row)
 
     raise ValueError(f"Unknown score_mode: {score_mode}")
 
@@ -1672,9 +1747,9 @@ def parse_args():
             "neural",
             "minimality_adjusted",
             "completeness_adjusted",
-            "nesyqa_compact",
-            "nesyqa_text_chain",
-            "nesyqa_proof",
+            "sageqa_compact",
+            "sageqa_text_chain",
+            "sageqa_proof",
         ],
     )
     parser.add_argument("--size-penalty", type=float, default=0.01)

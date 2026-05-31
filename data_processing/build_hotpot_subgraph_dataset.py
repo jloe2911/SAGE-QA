@@ -75,6 +75,127 @@ def parse_sentence_unit(unit: str) -> Tuple[str, int, str]:
     return title, idx, sent
 
 
+def to_python_list(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if hasattr(value, "tolist"):
+        converted = value.tolist()
+        if isinstance(converted, list):
+            return converted
+        return [converted]
+    return [value]
+
+
+def make_kg_triple_unit(subject: str, predicate: str, obj: str) -> str:
+    """
+    Structured KG evidence triple used as a graph-context bridge node.
+    """
+    return f"KG::{clean_sentence(subject)}::{clean_sentence(predicate)}::{clean_sentence(obj)}"
+
+
+def normalize_evidence_triples(raw_evidences: Any) -> List[List[str]]:
+    triples: List[List[str]] = []
+    for ev in to_python_list(raw_evidences):
+        if isinstance(ev, dict):
+            subject = ev.get("subject", ev.get("head", ev.get("s")))
+            predicate = ev.get("predicate", ev.get("relation", ev.get("p")))
+            obj = ev.get("object", ev.get("tail", ev.get("o")))
+            ev_list = [subject, predicate, obj]
+        else:
+            ev_list = to_python_list(ev)
+
+        if len(ev_list) >= 3 and all(x is not None for x in ev_list[:3]):
+            triples.append([clean_sentence(x) for x in ev_list[:3]])
+    return triples
+
+
+def evidence_triple_units(evidences: List[List[str]]) -> List[str]:
+    units: List[str] = []
+    seen = set()
+    for ev in evidences:
+        if not isinstance(ev, list) or len(ev) < 3:
+            continue
+        unit = make_kg_triple_unit(ev[0], ev[1], ev[2])
+        if unit not in seen:
+            seen.add(unit)
+            units.append(unit)
+    return units
+
+
+def construct_wiki_bridge_triples(
+    sentence_records: List[Dict[str, Any]],
+    answer: str,
+    max_triples: int,
+) -> List[List[str]]:
+    """
+    Deterministic KG fallback for Wikipedia text.
+
+    It promotes page-title co-mentions and answer grounding into typed bridge
+    triples so vanilla HotpotQA can expose structural nodes to the GNN even
+    without REBEL/Wikidata enrichment.
+    """
+    if max_triples <= 0:
+        return []
+
+    titles = []
+    seen_titles = set()
+    for rec in sentence_records:
+        title = rec.get("title", "")
+        if title and title not in seen_titles:
+            seen_titles.add(title)
+            titles.append(title)
+
+    triples: List[List[str]] = []
+    seen = set()
+
+    def add(subject: str, predicate: str, obj: str) -> None:
+        if len(triples) >= max_triples:
+            return
+        subject = clean_sentence(subject)
+        predicate = clean_sentence(predicate)
+        obj = clean_sentence(obj)
+        if not subject or not predicate or not obj or subject == obj:
+            return
+        key = (subject, predicate, obj)
+        if key not in seen:
+            seen.add(key)
+            triples.append([subject, predicate, obj])
+
+    title_by_norm = {normalize_text(title): title for title in titles}
+    answer_norm = normalize_text(answer)
+
+    for rec in sentence_records:
+        source_title = rec.get("title", "")
+        sentence = rec.get("sentence", "")
+        sentence_norm = normalize_text(sentence)
+
+        if answer_norm not in {"yes", "no"} and phrase_in_text(answer, sentence):
+            add(source_title, "mentions_answer", answer)
+
+        for target_norm, target_title in title_by_norm.items():
+            if not target_norm or target_title == source_title:
+                continue
+            if phrase_in_text(target_title, sentence):
+                add(source_title, "mentions_page", target_title)
+
+        if len(triples) >= max_triples:
+            break
+
+    return triples
+
+
+def phrase_in_text(phrase: str, text: str) -> bool:
+    phrase_norm = normalize_text(phrase)
+    text_norm = normalize_text(text)
+    if len(phrase_norm) < 3 or not text_norm:
+        return False
+    return f" {phrase_norm} " in f" {text_norm} "
+
+
 # ============================================================
 # HotpotQA parsing
 # ============================================================
@@ -168,6 +289,16 @@ def normalize_hotpot_record(row: Dict[str, Any]) -> Dict[str, Any]:
                 normalized_sf.append([title, int(idx)])
         out["supporting_facts"] = normalized_sf
 
+    raw_evidences = first_present(
+        out,
+        "evidences",
+        "evidence",
+        "kg_triples",
+        "triples",
+        default=[],
+    )
+    out["evidences"] = normalize_evidence_triples(raw_evidences)
+
     return out
 
 
@@ -215,7 +346,7 @@ def load_hotpot_file(path: str) -> List[Dict[str, Any]]:
             data = json.load(f)
         if not isinstance(data, list):
             raise ValueError(f"Expected JSON list, got {type(data)} from {p}")
-        return data
+        return [normalize_hotpot_record(r) for r in data]
 
     if suffix == ".jsonl":
         rows = []
@@ -223,7 +354,7 @@ def load_hotpot_file(path: str) -> List[Dict[str, Any]]:
             for line in f:
                 line = line.strip()
                 if line:
-                    rows.append(json.loads(line))
+                    rows.append(normalize_hotpot_record(json.loads(line)))
         return rows
 
     if suffix == ".parquet":
@@ -645,6 +776,7 @@ def build_rows_for_example(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
+    max_kg_bridge_triples: int,
     seed: int,
 ) -> List[Dict[str, Any]]:
     ex_id = str(example.get("_id", f"no_id_{seed}"))
@@ -652,11 +784,20 @@ def build_rows_for_example(
     answer = str(example.get("answer", ""))
     q_type = str(example.get("type", "unknown"))
     level = str(example.get("level", "unknown"))
-
     sentence_records = flatten_context(example)
     sent_lookup = {
         (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
     }
+    evidences = normalize_evidence_triples(example.get("evidences", []))
+    kg_construction_method = "provided"
+    if not evidences:
+        evidences = construct_wiki_bridge_triples(
+            sentence_records=sentence_records,
+            answer=answer,
+            max_triples=max_kg_bridge_triples,
+        )
+        kg_construction_method = "title_answer_fallback" if evidences else "none"
+    kg_evidence_units = evidence_triple_units(evidences)
 
     gold_units = get_gold_support_units(example, sent_lookup)
 
@@ -713,12 +854,28 @@ def build_rows_for_example(
             "answer": answer,
             "hotpot_type": q_type,
             "level": level,
+            "evidences": evidences,
+            "kg_construction_method": kg_construction_method,
             # Compatibility with OWL scripts.
             "sparql_query": "",
             "query": "",
             # Candidate support.
             "subgraph_units": candidate_units,
             "subgraph_size": len(candidate_units),
+            # Graph context nodes are available to the GNN message-passing
+            # graph, but are not scored as predicted support sentences.
+            "graph_context_units": kg_evidence_units,
+            "kg_evidence_units": kg_evidence_units,
+            "evidence_representation": (
+                "sentence_text_with_kg_bridges"
+                if kg_evidence_units
+                else "sentence_text"
+            ),
+            "has_typed_nodes": bool(kg_evidence_units),
+            "has_structural_edges": bool(kg_evidence_units),
+            "kg_bonus_mode": (
+                "kg_bridge_nodes" if kg_evidence_units else "disabled_sentence_text"
+            ),
             # Gold support.
             "gold_units": gold_units,
             "gold_explanations": gold_explanations,
@@ -802,6 +959,7 @@ def build_split_rows(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
+    max_kg_bridge_triples: int,
     seed: int,
 ) -> List[Dict[str, Any]]:
     all_rows: List[Dict[str, Any]] = []
@@ -813,6 +971,7 @@ def build_split_rows(
             max_sentences_per_example=max_sentences_per_example,
             max_subgraph_size=max_subgraph_size,
             max_candidates_per_question=max_candidates_per_question,
+            max_kg_bridge_triples=max_kg_bridge_triples,
             seed=seed + idx,
         )
         all_rows.extend(rows)
@@ -851,6 +1010,16 @@ def main():
     parser.add_argument("--max-sentences-per-example", type=int, default=30)
     parser.add_argument("--max-subgraph-size", type=int, default=3)
     parser.add_argument("--max-candidates-per-question", type=int, default=512)
+    parser.add_argument(
+        "--max-kg-bridge-triples",
+        type=int,
+        default=64,
+        help=(
+            "Maximum deterministic KG bridge triples to construct per example "
+            "when no upstream evidences/kg_triples are present. Use 0 to "
+            "disable fallback KG construction."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -900,6 +1069,7 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
+        max_kg_bridge_triples=args.max_kg_bridge_triples,
         seed=args.seed,
     )
 
@@ -910,6 +1080,7 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
+        max_kg_bridge_triples=args.max_kg_bridge_triples,
         seed=args.seed + 100000,
     )
 
@@ -920,6 +1091,7 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
+        max_kg_bridge_triples=args.max_kg_bridge_triples,
         seed=args.seed + 200000,
     )
 
@@ -945,6 +1117,12 @@ def main():
         "max_sentences_per_example": args.max_sentences_per_example,
         "max_subgraph_size": args.max_subgraph_size,
         "max_candidates_per_question": args.max_candidates_per_question,
+        "max_kg_bridge_triples": args.max_kg_bridge_triples,
+        "evidence_representation": "sentence_text_with_optional_kg_bridges",
+        "has_typed_nodes": "row_dependent",
+        "has_structural_edges": "row_dependent",
+        "kg_bonus_mode": "kg_bridge_nodes",
+        "kg_construction_required_for_full_sageqa": False,
         "train_rows": len(train_rows),
         "dev_rows": len(dev_rows),
         "test_rows": len(test_rows),

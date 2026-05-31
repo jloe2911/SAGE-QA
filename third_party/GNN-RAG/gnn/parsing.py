@@ -93,7 +93,7 @@ def add_parse_args(parser):
     parser_graftnet = subparsers.add_parser("GraftNet")
     create_parser_graftnet(parser_graftnet)
 
-    # This checkout does not include create_parser_nutrea. The NeSyQA adapter uses
+    # This checkout does not include create_parser_nutrea. The sageqa adapter uses
     # the upstream ReaRev path, so avoid registering the missing parser.
 
 

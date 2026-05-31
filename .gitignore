@@ -210,6 +210,7 @@ __marimo__/
 data/FamilyOWL_*/
 data/HotpotQA/
 data/2WikiMultiHopQA/
+data/Pizza_*/
 data/raw/*
 !data/raw/family.zip
 outputs/

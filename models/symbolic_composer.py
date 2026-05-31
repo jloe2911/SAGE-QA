@@ -1,4 +1,5 @@
 import itertools
+import json
 import math
 import re
 from dataclasses import dataclass, asdict
@@ -181,13 +182,16 @@ def parse_axiom(raw_axiom: str) -> ParsedAxiom:
 class SymbolicComposer:
     def __init__(
         self,
-        top_k_subgraph: int = 3,
+        top_k_subgraph: int = 0,
         edge_threshold: float = 0.50,
         connectivity_bonus: float = 0.30,
         fact_rule_mix_bonus: float = 0.20,
         query_alignment_bonus: float = 0.18,
         bridge_bonus: float = 0.22,
         redundancy_penalty: float = 0.05,
+        beam_width: int = 96,
+        max_combinations: int = 5000,
+        learned_weights_path: str = "",
     ):
         self.top_k_subgraph = top_k_subgraph
         self.edge_threshold = edge_threshold
@@ -196,6 +200,32 @@ class SymbolicComposer:
         self.query_alignment_bonus = query_alignment_bonus
         self.bridge_bonus = bridge_bonus
         self.redundancy_penalty = redundancy_penalty
+        self.beam_width = beam_width
+        self.max_combinations = max_combinations
+
+        if learned_weights_path:
+            self.load_learned_weights(learned_weights_path)
+
+    def load_learned_weights(self, path: str) -> None:
+        """
+        Load offline-fitted symbolic weights from JSON.
+
+        Expected keys match the constructor names:
+        connectivity_bonus, fact_rule_mix_bonus, query_alignment_bonus,
+        bridge_bonus, redundancy_penalty.
+        """
+        with open(path, "r", encoding="utf-8") as f:
+            weights = json.load(f)
+
+        for name in (
+            "connectivity_bonus",
+            "fact_rule_mix_bonus",
+            "query_alignment_bonus",
+            "bridge_bonus",
+            "redundancy_penalty",
+        ):
+            if name in weights:
+                setattr(self, name, float(weights[name]))
 
     # -----------------------------------------------------
     # Edge building
@@ -365,6 +395,128 @@ class SymbolicComposer:
             return 0.0
         return max(0.0, 1.0 - (unique / total))
 
+    def _score_nodes(
+        self,
+        nodes: List[Dict],
+        edges: List[Dict],
+        query_entities: Set[str],
+        query_properties: Set[str],
+    ) -> Dict:
+        node_ids = {n["node_id"] for n in nodes}
+
+        base = sum(self._node_score(n) for n in nodes)
+        connected = self._is_connected(node_ids, edges)
+        mix = self._fact_rule_mix(nodes)
+        q_align = self._query_alignment(nodes, query_entities, query_properties)
+        bridge = self._bridge_score(nodes, query_entities, query_properties)
+        redundancy = self._redundancy(nodes)
+
+        score = base
+        if connected:
+            score += self.connectivity_bonus
+        if mix:
+            score += self.fact_rule_mix_bonus
+        score += self.query_alignment_bonus * q_align
+        score += self.bridge_bonus * bridge
+        score -= self.redundancy_penalty * redundancy
+
+        return {
+            "node_ids": sorted(node_ids),
+            "score": round(score, 6),
+            "connected": connected,
+            "fact_rule_mix": mix,
+            "query_alignment": round(q_align, 6),
+            "bridge_score": round(bridge, 6),
+            "nodes": [
+                {
+                    "node_id": n["node_id"],
+                    "raw_axiom": n["raw_axiom"],
+                    "score": n["score"],
+                    "candidate_kind": n["candidate_kind"],
+                    "axiom_type": n["parsed_obj"].axiom_type,
+                    "parsed": asdict(n["parsed_obj"]),
+                }
+                for n in nodes
+            ],
+        }
+
+    def _estimated_combination_count(self, n: int, max_size: int) -> int:
+        total = 0
+        for size in range(1, max_size + 1):
+            total += math.comb(n, size)
+            if total > self.max_combinations:
+                break
+        return total
+
+    def _beam_candidates(
+        self,
+        parsed_nodes: List[Dict],
+        edges: List[Dict],
+        max_size: int,
+        query_entities: Set[str],
+        query_properties: Set[str],
+    ) -> List[Dict]:
+        node_by_id = {n["node_id"]: n for n in parsed_nodes}
+        adjacency = {n["node_id"]: set() for n in parsed_nodes}
+        for edge in edges:
+            adjacency[edge["source"]].add(edge["target"])
+            adjacency[edge["target"]].add(edge["source"])
+
+        frontier = [
+            (n["node_id"],)
+            for n in sorted(parsed_nodes, key=lambda item: item["score"], reverse=True)
+        ][: max(1, self.beam_width)]
+        seen = set(frontier)
+        candidates = []
+
+        for size in range(1, max_size + 1):
+            for combo_ids in frontier:
+                candidates.append(
+                    self._score_nodes(
+                        [node_by_id[nid] for nid in combo_ids],
+                        edges,
+                        query_entities,
+                        query_properties,
+                    )
+                )
+
+            if size == max_size:
+                break
+
+            expansions = {}
+            for combo_ids in frontier:
+                combo_set = set(combo_ids)
+                neighbors = set()
+                for nid in combo_ids:
+                    neighbors.update(adjacency[nid])
+
+                for nxt in neighbors - combo_set:
+                    expanded = tuple(sorted((*combo_ids, nxt)))
+                    if expanded in seen:
+                        continue
+                    seen.add(expanded)
+                    candidate = self._score_nodes(
+                        [node_by_id[nid] for nid in expanded],
+                        edges,
+                        query_entities,
+                        query_properties,
+                    )
+                    expansions[expanded] = candidate
+
+            if not expansions:
+                break
+
+            frontier = [
+                tuple(candidate["node_ids"])
+                for candidate in sorted(
+                    expansions.values(),
+                    key=lambda item: item["score"],
+                    reverse=True,
+                )[: max(1, self.beam_width)]
+            ]
+
+        return candidates
+
     # -----------------------------------------------------
     # Main compose
     # -----------------------------------------------------
@@ -393,53 +545,37 @@ class SymbolicComposer:
 
         best = None
 
-        max_size = min(self.top_k_subgraph, len(parsed_nodes))
-        for size in range(1, max_size + 1):
-            for combo in itertools.combinations(parsed_nodes, size):
-                node_ids = {n["node_id"] for n in combo}
-
-                base = sum(self._node_score(n) for n in combo)
-                connected = self._is_connected(node_ids, edges)
-                mix = self._fact_rule_mix(list(combo))
-                q_align = self._query_alignment(
-                    list(combo), query_entities, query_properties
+        max_size = (
+            len(parsed_nodes)
+            if self.top_k_subgraph <= 0
+            else min(self.top_k_subgraph, len(parsed_nodes))
+        )
+        if (
+            self._estimated_combination_count(len(parsed_nodes), max_size)
+            <= self.max_combinations
+        ):
+            candidates = [
+                self._score_nodes(
+                    list(combo),
+                    edges,
+                    query_entities,
+                    query_properties,
                 )
-                bridge = self._bridge_score(
-                    list(combo), query_entities, query_properties
-                )
-                redundancy = self._redundancy(list(combo))
+                for size in range(1, max_size + 1)
+                for combo in itertools.combinations(parsed_nodes, size)
+            ]
+        else:
+            candidates = self._beam_candidates(
+                parsed_nodes=parsed_nodes,
+                edges=edges,
+                max_size=max_size,
+                query_entities=query_entities,
+                query_properties=query_properties,
+            )
 
-                score = base
-                if connected:
-                    score += self.connectivity_bonus
-                if mix:
-                    score += self.fact_rule_mix_bonus
-                score += self.query_alignment_bonus * q_align
-                score += self.bridge_bonus * bridge
-                score -= self.redundancy_penalty * redundancy
-
-                candidate = {
-                    "node_ids": sorted(node_ids),
-                    "score": round(score, 6),
-                    "connected": connected,
-                    "fact_rule_mix": mix,
-                    "query_alignment": round(q_align, 6),
-                    "bridge_score": round(bridge, 6),
-                    "nodes": [
-                        {
-                            "node_id": n["node_id"],
-                            "raw_axiom": n["raw_axiom"],
-                            "score": n["score"],
-                            "candidate_kind": n["candidate_kind"],
-                            "axiom_type": n["parsed_obj"].axiom_type,
-                            "parsed": asdict(n["parsed_obj"]),
-                        }
-                        for n in combo
-                    ],
-                }
-
-                if best is None or candidate["score"] > best["score"]:
-                    best = candidate
+        for candidate in candidates:
+            if best is None or candidate["score"] > best["score"]:
+                best = candidate
 
         if best is None:
             best = {

@@ -1,5 +1,6 @@
 import re
-from typing import List, Dict, Optional
+import string
+from typing import List, Dict, Optional, Set, Tuple
 
 import torch
 import torch.nn as nn
@@ -33,6 +34,16 @@ def serialize_axiom_for_encoder(axiom: str) -> str:
     A stable text form for encoding axiom nodes.
     """
     axiom = " ".join(str(axiom).strip().split())
+
+    kg = parse_kg_triple_unit(axiom)
+    if kg is not None:
+        s, p, o = kg
+        return f"fact subject {s} predicate {p} object {o}"
+
+    sent = parse_sentence_unit(axiom)
+    if sent is not None:
+        title, _, text = sent
+        return f"sentence title {title} text {text}"
 
     if axiom.startswith("SymmetricObjectProperty("):
         p = axiom[len("SymmetricObjectProperty(") : -1]
@@ -90,6 +101,79 @@ def serialize_axiom_for_encoder(axiom: str) -> str:
     return axiom
 
 
+def parse_kg_triple_unit(unit: str) -> Optional[Tuple[str, str, str]]:
+    parts = str(unit).split("::", 3)
+    if len(parts) == 4 and parts[0] == "KG":
+        return parts[1].strip(), parts[2].strip(), parts[3].strip()
+    return None
+
+
+def parse_sentence_unit(unit: str) -> Optional[Tuple[str, int, str]]:
+    parts = str(unit).split("::", 3)
+    if len(parts) != 4 or parts[0] != "SENT":
+        return None
+    try:
+        idx = int(parts[2])
+    except Exception:
+        idx = -1
+    return parts[1].strip(), idx, parts[3].strip()
+
+
+_ARTICLES = {"a", "an", "the"}
+
+
+def normalize_text_for_match(text: str) -> str:
+    text = str(text or "").lower()
+    text = text.translate(str.maketrans("", "", string.punctuation))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def token_set_for_match(text: str) -> Set[str]:
+    return {
+        tok
+        for tok in normalize_text_for_match(text).split()
+        if tok and tok not in _ARTICLES and len(tok) > 1
+    }
+
+
+def kg_unit_signature(unit: str) -> Tuple[Set[str], Set[str]]:
+    kg = parse_kg_triple_unit(unit)
+    if kg is None:
+        return set(), set()
+    s, p, o = kg
+    return {s, o}, {normalize_prop(p)}
+
+
+def text_mentions_entity(text: str, entity: str) -> bool:
+    entity_norm = normalize_text_for_match(entity)
+    text_norm = normalize_text_for_match(text)
+    if not entity_norm or not text_norm:
+        return False
+    if entity_norm in text_norm:
+        return True
+    entity_tokens = token_set_for_match(entity)
+    text_tokens = token_set_for_match(text)
+    if not entity_tokens:
+        return False
+    # Require substantial overlap to avoid connecting every Hesse-like page.
+    return len(entity_tokens & text_tokens) / len(entity_tokens) >= 0.6
+
+
+def sentence_kg_edge(sentence_unit: str, kg_unit: str) -> bool:
+    sent = parse_sentence_unit(sentence_unit)
+    kg = parse_kg_triple_unit(kg_unit)
+    if sent is None or kg is None:
+        return False
+    title, _, text = sent
+    s, _, o = kg
+    haystack = f"{title} {text}"
+    return (
+        text_mentions_entity(haystack, s)
+        or text_mentions_entity(haystack, o)
+        or text_mentions_entity(f"{s} {o}", title)
+    )
+
+
 def extract_rule_properties(unit: str) -> set:
     unit = str(unit).strip()
     props = set()
@@ -139,6 +223,28 @@ def edge_between_axioms(ax1: str, ax2: str) -> bool:
     Same symbolic graph intuition as the previous subgraph generator:
     connect axioms if they share entities or properties.
     """
+    kg1 = parse_kg_triple_unit(ax1)
+    kg2 = parse_kg_triple_unit(ax2)
+    sent1 = parse_sentence_unit(ax1)
+    sent2 = parse_sentence_unit(ax2)
+
+    if kg1 is not None and sent2 is not None:
+        return sentence_kg_edge(ax2, ax1)
+
+    if sent1 is not None and kg2 is not None:
+        return sentence_kg_edge(ax1, ax2)
+
+    if kg1 is not None and kg2 is not None:
+        ents1, props1 = kg_unit_signature(ax1)
+        ents2, props2 = kg_unit_signature(ax2)
+        return bool((ents1 & ents2) or (props1 & props2))
+
+    # Keep sentence-sentence edges conservative. KG bridge nodes carry the
+    # structural signal for text benchmarks; capitalized phrase overlap tends
+    # to create dense, noisy graphs.
+    if sent1 is not None and sent2 is not None:
+        return False
+
     p1 = parse_axiom(ax1)
     p2 = parse_axiom(ax2)
 
@@ -212,6 +318,55 @@ def compute_node_symbolic_features(
     rows = []
 
     for ax in candidate_axioms:
+        kg = parse_kg_triple_unit(ax)
+        if kg is not None:
+            subject, predicate, obj = kg
+            entity_tokens = token_set_for_match(subject) | token_set_for_match(obj)
+            property_tokens = token_set_for_match(predicate)
+            question_tokens = token_set_for_match(question)
+
+            overlaps_query_entity = (
+                1.0 if entity_tokens and entity_tokens & question_tokens else 0.0
+            )
+            overlaps_query_property = (
+                1.0 if property_tokens and property_tokens & question_tokens else 0.0
+            )
+            rows.append(
+                [
+                    1.0,
+                    0.0,
+                    overlaps_query_entity,
+                    overlaps_query_property,
+                    0.0,
+                    overlaps_query_entity,
+                    0.0,
+                    1.0,
+                ]
+            )
+            continue
+
+        sent = parse_sentence_unit(ax)
+        if sent is not None:
+            title, _, text = sent
+            question_tokens = token_set_for_match(question)
+            sent_tokens = token_set_for_match(f"{title} {text}")
+            title_tokens = token_set_for_match(title)
+            overlap = 1.0 if sent_tokens & question_tokens else 0.0
+            title_overlap = 1.0 if title_tokens & question_tokens else 0.0
+            rows.append(
+                [
+                    0.0,
+                    0.0,
+                    title_overlap,
+                    overlap,
+                    0.0,
+                    title_overlap,
+                    0.0,
+                    1.0,
+                ]
+            )
+            continue
+
         parsed = parse_axiom(ax)
 
         unit_entities = set(parsed.entities())

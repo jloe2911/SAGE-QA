@@ -51,6 +51,34 @@ DATASETS = {
         "output_dir": "outputs/full_results/FamilyOWL_2hop",
         "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_familyowl_2hop_full",
     },
+    "pizza_100_1hop": {
+        "display": "Pizza_100_1hop",
+        "type": "owl",
+        "data_dir": "data/pizza_100_1hop",
+        "output_dir": "outputs/full_results/pizza_100_1hop",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_pizza_100_1hop_full",
+    },
+    "pizza_100_2hop": {
+        "display": "Pizza_100_2hop",
+        "type": "owl",
+        "data_dir": "data/pizza_100_2hop",
+        "output_dir": "outputs/full_results/pizza_100_2hop",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_pizza_100_2hop_full",
+    },
+    "pizza_250_1hop": {
+        "display": "Pizza_250_1hop",
+        "type": "owl",
+        "data_dir": "data/pizza_250_1hop",
+        "output_dir": "outputs/full_results/pizza_250_1hop",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_pizza_250_1hop_full",
+    },
+    "pizza_250_2hop": {
+        "display": "Pizza_250_2hop",
+        "type": "owl",
+        "data_dir": "data/pizza_250_2hop",
+        "output_dir": "outputs/full_results/pizza_250_2hop",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_pizza_250_2hop_full",
+    },
 }
 
 
@@ -69,11 +97,11 @@ METHODS = {
         "score_mode": "neural",
         "valid_for": ["text", "owl"],
     },
-    "nesyqa_text_chain": {
-        "display": "NeSyQA Text-Chain",
+    "sageqa_text_chain": {
+        "display": "sageqa Text-Chain",
         "needs_training": True,
-        "details_subdir": "gnn_nesyqa_text_chain",
-        "score_mode": "nesyqa_text_chain",
+        "details_subdir": "gnn_sageqa_text_chain",
+        "score_mode": "sageqa_text_chain",
         "valid_for": ["text"],
     },
     "gnn_rag": {
@@ -84,18 +112,18 @@ METHODS = {
         "valid_for": ["text", "owl"],
         "gnn_rag": True,
     },
-    "nesyqa_compact": {
-        "display": "NeSyQA Compact",
+    "sageqa_compact": {
+        "display": "sageqa Compact",
         "needs_training": True,
-        "details_subdir": "gnn_nesyqa_compact",
-        "score_mode": "nesyqa_compact",
+        "details_subdir": "gnn_sageqa_compact",
+        "score_mode": "sageqa_compact",
         "valid_for": ["owl"],
     },
-    "nesyqa_proof": {
-        "display": "NeSyQA Proof",
+    "sageqa_proof": {
+        "display": "sageqa Proof",
         "needs_training": True,
-        "details_subdir": "gnn_nesyqa_proof",
-        "score_mode": "nesyqa_proof",
+        "details_subdir": "gnn_sageqa_proof",
+        "score_mode": "sageqa_proof",
         "valid_for": ["owl"],
     },
 }
@@ -225,9 +253,15 @@ def safe_model_name(model: str) -> str:
 
 def default_methods_for_dataset(dataset_type: str) -> List[str]:
     if dataset_type == "text":
-        return ["lexical_subgraph", "gnn_neural", "nesyqa_text_chain"]
+        return ["lexical_subgraph", "gnn_neural", "sageqa_text_chain", "gnn_rag"]
     if dataset_type == "owl":
-        return ["lexical_subgraph", "gnn_neural", "nesyqa_compact", "nesyqa_proof"]
+        return [
+            "lexical_subgraph",
+            "gnn_neural",
+            "sageqa_compact",
+            "sageqa_proof",
+            "gnn_rag",
+        ]
     raise ValueError(f"Unknown dataset type: {dataset_type}")
 
 
@@ -497,14 +531,14 @@ def run_gnn_rag_generation(
         llm_root / "src" / "qa_prediction" / "predict_answer.py", "GNN-RAG predictor"
     )
 
-    adapter_dataset = f"nesyqa-{dataset_key}"
+    adapter_dataset = f"sageqa-{dataset_key}"
     gnn_data_dir = gnn_root / "data" / adapter_dataset
     gnn_checkpoint_dir = gnn_root / "checkpoint" / adapter_dataset
     gnn_experiment = f"rearev_lstm_{adapter_dataset}"
     gnn_info_path = gnn_checkpoint_dir / f"{gnn_experiment}_test.info"
     llm_data_dir = llm_root / "data" / adapter_dataset
     llm_gnn_dir = llm_root / "results" / "gnn" / adapter_dataset / "rearev-lstm"
-    predict_root = llm_root / "results" / "NeSyQA-GNN-RAG"
+    predict_root = llm_root / "results" / "sageqa-GNN-RAG"
     raw_predictions = (
         predict_root
         / adapter_dataset
@@ -652,7 +686,7 @@ def run_gnn_rag_generation(
         "--rule_path_g2",
         "None",
         "--predict_path",
-        str(Path("results") / "NeSyQA-GNN-RAG"),
+        str(Path("results") / "sageqa-GNN-RAG"),
         "-n",
         "1",
     ]
@@ -1034,7 +1068,7 @@ def run_experiment(args) -> None:
             if method_cfg.get("gnn_rag"):
                 log(
                     "GNN-RAG uses the upstream ReaRev retriever on adapted "
-                    "KGQA-style data; skipping local NeSyQA retrieval details."
+                    "KGQA-style data; skipping local sageqa retrieval details."
                 )
                 continue
             elif method_key == "lexical_subgraph":
@@ -1245,8 +1279,15 @@ def main():
     parser.add_argument(
         "--datasets",
         type=str,
-        default="hotpotqa,2wiki,familyowl_1hop,familyowl_2hop",
-        help="Comma-separated: hotpotqa,2wiki,familyowl_1hop,familyowl_2hop",
+        default=(
+            "hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,"
+            "pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop"
+        ),
+        help=(
+            "Comma-separated dataset keys. Choices: "
+            "hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,"
+            "pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop"
+        ),
     )
     parser.add_argument(
         "--methods",
@@ -1254,8 +1295,8 @@ def main():
         default="auto",
         help=(
             "Comma-separated method list or 'auto'. "
-            "Text auto: lexical_subgraph,gnn_neural,nesyqa_text_chain. "
-            "OWL auto: lexical_subgraph,gnn_neural,nesyqa_compact."
+            "Text auto: lexical_subgraph,gnn_neural,sageqa_text_chain,gnn_rag. "
+            "OWL auto: lexical_subgraph,gnn_neural,sageqa_compact,sageqa_proof,gnn_rag."
         ),
     )
 

@@ -28,11 +28,11 @@ MODEL_FILES = {
         "gnn_neural/test_metrics.json",
         "gnn_neural/eval_metrics.json",
     ],
-    "NeSyQA": [
-        "gnn_nesyqa_compact/test_split_metrics.json",
-        "gnn_nesyqa_compact/metrics.json",
-        "gnn_nesyqa_compact/test_metrics.json",
-        "gnn_nesyqa_compact/eval_metrics.json",
+    "sageqa": [
+        "gnn_sageqa_compact/test_split_metrics.json",
+        "gnn_sageqa_compact/metrics.json",
+        "gnn_sageqa_compact/test_metrics.json",
+        "gnn_sageqa_compact/eval_metrics.json",
     ],
 }
 
@@ -446,7 +446,7 @@ def main():
         "Lexical Subgraph": 2,
         "Lexical Axiom": 3,
         "GNN Subgraph": 4,
-        "NeSyQA": 5,
+        "sageqa": 5,
     }
 
     dataset_order = {name: i for i, name in enumerate(dataset_names)}

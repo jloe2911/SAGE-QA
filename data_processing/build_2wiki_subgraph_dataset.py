@@ -67,6 +67,96 @@ def parse_sentence_unit(unit: str) -> Tuple[str, int, str]:
     return "", -1, str(unit)
 
 
+def make_kg_triple_unit(subject: str, predicate: str, obj: str) -> str:
+    """
+    Structured 2Wiki evidence triple used as a graph-context bridge node.
+    """
+    return f"KG::{clean_sentence(subject)}::{clean_sentence(predicate)}::{clean_sentence(obj)}"
+
+
+def evidence_triple_units(evidences: List[List[str]]) -> List[str]:
+    units: List[str] = []
+    seen = set()
+    for ev in evidences:
+        if not isinstance(ev, list) or len(ev) < 3:
+            continue
+        unit = make_kg_triple_unit(ev[0], ev[1], ev[2])
+        if unit not in seen:
+            seen.add(unit)
+            units.append(unit)
+    return units
+
+
+def construct_wiki_bridge_triples(
+    sentence_records: List[Dict[str, Any]],
+    answer: str,
+    max_triples: int,
+) -> List[List[str]]:
+    """
+    Deterministic KG fallback for Wikipedia text.
+
+    2Wiki normally provides evidence triples. This fallback keeps the same
+    bridge-node mechanism available for ablations or alternate text inputs
+    where those triples are missing.
+    """
+    if max_triples <= 0:
+        return []
+
+    titles = []
+    seen_titles = set()
+    for rec in sentence_records:
+        title = rec.get("title", "")
+        if title and title not in seen_titles:
+            seen_titles.add(title)
+            titles.append(title)
+
+    triples: List[List[str]] = []
+    seen = set()
+
+    def add(subject: str, predicate: str, obj: str) -> None:
+        if len(triples) >= max_triples:
+            return
+        subject = clean_sentence(subject)
+        predicate = clean_sentence(predicate)
+        obj = clean_sentence(obj)
+        if not subject or not predicate or not obj or subject == obj:
+            return
+        key = (subject, predicate, obj)
+        if key not in seen:
+            seen.add(key)
+            triples.append([subject, predicate, obj])
+
+    title_by_norm = {normalize_text(title): title for title in titles}
+    answer_norm = normalize_text(answer)
+
+    for rec in sentence_records:
+        source_title = rec.get("title", "")
+        sentence = rec.get("sentence", "")
+        sentence_norm = normalize_text(sentence)
+
+        if answer_norm not in {"yes", "no"} and phrase_in_text(answer, sentence):
+            add(source_title, "mentions_answer", answer)
+
+        for target_norm, target_title in title_by_norm.items():
+            if not target_norm or target_title == source_title:
+                continue
+            if phrase_in_text(target_title, sentence):
+                add(source_title, "mentions_page", target_title)
+
+        if len(triples) >= max_triples:
+            break
+
+    return triples
+
+
+def phrase_in_text(phrase: str, text: str) -> bool:
+    phrase_norm = normalize_text(phrase)
+    text_norm = normalize_text(text)
+    if len(phrase_norm) < 3 or not text_norm:
+        return False
+    return f" {phrase_norm} " in f" {text_norm} "
+
+
 def get_first_present(mapping: Dict[str, Any], keys: List[str], default=None):
     """
     Safely returns the first existing non-None value from a dict.
@@ -685,6 +775,7 @@ def build_rows_for_example(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
+    max_kg_bridge_triples: int,
     seed: int,
 ) -> List[Dict[str, Any]]:
     raw_id = str(get_first_present(example, ["_id", "id"], f"no_id_{seed}"))
@@ -697,6 +788,15 @@ def build_rows_for_example(
     sent_lookup = {
         (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
     }
+    kg_construction_method = "provided"
+    if not evidences:
+        evidences = construct_wiki_bridge_triples(
+            sentence_records=sentence_records,
+            answer=answer,
+            max_triples=max_kg_bridge_triples,
+        )
+        kg_construction_method = "title_answer_fallback" if evidences else "none"
+    kg_evidence_units = evidence_triple_units(evidences)
 
     gold_units = get_gold_support_units(example, sent_lookup)
 
@@ -754,12 +854,27 @@ def build_rows_for_example(
             "answer": answer,
             "question_type": q_type,
             "evidences": evidences,
+            "kg_construction_method": kg_construction_method,
             # Compatibility with OWL scripts.
             "sparql_query": "",
             "query": "",
             # Candidate support.
             "subgraph_units": candidate_units,
             "subgraph_size": len(candidate_units),
+            # Graph context nodes are available to the GNN message-passing
+            # graph, but are not scored as predicted support sentences.
+            "graph_context_units": kg_evidence_units,
+            "kg_evidence_units": kg_evidence_units,
+            "evidence_representation": (
+                "sentence_text_with_kg_bridges"
+                if kg_evidence_units
+                else "sentence_text"
+            ),
+            "has_typed_nodes": bool(kg_evidence_units),
+            "has_structural_edges": bool(kg_evidence_units),
+            "kg_bonus_mode": (
+                "kg_bridge_nodes" if kg_evidence_units else "disabled_sentence_text"
+            ),
             # Gold support.
             "gold_units": gold_units,
             "gold_explanations": gold_explanations,
@@ -846,6 +961,7 @@ def build_split_rows(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
+    max_kg_bridge_triples: int,
     seed: int,
 ) -> List[Dict[str, Any]]:
     all_rows: List[Dict[str, Any]] = []
@@ -857,6 +973,7 @@ def build_split_rows(
             max_sentences_per_example=max_sentences_per_example,
             max_subgraph_size=max_subgraph_size,
             max_candidates_per_question=max_candidates_per_question,
+            max_kg_bridge_triples=max_kg_bridge_triples,
             seed=seed + idx,
         )
         all_rows.extend(rows)
@@ -905,6 +1022,16 @@ def main():
     parser.add_argument("--max-sentences-per-example", type=int, default=30)
     parser.add_argument("--max-subgraph-size", type=int, default=4)
     parser.add_argument("--max-candidates-per-question", type=int, default=512)
+    parser.add_argument(
+        "--max-kg-bridge-triples",
+        type=int,
+        default=64,
+        help=(
+            "Maximum deterministic KG bridge triples to construct per example "
+            "when no upstream evidences/kg_triples are present. Use 0 to "
+            "disable fallback KG construction."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -954,6 +1081,7 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
+        max_kg_bridge_triples=args.max_kg_bridge_triples,
         seed=args.seed,
     )
 
@@ -964,6 +1092,7 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
+        max_kg_bridge_triples=args.max_kg_bridge_triples,
         seed=args.seed + 100000,
     )
 
@@ -974,6 +1103,7 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
+        max_kg_bridge_triples=args.max_kg_bridge_triples,
         seed=args.seed + 200000,
     )
 
@@ -999,6 +1129,12 @@ def main():
         "max_sentences_per_example": args.max_sentences_per_example,
         "max_subgraph_size": args.max_subgraph_size,
         "max_candidates_per_question": args.max_candidates_per_question,
+        "max_kg_bridge_triples": args.max_kg_bridge_triples,
+        "evidence_representation": "sentence_text_with_optional_kg_bridges",
+        "has_typed_nodes": "row_dependent",
+        "has_structural_edges": "row_dependent",
+        "kg_bonus_mode": "kg_bridge_nodes",
+        "kg_construction_required_for_full_sageqa": False,
         "train_rows": len(train_rows),
         "dev_rows": len(dev_rows),
         "test_rows": len(test_rows),

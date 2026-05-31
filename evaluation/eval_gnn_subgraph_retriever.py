@@ -135,9 +135,9 @@ def main():
             "neural",
             "minimality_adjusted",
             "completeness_adjusted",
-            "nesyqa_compact",
-            "nesyqa_text_chain",
-            "nesyqa_proof",
+            "sageqa_compact",
+            "sageqa_text_chain",
+            "sageqa_proof",
         ],
         help="Overrides checkpoint score mode.",
     )

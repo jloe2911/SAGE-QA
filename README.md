@@ -1,22 +1,37 @@
-# NeSyQA
+# sageqa
+
+This repository contains the code and data-processing scripts for the sageqa
+experiments. It supports the manuscript experiments on HotpotQA,
+2WikiMultiHopQA, and FamilyOWL, including retrieval-data construction, GNN
+retriever training, symbolic retrieval variants, GNN-RAG adaptation, LLM answer
+generation, final QA evaluation, and error analysis.
+
+## Repository Layout
+
+- `data_processing/`: builders for HotpotQA and 2WikiMultiHopQA retrieval data
+- `data/`: raw inputs and processed retrieval datasets
+- `training/`: training utilities for GNN and symbolic components
+- `experiments/`: unified experiment runner
+- `evaluation/`: QA and support/error-analysis scripts
+- `models/`, `generation/`, `utils/`: model, answer-generation, and shared code
+- `third_party/GNN-RAG/`: expected location for the upstream GNN-RAG baseline
+- `outputs/`: experiment outputs, predictions, and combined result files
+- `checkpoints/`: trained or reused model checkpoints
 
 ## Setup
 
-```bash
+Create and activate a virtual environment, then install dependencies:
+
+```powershell
 python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-On Windows PowerShell:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
 The experiments use Hugging Face models/tokenizers and OpenAI-backed answer
-generation. Make sure the machine can access Hugging Face, or has the required
-models cached locally. Set `OPENAI_API_KEY` before running any command that
-generates LLM answers:
+generation. Make sure the required Hugging Face models are available locally or
+online. Set `OPENAI_API_KEY` before running any command that generates LLM
+answers:
 
 ```powershell
 $env:OPENAI_API_KEY="sk-..."
@@ -26,8 +41,8 @@ The GNN-RAG baseline requires the upstream code under `third_party/GNN-RAG`.
 
 ## Input Data
 
-Raw input files live under `data/raw/`. The repository tracks only the small
-OWL input archive at `data/raw/family.zip`; extract it before building the OWL
+Raw input files live under `data/raw/`. The repository tracks the small
+FamilyOWL archive at `data/raw/family.zip`; extract it before building the OWL
 retrieval datasets:
 
 ```powershell
@@ -48,24 +63,20 @@ hf download framolfese/2WikiMultihopQA data/ `
 ```
 
 The builders read these raw benchmark files and write processed retrieval
-datasets to the other directories under `data/`.
+datasets under `data/`.
 
-## Build OWL Retrieval Data
+## Build FamilyOWL Retrieval Data
 
-OWL-style datasets are built from the project benchmark JSON files. This is a
-different construction path from HotpotQA and 2WikiMultiHopQA: OWL examples
-contain ontology context, SPARQL/query information, answers, and gold
-explanations.
-
-The OWL builder converts each raw benchmark JSON file into one retrieval dataset
-directory named after the JSON stem:
+FamilyOWL examples contain ontology context, SPARQL/query information, answers,
+and gold explanations. The OWL builder converts each raw benchmark JSON file
+into a retrieval dataset directory named after the JSON stem:
 
 - `data/<dataset>/train_subgraph_retrieval.jsonl`
 - `data/<dataset>/dev_subgraph_retrieval.jsonl`
 - `data/<dataset>/test_subgraph_retrieval.jsonl`
 - `data/<dataset>/*_answer_only_no_explanation.jsonl`
 
-Build from raw benchmark files:
+Build the manuscript FamilyOWL datasets:
 
 ```powershell
 python data/build_subgraph_training_data.py --input-json data/raw/family/FamilyOWL_1hop.json --output-dir data
@@ -73,29 +84,36 @@ python data/build_subgraph_training_data.py --input-json data/raw/family/FamilyO
 python data/build_subgraph_training_data.py --input-json data/raw/family/FamilyOWL_2hop.json --output-dir data
 ```
 
-By default the builder includes gold supports, adds query-aligned OWL context axioms, enumerates connected candidate subgraphs up to size 3, and caps negatives at 200 per example.
+By default the builder includes gold supports, adds query-aligned OWL context
+axioms, and uses bounded beam search to generate connected candidate subgraphs
+with no fixed size cap. Runtime is controlled by the beam width and
+candidate-pool cap, and negatives are capped at 200 per example.
+
+Optional controls:
+
+```powershell
+python data/build_subgraph_training_data.py `
+  --input-json data/raw/family/FamilyOWL_2hop.json `
+  --output-dir data `
+  --max-subgraph-size 0 `
+  --candidate-beam-width 96 `
+  --max-candidate-subgraphs 320
+```
+
+Use `--max-subgraph-size N` only when intentionally applying a fixed support
+depth cap. The default `0` means no fixed cap.
+
+The symbolic composer can also load weights fitted offline from retrieval rows:
+
+```powershell
+python training/learn_symbolic_composer_weights.py `
+  --train-path data/FamilyOWL_2hop/train_subgraph_retrieval.jsonl `
+  --output checkpoints/symbolic_composer_weights.json
+```
 
 Binary QAs without gold explanations are written to the
 `*_answer_only_no_explanation.jsonl` files. They are used only for OWL answer
 EM/F1 and are excluded from support, retrieval, and joint metrics.
-
-### OWL Dataset Format
-
-New raw dataset files should follow the same structure as the existing benchmark JSON files. Each top-level item should include:
-
-- `OWL Context`: RDF/XML context used to build candidate support axioms
-- `Task Type` and `Answer Type`: metadata for reporting
-- `QAs`: question-answer entries
-
-Each QA entry should include:
-
-- `NL Question` or `ABS Question`
-- `SPARQL Query`
-- `Answer`
-- `Explanations` or `Minimum Explanation` for support/retrieval examples
-
-Binary QAs may omit explanations when they should be evaluated as answer-only
-examples.
 
 ## Build Text-QA Retrieval Data
 
@@ -104,13 +122,11 @@ builders read downloaded benchmark parquet files and construct sentence-level
 candidate subgraphs. Unlike the OWL datasets, the raw data here is natural-text
 context and supporting facts rather than ontology axioms.
 
-Both builders accept one or more paths for `--train-file`. The generated
-retrieval splits are sampled as follows:
-
-- train from `--train-file`
-- dev from `--dev-file`
-- test from `--test-file` when provided
-- test from `--dev-file` when `--test-file` is omitted
+Text-QA rows include KG bridge nodes for GNN message passing. Both builders
+accept KG-style triples from `evidences`, `evidence`, `kg_triples`, or
+`triples` fields and add them as `KG::subject::predicate::object` nodes in
+`graph_context_units`. These bridge nodes are available to the GNN graph but
+are not counted as predicted support sentences.
 
 For 2WikiMultiHopQA, use the official test parquet as the test source:
 
@@ -124,7 +140,8 @@ python data_processing/build_2wiki_subgraph_dataset.py `
   --max-test-examples 1000 `
   --max-sentences-per-example 30 `
   --max-subgraph-size 4 `
-  --max-candidates-per-question 512 `
+  --max-kg-bridge-triples 64 `
+  --max-candidates-per-question 256 `
   --seed 42
 ```
 
@@ -142,11 +159,12 @@ python data_processing/build_hotpot_subgraph_dataset.py `
   --max-test-examples 1000 `
   --max-sentences-per-example 30 `
   --max-subgraph-size 3 `
-  --max-candidates-per-question 512 `
+  --max-kg-bridge-triples 64 `
+  --max-candidates-per-question 256 `
   --seed 42
 ```
 
-The builders write:
+The generated retrieval files are:
 
 - `data/2WikiMultiHopQA/train_subgraph_retrieval.jsonl`
 - `data/2WikiMultiHopQA/dev_subgraph_retrieval.jsonl`
@@ -155,14 +173,17 @@ The builders write:
 - `data/HotpotQA/dev_subgraph_retrieval.jsonl`
 - `data/HotpotQA/test_subgraph_retrieval.jsonl`
 
+For final runs, `--max-candidates-per-question 256` is the recommended text-QA
+setting. It keeps a broad candidate pool while avoiding very large JSONL files.
+
 ## Reproduce Main Results
 
-After setup and data construction, run the full experiment suite:
+After setup and data construction, run the manuscript experiment suite:
 
 ```powershell
 python experiments/run_experiments.py `
   --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop `
-  --methods lexical_subgraph,gnn_neural,nesyqa_text_chain,nesyqa_compact,nesyqa_proof,gnn_rag `
+  --methods auto `
   --top-k 3 `
   --reader-model gpt-4.1-mini `
   --epochs 3 `
@@ -175,7 +196,7 @@ answers where available:
 ```powershell
 python experiments/run_experiments.py `
   --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop `
-  --methods lexical_subgraph,gnn_neural,nesyqa_text_chain,nesyqa_compact,nesyqa_proof,gnn_rag `
+  --methods auto `
   --top-k 3 `
   --reader-model gpt-4.1-mini `
   --epochs 3 `
@@ -194,61 +215,41 @@ default. Runtime depends on hardware, OpenAI API latency, Hugging Face cache
 state, and whether checkpoints already exist. GNN-RAG and LLM answer generation
 are usually the slowest stages.
 
-## Run Experiments
+## Run Selected Experiments
 
-There is now one experiment runner for both OWL and text-QA datasets:
+The unified runner is:
 
 - `experiments/run_experiments.py`
 
-The dataset construction remains separate, but experiment execution is unified.
-The runner trains or reuses GNN checkpoints, evaluates retrieval methods,
-generates LLM answers, evaluates final QA metrics, and writes combined results.
+It trains or reuses GNN checkpoints, evaluates retrieval methods, generates LLM
+answers, evaluates final QA metrics, and writes combined results.
 
-Set `OPENAI_API_KEY` before running answer generation:
-
-```powershell
-$env:OPENAI_API_KEY="sk-..."
-```
-
-Run all configured datasets with the default method set for each dataset type:
-
-```powershell
-python experiments/run_experiments.py `
-  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop `
-  --methods auto `
-  --top-k 3 `
-  --reader-model gpt-4.1-mini `
-  --encoder-model google/bert_uncased_L-2_H-128_A-2 `
-  --epochs 3 `
-  --candidate-batch-size 512
-```
-
-Supported dataset keys:
+Supported manuscript dataset keys:
 
 - `hotpotqa`: text-QA
 - `2wiki`: text-QA
 - `familyowl_1hop`: OWL
 - `familyowl_2hop`: OWL
 
-With `--methods auto`, the runner chooses methods by dataset type:
-
-- text-QA: `lexical_subgraph`, `gnn_neural`, `nesyqa_text_chain`
-- OWL: `lexical_subgraph`, `gnn_neural`, `nesyqa_compact`, `nesyqa_proof`
-
-Available methods:
-
-- `lexical_subgraph`: lexical sentence-subgraph baseline
-- `gnn_neural`: trained GNN subgraph retriever
-- `nesyqa_text_chain`: GNN retriever plus text-chain symbolic adjustment for HotpotQA/2WikiMultiHopQA
-- `gnn_rag`: upstream GNN-RAG retriever and prediction stage on adapted KGQA-style data
-- `nesyqa_compact`: GNN retriever plus compact symbolic adjustment for OWL datasets
-- `nesyqa_proof`: GNN retriever plus proof-aware symbolic reranking and deterministic OWL proof answering for OWL datasets
-
 Run only text-QA datasets:
 
 ```powershell
 python experiments/run_experiments.py `
   --datasets hotpotqa,2wiki `
+  --methods auto `
+  --top-k 3 `
+  --reader-model gpt-4.1-mini `
+  --epochs 3 `
+  --candidate-batch-size 512 `
+  --skip-llm-if-exists `
+  --resume
+```
+
+Run only FamilyOWL datasets:
+
+```powershell
+python experiments/run_experiments.py `
+  --datasets familyowl_1hop,familyowl_2hop `
   --methods auto `
   --top-k 3 `
   --reader-model gpt-4.1-mini `
@@ -274,25 +275,7 @@ python experiments/run_experiments.py `
 This baseline adapts each dataset into the upstream `cmavro/GNN-RAG` KGQA data
 format, trains/evaluates the upstream ReaRev retriever, writes its `test.info`,
 calls `third_party/GNN-RAG/llm/src/qa_prediction/predict_answer.py`, then
-converts the upstream `predictions.jsonl` back to the common evaluator. For
-FamilyOWL, ontology evidence units are represented as graph nodes. For HotpotQA
-and 2WikiMultiHopQA, retrieved sentence evidence is represented as a
-text-derived evidence graph; this is a NeSyQA adapter around the upstream
-GNN-RAG pipeline rather than a native GNN-RAG text benchmark setting.
-
-Run only OWL datasets:
-
-```powershell
-python experiments/run_experiments.py `
-  --datasets familyowl_1hop,familyowl_2hop `
-  --methods auto `
-  --top-k 3 `
-  --reader-model gpt-4.1-mini `
-  --epochs 3 `
-  --candidate-batch-size 512 `
-  --skip-llm-if-exists `
-  --resume
-```
+converts the upstream `predictions.jsonl` back to the common evaluator.
 
 Useful options:
 
@@ -304,44 +287,51 @@ Useful options:
 - `--resume-llm`: resume OWL LLM answer generation when supported
 - `--max-llm-examples N`: limit LLM answer generation for debugging
 - `--datasets hotpotqa` or `--datasets familyowl_1hop`: run one dataset
-- `--methods nesyqa_text_chain`, `--methods nesyqa_compact`, or `--methods nesyqa_proof`: run one method
 
 The pipeline writes checkpoints under `checkpoints/`, method outputs under
-`outputs/full_results/<dataset>/`, and combined result files:
-
-- `outputs/full_results/full_pipeline_results.csv`
-- `outputs/full_results/full_pipeline_results.json`
+`outputs/full_results/<dataset>/`, and combined result files under
+`outputs/full_results/`.
 
 ## Error Analysis
 
 The error-analysis script writes a per-example CSV and a JSON summary of error
 categories.
 
-OWL example for NeSyQA Proof on FamilyOWL 2-hop:
+FamilyOWL example:
 
 ```powershell
 python evaluation/error_analysis_support_qa.py `
   --mode owl `
-  --details outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/test_details.json `
-  --llm-answers outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl `
+  --details outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/test_details.json `
+  --llm-answers outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl `
   --top-k 3 `
-  --output-csv outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/error_analysis_top3.csv `
-  --output-summary outputs/full_results/FamilyOWL_2hop/gnn_nesyqa_proof/error_analysis_top3_summary.json
+  --output-csv outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/error_analysis_top3.csv `
+  --output-summary outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/error_analysis_top3_summary.json
 ```
 
-Text example for NeSyQA Text-Chain on HotpotQA:
+HotpotQA example:
 
 ```powershell
 python evaluation/error_analysis_support_qa.py `
   --mode text `
-  --details outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/test_details.json `
-  --llm-answers outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/llm_answers_top3_gpt_4_1_mini.jsonl `
+  --details outputs/full_results/HotpotQA/gnn_sageqa_text_chain/test_details.json `
+  --llm-answers outputs/full_results/HotpotQA/gnn_sageqa_text_chain/llm_answers_top3_gpt_4_1_mini.jsonl `
   --gold data/HotpotQA/hotpot_test_subset_gold.json `
-  --predictions outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/hotpotqa_predictions_top3_gpt_4_1_mini.json `
+  --predictions outputs/full_results/HotpotQA/gnn_sageqa_text_chain/hotpotqa_predictions_top3_gpt_4_1_mini.json `
   --top-k 3 `
-  --output-csv outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/error_analysis_top3.csv `
-  --output-summary outputs/full_results/HotpotQA/gnn_nesyqa_text_chain/error_analysis_top3_summary.json
+  --output-csv outputs/full_results/HotpotQA/gnn_sageqa_text_chain/error_analysis_top3.csv `
+  --output-summary outputs/full_results/HotpotQA/gnn_sageqa_text_chain/error_analysis_top3_summary.json
 ```
+
+## Notes for Reviewers
+
+- The reproduction commands above use only the datasets included in the final
+  manuscript experiments.
+- Large external benchmark files must be downloaded separately because they are
+  not committed to the repository.
+- Existing checkpoints and outputs can be reused with `--resume` and
+  `--skip-llm-if-exists` to avoid rerunning expensive stages.
+- LLM-based answer generation requires a valid `OPENAI_API_KEY`.
 
 ## License
 

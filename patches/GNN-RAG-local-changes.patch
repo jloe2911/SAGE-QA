@@ -4595,7 +4595,7 @@ index 1360bf5..ec67fcc 100644
  
 -    parser_nutrea = subparsers.add_parser("NuTrea")
 -    create_parser_nutrea(parser_nutrea)
-+    # This checkout does not include create_parser_nutrea. The NeSyQA adapter uses
++    # This checkout does not include create_parser_nutrea. The sageqa adapter uses
 +    # the upstream ReaRev path, so avoid registering the missing parser.
  
  

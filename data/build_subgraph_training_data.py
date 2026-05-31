@@ -197,6 +197,163 @@ def is_connected(units: Tuple[str, ...]) -> bool:
     return len(visited) == len(units)
 
 
+def build_unit_adjacency(candidate_units: List[str]) -> List[Set[int]]:
+    adjacency = [set() for _ in candidate_units]
+
+    for i, j in itertools.combinations(range(len(candidate_units)), 2):
+        if edge_between_units(candidate_units[i], candidate_units[j]):
+            adjacency[i].add(j)
+            adjacency[j].add(i)
+
+    return adjacency
+
+
+def score_unit_for_query(
+    unit: str,
+    query_entities: Set[str],
+    query_properties: Set[str],
+    degree: int = 0,
+) -> float:
+    entities, properties = unit_signature(unit)
+    parsed = parse_axiom(unit)
+
+    score = 0.0
+    score += 2.0 * len(entities & query_entities)
+    score += 1.5 * len(properties & query_properties)
+    score += 0.15 if parsed.axiom_type == "fact" else 0.0
+    score += 0.10 if parsed.axiom_type == "rule" else 0.0
+    score += min(degree, 8) * 0.01
+    return score
+
+
+def score_subgraph_indices(
+    indices: Tuple[int, ...],
+    candidate_units: List[str],
+    adjacency: List[Set[int]],
+    unit_scores: List[float],
+) -> float:
+    units = [candidate_units[i] for i in indices]
+    parsed = [parse_axiom(unit) for unit in units]
+    kinds = {p.axiom_type for p in parsed}
+
+    internal_edges = 0
+    for pos, i in enumerate(indices):
+        for j in indices[pos + 1 :]:
+            internal_edges += int(j in adjacency[i])
+
+    fact_rule_mix = 1.0 if ("fact" in kinds and "rule" in kinds) else 0.0
+    avg_relevance = sum(unit_scores[i] for i in indices) / max(len(indices), 1)
+
+    return (
+        avg_relevance
+        + 0.05 * internal_edges
+        + 0.20 * fact_rule_mix
+        - 0.015 * max(0, len(indices) - 3)
+    )
+
+
+def beam_connected_subgraphs(
+    candidate_units: List[str],
+    question: str,
+    sparql_query: str,
+    min_subgraph_size: int,
+    max_subgraph_size: int,
+    beam_width: int,
+    max_candidate_subgraphs: int,
+) -> Set[Tuple[str, ...]]:
+    """
+    Generate a bounded set of connected candidate supports.
+
+    This replaces exhaustive n-choose-k enumeration for larger support sizes.
+    The beam expands only through graph-neighboring axioms, so 4+ axiom chains
+    are possible without materializing every combination.
+    """
+    if not candidate_units or max_subgraph_size < min_subgraph_size:
+        return set()
+
+    signature = extract_query_signature(question=question, sparql_query=sparql_query)
+    query_entities = set(signature.get("query_entities", []))
+    query_properties = set(signature.get("query_properties", []))
+
+    adjacency = build_unit_adjacency(candidate_units)
+    unit_scores = [
+        score_unit_for_query(
+            unit,
+            query_entities=query_entities,
+            query_properties=query_properties,
+            degree=len(adjacency[i]),
+        )
+        for i, unit in enumerate(candidate_units)
+    ]
+
+    max_size = min(max_subgraph_size, len(candidate_units))
+    beam_width = max(1, beam_width)
+    max_candidate_subgraphs = max(1, max_candidate_subgraphs)
+
+    seed_indices = sorted(
+        range(len(candidate_units)),
+        key=lambda i: (-unit_scores[i], candidate_units[i]),
+    )
+
+    frontier = [(i,) for i in seed_indices[: max(beam_width, max_candidate_subgraphs)]]
+    scored_candidates = []
+    seen = set(frontier)
+
+    for size in range(1, max_size + 1):
+        if size >= min_subgraph_size:
+            for combo in frontier:
+                scored_candidates.append(
+                    (
+                        score_subgraph_indices(
+                            combo,
+                            candidate_units=candidate_units,
+                            adjacency=adjacency,
+                            unit_scores=unit_scores,
+                        ),
+                        combo,
+                    )
+                )
+
+        if size == max_size:
+            break
+
+        expansions = {}
+        for combo in frontier:
+            combo_set = set(combo)
+            neighbors = set()
+            for idx in combo:
+                neighbors.update(adjacency[idx])
+
+            for nxt in neighbors - combo_set:
+                expanded = tuple(sorted((*combo, nxt)))
+                if expanded in seen:
+                    continue
+                seen.add(expanded)
+                expansions[expanded] = score_subgraph_indices(
+                    expanded,
+                    candidate_units=candidate_units,
+                    adjacency=adjacency,
+                    unit_scores=unit_scores,
+                )
+
+        if not expansions:
+            break
+
+        frontier = [
+            combo
+            for combo, _ in sorted(
+                expansions.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:beam_width]
+        ]
+
+    scored_candidates.sort(key=lambda item: (-item[0], item[1]))
+    return {
+        tuple(candidate_units[i] for i in combo)
+        for _, combo in scored_candidates[:max_candidate_subgraphs]
+    }
+
+
 def set_scores(pred: List[str], gold_explanations: List[List[str]]) -> Dict:
     pred_set = set(pred)
     best = {
@@ -315,6 +472,8 @@ def build_rows_for_qa(
     min_subgraph_size: int,
     max_context_units: int,
     max_negative_per_example: int,
+    candidate_beam_width: int,
+    max_candidate_subgraphs: int,
 ) -> List[Dict]:
     sparql_query = str(qa.get("SPARQL Query") or "")
     question = (
@@ -353,14 +512,26 @@ def build_rows_for_qa(
     candidate_subgraphs = set()
 
     for gold in gold_explanations:
-        if min_subgraph_size <= len(gold) <= max_subgraph_size:
+        if min_subgraph_size <= len(gold) and (
+            max_subgraph_size <= 0 or len(gold) <= max_subgraph_size
+        ):
             candidate_subgraphs.add(tuple(gold))
 
-    max_size = min(max_subgraph_size, len(candidate_units))
-    for size in range(min_subgraph_size, max_size + 1):
-        for combo in itertools.combinations(candidate_units, size):
-            if is_connected(combo):
-                candidate_subgraphs.add(combo)
+    effective_max_subgraph_size = (
+        len(candidate_units) if max_subgraph_size <= 0 else max_subgraph_size
+    )
+
+    candidate_subgraphs.update(
+        beam_connected_subgraphs(
+            candidate_units=candidate_units,
+            question=question,
+            sparql_query=sparql_query,
+            min_subgraph_size=min_subgraph_size,
+            max_subgraph_size=effective_max_subgraph_size,
+            beam_width=candidate_beam_width,
+            max_candidate_subgraphs=max_candidate_subgraphs,
+        )
+    )
 
     positives = []
     negatives = []
@@ -515,6 +686,8 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
                     min_subgraph_size=args.min_subgraph_size,
                     max_context_units=args.max_context_units,
                     max_negative_per_example=args.max_negative_per_example,
+                    candidate_beam_width=args.candidate_beam_width,
+                    max_candidate_subgraphs=args.max_candidate_subgraphs,
                 )
                 source_output[split].extend(rows)
 
@@ -546,9 +719,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", default="data")
     parser.add_argument("--min-subgraph-size", type=int, default=1)
-    parser.add_argument("--max-subgraph-size", type=int, default=3)
+    parser.add_argument(
+        "--max-subgraph-size",
+        type=int,
+        default=0,
+        help=(
+            "Maximum support size to search. Use 0 for no fixed size cap; "
+            "runtime is then controlled by --candidate-beam-width and "
+            "--max-candidate-subgraphs."
+        ),
+    )
     parser.add_argument("--max-context-units", type=int, default=40)
     parser.add_argument("--max-negative-per-example", type=int, default=200)
+    parser.add_argument(
+        "--candidate-beam-width",
+        type=int,
+        default=96,
+        help=(
+            "Beam width for connected support generation. Larger values explore "
+            "more 4+ axiom chains but keep enumeration bounded."
+        ),
+    )
+    parser.add_argument(
+        "--max-candidate-subgraphs",
+        type=int,
+        default=320,
+        help="Maximum non-gold candidate subgraphs generated per QA example.",
+    )
     parser.add_argument("--train-ratio", type=float, default=0.65)
     parser.add_argument("--dev-ratio", type=float, default=0.1)
     parser.add_argument(
