@@ -1,4 +1,4 @@
-# sageqa
+# SAGE-QA
 
 This repository contains the code and data-processing scripts for the sageqa
 experiments. It supports the manuscript experiments on HotpotQA,
@@ -323,7 +323,7 @@ python evaluation/error_analysis_support_qa.py `
   --output-summary outputs/full_results/HotpotQA/gnn_sageqa_text_chain/error_analysis_top3_summary.json
 ```
 
-## Notes for Reviewers
+## Notes
 
 - The reproduction commands above use only the datasets included in the final
   manuscript experiments.
