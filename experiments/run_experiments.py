@@ -258,7 +258,6 @@ def default_methods_for_dataset(dataset_type: str) -> List[str]:
         return [
             "lexical_subgraph",
             "gnn_neural",
-            "sageqa_compact",
             "sageqa_proof",
             "gnn_rag",
         ]
@@ -1296,7 +1295,7 @@ def main():
         help=(
             "Comma-separated method list or 'auto'. "
             "Text auto: lexical_subgraph,gnn_neural,sageqa_text_chain,gnn_rag. "
-            "OWL auto: lexical_subgraph,gnn_neural,sageqa_compact,sageqa_proof,gnn_rag."
+            "OWL auto: lexical_subgraph,gnn_neural,sageqa_proof,gnn_rag."
         ),
     )
 

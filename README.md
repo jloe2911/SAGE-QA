@@ -231,6 +231,11 @@ Supported manuscript dataset keys:
 - `familyowl_1hop`: OWL
 - `familyowl_2hop`: OWL
 
+When `--methods auto` is used, the runner selects defaults by dataset type:
+
+- text-QA: `lexical_subgraph`, `gnn_neural`, `sageqa_text_chain`, `gnn_rag`
+- OWL: `lexical_subgraph`, `gnn_neural`, `sageqa_proof`, `gnn_rag`
+
 Run only text-QA datasets:
 
 ```powershell
