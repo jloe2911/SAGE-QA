@@ -8,6 +8,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
+from rdflib import Graph, URIRef
+from rdflib.namespace import OWL as OWL_NS
+from rdflib.namespace import RDF as RDF_NS
+from rdflib.namespace import RDFS as RDFS_NS
+
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -103,8 +108,34 @@ def get_gold_explanations(qa: Dict) -> List[List[str]]:
     return gold_explanations
 
 
+def parse_rdf_graph(owl_context: str) -> Graph:
+    text = str(owl_context or "").lstrip("\ufeff").strip()
+    if not text:
+        return Graph()
+
+    preferred_formats = (
+        ["xml", "turtle"]
+        if text.startswith("<?xml") or "<rdf:RDF" in text[:500]
+        else ["turtle", "xml"]
+    )
+    errors = []
+
+    for rdf_format in preferred_formats:
+        graph = Graph()
+        try:
+            graph.parse(data=text, format=rdf_format)
+            return graph
+        except Exception as exc:
+            errors.append(f"{rdf_format}: {exc}")
+
+    raise ValueError(
+        "Could not parse OWL Context as Turtle or RDF/XML. "
+        f"Parser errors: {'; '.join(errors)}"
+    )
+
+
 def parse_owl_context(owl_context: str) -> List[str]:
-    root = ET.fromstring(owl_context)
+    graph = parse_rdf_graph(owl_context)
     axioms = []
     seen = set()
 
@@ -114,47 +145,42 @@ def parse_owl_context(owl_context: str) -> List[str]:
             axioms.append(axiom)
             seen.add(axiom)
 
-    for desc in root.findall(f".//{RDF}Description"):
-        subject_uri = desc.attrib.get(f"{RDF}about")
-        if not subject_uri:
+    for subject_ref, predicate_ref, object_ref in graph:
+        if not isinstance(subject_ref, URIRef) or not isinstance(object_ref, URIRef):
             continue
 
-        subject = local_name(subject_uri)
+        subject = local_name(str(subject_ref))
+        predicate = predicate_ref
+        obj = local_name(str(object_ref))
 
-        for child in list(desc):
-            _, child_name = split_tag(child.tag)
-            resource = child.attrib.get(f"{RDF}resource")
-            if not resource:
-                continue
-
-            obj = local_name(resource)
-
-            if child.tag == f"{RDF}type":
-                if obj == "SymmetricProperty":
-                    add(f"SymmetricObjectProperty({subject})")
-                elif obj == "TransitiveProperty":
-                    add(f"TransitiveObjectProperty({subject})")
-                elif obj == "FunctionalProperty":
-                    add(f"FunctionalObjectProperty({subject})")
-                elif obj not in {"NamedIndividual", "ObjectProperty", "Ontology"}:
-                    add(f"{subject} rdf:type {obj}")
-            elif child.tag == f"{RDFS}subPropertyOf":
-                add(f"SubObjectPropertyOf({subject},{obj})")
-            elif child.tag == f"{OWL}inverseOf":
-                add(f"InverseObjectProperties({subject},{obj})")
-            elif child.tag == f"{OWL}equivalentProperty":
-                add(f"EquivalentObjectProperties({subject},{obj})")
-            elif child.tag == f"{RDFS}domain":
-                add(f"{subject} domain {obj}")
-            elif child.tag == f"{RDFS}range":
-                add(f"{subject} range {obj}")
-            elif child_name not in {
-                "comment",
-                "first",
-                "rest",
-                "propertyChainAxiom",
+        if predicate == RDF_NS.type:
+            if obj in {"SymmetricProperty", "SymmetricObjectProperty"}:
+                add(f"SymmetricObjectProperty({subject})")
+            elif obj in {"TransitiveProperty", "TransitiveObjectProperty"}:
+                add(f"TransitiveObjectProperty({subject})")
+            elif obj in {"FunctionalProperty", "FunctionalObjectProperty"}:
+                add(f"FunctionalObjectProperty({subject})")
+            elif obj not in {
+                "NamedIndividual",
+                "ObjectProperty",
+                "Ontology",
+                "Class",
             }:
-                add(f"{subject} {child_name} {obj}")
+                add(f"{subject} rdf:type {obj}")
+        elif predicate == RDFS_NS.subPropertyOf:
+            add(f"SubObjectPropertyOf({subject},{obj})")
+        elif predicate == OWL_NS.inverseOf:
+            add(f"InverseObjectProperties({subject},{obj})")
+        elif predicate == OWL_NS.equivalentProperty:
+            add(f"EquivalentObjectProperties({subject},{obj})")
+        elif predicate == RDFS_NS.domain:
+            add(f"{subject} domain {obj}")
+        elif predicate == RDFS_NS.range:
+            add(f"{subject} range {obj}")
+        else:
+            pred = local_name(str(predicate_ref))
+            if pred not in {"comment", "first", "rest", "propertyChainAxiom"}:
+                add(f"{subject} {pred} {obj}")
 
     return axioms
 

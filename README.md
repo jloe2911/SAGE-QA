@@ -1,10 +1,39 @@
 # SAGE-QA
 
-This repository contains the code and data-processing scripts for the sageqa
+This repository contains the code and data-processing scripts for the SAGE-QA
 experiments. It supports the manuscript experiments on HotpotQA,
 2WikiMultiHopQA, and FamilyOWL, including retrieval-data construction, GNN
 retriever training, symbolic retrieval variants, GNN-RAG adaptation, LLM answer
 generation, final QA evaluation, and error analysis.
+
+## Reproduction Overview
+
+This repository is intended to reproduce the manuscript's main SAGE-QA pipeline
+results for four datasets:
+
+- HotpotQA
+- 2WikiMultiHopQA
+- FamilyOWL_1hop
+- FamilyOWL_2hop
+
+The main entry point is `experiments/run_experiments.py`. It builds or reuses
+GNN checkpoints, evaluates retrieval methods, generates LLM answers, computes
+QA/support/joint metrics, and writes the combined result tables under
+`outputs/full_results/`.
+
+The expected workflow is:
+
+1. Install dependencies.
+2. Download or extract the required input data.
+3. Build the retrieval datasets.
+4. Run either the smoke test or the full manuscript experiment suite.
+5. Compare `outputs/full_results/full_pipeline_results.csv` with the manuscript
+   tables.
+
+The committed repository includes code, the small FamilyOWL raw archive, the
+GNN-RAG adaptation code under `third_party/GNN-RAG/`, and local patch notes.
+Large external benchmarks, generated processed datasets, generated outputs, and
+checkpoints are intentionally not committed.
 
 ## Repository Layout
 
@@ -14,9 +43,30 @@ generation, final QA evaluation, and error analysis.
 - `experiments/`: unified experiment runner
 - `evaluation/`: QA and support/error-analysis scripts
 - `models/`, `generation/`, `utils/`: model, answer-generation, and shared code
-- `third_party/GNN-RAG/`: expected location for the upstream GNN-RAG baseline
+- `third_party/GNN-RAG/`: adapted upstream GNN-RAG baseline code
 - `outputs/`: experiment outputs, predictions, and combined result files
 - `checkpoints/`: trained or reused model checkpoints
+
+## Environment
+
+The repository was prepared and tested on Windows with PowerShell commands. The
+commands can be translated to Bash on Linux/macOS by replacing PowerShell line
+continuations and activation syntax.
+
+Recommended environment:
+
+- Python 3.12, tested with Python 3.12.7
+- A virtual environment with packages from `requirements.txt`
+- Network access for Hugging Face dataset/model downloads unless already cached
+- A valid `OPENAI_API_KEY` for LLM answer generation
+- A CUDA-capable GPU for faster GNN training, although small runs can execute on
+  CPU
+
+Full reproduction can take several hours depending on hardware, Hugging Face
+cache state, OpenAI API latency, and whether checkpoints already exist. The
+text-QA benchmarks use 3,000 training examples and 1,000 test examples in the
+manuscript commands below. GNN-RAG and LLM answer generation are usually the
+slowest stages.
 
 ## Setup
 
@@ -37,7 +87,11 @@ answers:
 $env:OPENAI_API_KEY="sk-..."
 ```
 
-The GNN-RAG baseline requires the upstream code under `third_party/GNN-RAG`.
+The GNN-RAG baseline uses the adapted upstream code under
+`third_party/GNN-RAG`. Local changes are documented in:
+
+- `patches/GNN-RAG-local-changes.md`
+- `patches/GNN-RAG-local-changes.patch`
 
 ## Input Data
 
@@ -64,6 +118,15 @@ hf download framolfese/2WikiMultihopQA data/ `
 
 The builders read these raw benchmark files and write processed retrieval
 datasets under `data/`.
+
+Data and output policy:
+
+- Committed: source code, `data/raw/family.zip`, and GNN-RAG adaptation files.
+- Downloaded externally: HotpotQA and 2WikiMultiHopQA parquet files.
+- Generated locally: `data/FamilyOWL_*`, `data/HotpotQA`,
+  `data/2WikiMultiHopQA`, `outputs/`, and `checkpoints/`.
+- Optional cached outputs/checkpoints may be reused with `--resume` and
+  `--skip-llm-if-exists` when they are available locally.
 
 ## Build FamilyOWL Retrieval Data
 
@@ -134,6 +197,7 @@ For 2WikiMultiHopQA, use the official test parquet as the test source:
 python data_processing/build_2wiki_subgraph_dataset.py `
   --train-file data/raw/2WikiMultihopQA/data/train-00000-of-00002.parquet data/raw/2WikiMultihopQA/data/train-00001-of-00002.parquet `
   --dev-file data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet `
+  --test-file data/raw/2WikiMultihopQA/data/test-00000-of-00001.parquet `
   --output-dir data/2WikiMultiHopQA `
   --max-train-examples 3000 `
   --max-dev-examples 500 `
@@ -176,6 +240,51 @@ The generated retrieval files are:
 For final runs, `--max-candidates-per-question 256` is the recommended text-QA
 setting. It keeps a broad candidate pool while avoiding very large JSONL files.
 
+## Smoke Test
+
+Before running the full suite, verify data loading, retrieval evaluation, GNN
+training, and result writing without OpenAI API calls by running a
+retrieval-only FamilyOWL check.
+
+Lexical retrieval smoke test:
+
+```powershell
+python evaluation/eval_subgraph_baselines.py `
+  --test-path data/FamilyOWL_1hop/test_subgraph_retrieval.jsonl `
+  --baseline lexical `
+  --input-format hybrid `
+  --output-dir outputs/smoke_test/familyowl_1hop_lexical `
+  --source-name FamilyOWL_1hop
+```
+
+Small GNN smoke test:
+
+```powershell
+python training/train_gnn_subgraph_retriever.py `
+  --train-path data/FamilyOWL_1hop/train_subgraph_retrieval.jsonl `
+  --dev-path data/FamilyOWL_1hop/dev_subgraph_retrieval.jsonl `
+  --save-dir checkpoints/smoke_familyowl_1hop `
+  --epochs 1 `
+  --max-train-examples 25 `
+  --max-dev-examples 25 `
+  --candidate-batch-size 128 `
+  --source-name FamilyOWL_1hop
+
+python evaluation/eval_gnn_subgraph_retriever.py `
+  --train-path data/FamilyOWL_1hop/train_subgraph_retrieval.jsonl `
+  --dev-path data/FamilyOWL_1hop/dev_subgraph_retrieval.jsonl `
+  --test-path data/FamilyOWL_1hop/test_subgraph_retrieval.jsonl `
+  --checkpoint checkpoints/smoke_familyowl_1hop/best_model.pt `
+  --max-test-examples 25 `
+  --candidate-batch-size 128 `
+  --source-name FamilyOWL_1hop `
+  --save-details `
+  --details-dir outputs/smoke_test/familyowl_1hop_gnn
+```
+
+These smoke tests assume the FamilyOWL retrieval data has already been built.
+They do not evaluate final LLM answer quality.
+
 ## Reproduce Main Results
 
 After setup and data construction, run the manuscript experiment suite:
@@ -210,10 +319,35 @@ The final combined result files are written to:
 - `outputs/full_results/full_pipeline_results.csv`
 - `outputs/full_results/full_pipeline_results.json`
 
-The text benchmarks use 3,000 training examples and 1,000 test examples by
-default. Runtime depends on hardware, OpenAI API latency, Hugging Face cache
-state, and whether checkpoints already exist. GNN-RAG and LLM answer generation
-are usually the slowest stages.
+The expected manuscript rows are the four datasets listed in the reproduction
+overview crossed with the default methods selected by `--methods auto`. If the
+CSV also contains Pizza rows, those are auxiliary experiments and are not part
+of the main manuscript reproduction command shown above.
+
+Representative values from a completed `gpt-4.1-mini`, `top-k=3` run are:
+
+| Dataset | Method | Answer EM | Support F1 | Exact@k |
+| --- | --- | ---: | ---: | ---: |
+| FamilyOWL_1hop | sageqa Proof | 0.523 | 0.583 | 0.914 |
+| FamilyOWL_2hop | sageqa Proof | 0.854 | 0.276 | 1.000 |
+
+Small numerical differences can occur across hardware, dependency versions,
+checkpoint initialization, and LLM responses. Reusing existing outputs with
+`--resume` and `--skip-llm-if-exists` gives the closest comparison to a cached
+run.
+
+## Reproducibility Notes
+
+- Dataset sampling uses seed `42` in the text-QA build commands.
+- The GNN training scripts set fixed Python and PyTorch seeds, but exact GPU
+  determinism is not guaranteed across platforms.
+- LLM-based answer generation uses OpenAI models and may vary over time.
+- Commands that include `--skip-llm` avoid OpenAI API calls and therefore do not
+  produce final answer metrics.
+- Commands that include `--skip-llm-if-exists` reuse existing generated answer
+  files when present.
+- The default runner includes auxiliary Pizza dataset keys if `--datasets` is
+  omitted. Use the manuscript command's explicit dataset list for paper results.
 
 ## Run Selected Experiments
 
