@@ -1,11 +1,24 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import itertools
 import json
 import random
 import re
 import string
+import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Set, Iterable
+
+if __package__ is None or __package__ == "":
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from data_processing.text_kg_constructor import (
+    KGConstructionConfig,
+    LLMKGConstructor,
+    construct_text_kg,
+)
 
 
 # ============================================================
@@ -776,10 +789,15 @@ def build_rows_for_example(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
-    max_kg_bridge_triples: int,
+    kg_config: KGConstructionConfig,
+    llm_kg_constructor: LLMKGConstructor | None,
+    kg_cache: Dict[str, Dict[str, Any]] | None,
+    kg_cache_path: Path | None,
+    kg_cache_lock: Any,
     seed: int,
 ) -> List[Dict[str, Any]]:
     ex_id = str(example.get("_id", f"no_id_{seed}"))
+    example_id = f"HotpotQA__{split_name}__{ex_id}"
     question = str(example.get("question", ""))
     answer = str(example.get("answer", ""))
     q_type = str(example.get("type", "unknown"))
@@ -788,15 +806,32 @@ def build_rows_for_example(
     sent_lookup = {
         (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
     }
-    evidences = normalize_evidence_triples(example.get("evidences", []))
-    kg_construction_method = "provided"
-    if not evidences:
-        evidences = construct_wiki_bridge_triples(
+    cached_kg = kg_cache.get(example_id) if kg_cache is not None else None
+    if cached_kg:
+        evidences = cached_kg.get("evidences", [])
+        kg_construction_method = str(cached_kg.get("kg_construction_method", "cache"))
+    else:
+        evidences, kg_construction_method = construct_text_kg(
+            provided_evidences=example.get("evidences", []),
             sentence_records=sentence_records,
+            question=question,
             answer=answer,
-            max_triples=max_kg_bridge_triples,
+            config=kg_config,
+            llm_constructor=llm_kg_constructor,
         )
-        kg_construction_method = "title_answer_fallback" if evidences else "none"
+        if llm_kg_constructor is not None and kg_cache is not None:
+            cache_row = {
+                "example_id": example_id,
+                "evidences": evidences,
+                "kg_construction_method": kg_construction_method,
+            }
+            if kg_cache_lock is not None:
+                with kg_cache_lock:
+                    kg_cache[example_id] = cache_row
+                    append_kg_cache_row(kg_cache_path, cache_row)
+            else:
+                kg_cache[example_id] = cache_row
+                append_kg_cache_row(kg_cache_path, cache_row)
     kg_evidence_units = evidence_triple_units(evidences)
 
     gold_units = get_gold_support_units(example, sent_lookup)
@@ -845,7 +880,7 @@ def build_rows_for_example(
 
         row = {
             "row_id": row_id,
-            "example_id": f"HotpotQA__{split_name}__{ex_id}",
+            "example_id": example_id,
             "dataset": "HotpotQA",
             "source_dataset": "HotpotQA",
             "hop": "2hop",
@@ -908,6 +943,28 @@ def write_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def load_kg_cache(path: Path | None) -> Dict[str, Dict[str, Any]]:
+    cache: Dict[str, Dict[str, Any]] = {}
+    if path is None or not path.exists():
+        return cache
+    with path.open("r", encoding="utf-8-sig") as f:
+        for line in f:
+            if line.strip():
+                row = json.loads(line)
+                example_id = row.get("example_id")
+                if example_id:
+                    cache[str(example_id)] = row
+    return cache
+
+
+def append_kg_cache_row(path: Path | None, row: Dict[str, Any]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
 def split_train_dev_from_train(
     examples: List[Dict[str, Any]],
     dev_ratio: float,
@@ -959,10 +1016,75 @@ def build_split_rows(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
-    max_kg_bridge_triples: int,
+    kg_config: KGConstructionConfig,
+    llm_kg_constructor: LLMKGConstructor | None,
+    kg_construction_workers: int,
+    kg_cache_path: Path | None,
     seed: int,
 ) -> List[Dict[str, Any]]:
     all_rows: List[Dict[str, Any]] = []
+    start_time = time.time()
+    uses_llm = llm_kg_constructor is not None
+    kg_cache = load_kg_cache(kg_cache_path) if uses_llm else None
+    kg_cache_lock = threading.Lock() if uses_llm else None
+    print(
+        f"  {split_name}: starting {len(examples)} examples "
+        f"(kg_backend={kg_config.backend}, "
+        f"workers={kg_construction_workers if uses_llm else 1})",
+        flush=True,
+    )
+    if uses_llm and kg_cache_path is not None:
+        print(
+            f"  {split_name}: KG cache has {len(kg_cache or {})} examples at {kg_cache_path}",
+            flush=True,
+        )
+
+    def print_progress(done_count: int, total_count: int) -> None:
+        elapsed = max(time.time() - start_time, 1e-6)
+        rate = done_count / elapsed
+        remaining = max(total_count - done_count, 0)
+        eta_seconds = remaining / rate if rate > 0 else 0.0
+        print(
+            f"  {split_name}: built {done_count}/{total_count} examples "
+            f"({rate:.2f} ex/s, elapsed {elapsed / 60:.1f} min, "
+            f"ETA {eta_seconds / 60:.1f} min)",
+            flush=True,
+        )
+
+    if llm_kg_constructor is not None and kg_construction_workers > 1:
+        indexed_results: List[Tuple[int, List[Dict[str, Any]]]] = []
+
+        def build_one(
+            idx_ex: Tuple[int, Dict[str, Any]],
+        ) -> Tuple[int, List[Dict[str, Any]]]:
+            idx, ex = idx_ex
+            local_constructor = LLMKGConstructor(kg_config)
+            return idx, build_rows_for_example(
+                example=ex,
+                split_name=split_name,
+                max_sentences_per_example=max_sentences_per_example,
+                max_subgraph_size=max_subgraph_size,
+                max_candidates_per_question=max_candidates_per_question,
+                kg_config=kg_config,
+                llm_kg_constructor=local_constructor,
+                kg_cache=kg_cache,
+                kg_cache_path=kg_cache_path,
+                kg_cache_lock=kg_cache_lock,
+                seed=seed + idx,
+            )
+
+        with ThreadPoolExecutor(max_workers=kg_construction_workers) as pool:
+            futures = [
+                pool.submit(build_one, (idx, ex)) for idx, ex in enumerate(examples)
+            ]
+            for done_count, future in enumerate(as_completed(futures), start=1):
+                indexed_results.append(future.result())
+                if done_count % 5 == 0 or done_count == len(futures):
+                    print_progress(done_count, len(futures))
+
+        for _, rows in sorted(indexed_results, key=lambda item: item[0]):
+            all_rows.extend(rows)
+        return all_rows
 
     for idx, ex in enumerate(examples):
         rows = build_rows_for_example(
@@ -971,10 +1093,17 @@ def build_split_rows(
             max_sentences_per_example=max_sentences_per_example,
             max_subgraph_size=max_subgraph_size,
             max_candidates_per_question=max_candidates_per_question,
-            max_kg_bridge_triples=max_kg_bridge_triples,
+            kg_config=kg_config,
+            llm_kg_constructor=llm_kg_constructor,
+            kg_cache=kg_cache,
+            kg_cache_path=kg_cache_path,
+            kg_cache_lock=kg_cache_lock,
             seed=seed + idx,
         )
         all_rows.extend(rows)
+        progress_every = 5 if uses_llm else 25
+        if (idx + 1) % progress_every == 0 or idx + 1 == len(examples):
+            print_progress(idx + 1, len(examples))
 
     return all_rows
 
@@ -1015,9 +1144,49 @@ def main():
         type=int,
         default=64,
         help=(
-            "Maximum deterministic KG bridge triples to construct per example "
-            "when no upstream evidences/kg_triples are present. Use 0 to "
-            "disable fallback KG construction."
+            "Maximum KG triples to attach per example. Applies to provided, "
+            "deterministic, and LLM-constructed triples."
+        ),
+    )
+    parser.add_argument(
+        "--kg-construction-backend",
+        choices=[
+            "auto",
+            "provided",
+            "deterministic",
+            "llm",
+            "llm_with_provided",
+            "none",
+        ],
+        default="auto",
+        help=(
+            "How to build text benchmark KG triples. auto uses provided triples "
+            "when available, otherwise falls back to deterministic title/answer "
+            "bridges. llm extracts triples from the example context."
+        ),
+    )
+    parser.add_argument("--kg-construction-model", type=str, default="gpt-4.1-mini")
+    parser.add_argument("--kg-max-context-sentences", type=int, default=20)
+    parser.add_argument("--kg-sleep-seconds", type=float, default=0.0)
+    parser.add_argument("--kg-request-timeout", type=float, default=90.0)
+    parser.add_argument("--kg-max-retries", type=int, default=4)
+    parser.add_argument("--kg-retry-initial-sleep", type=float, default=5.0)
+    parser.add_argument(
+        "--kg-cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory for per-split LLM KG cache JSONL files. Defaults to "
+            "<output-dir>/kg_cache for LLM KG backends."
+        ),
+    )
+    parser.add_argument(
+        "--kg-construction-workers",
+        type=int,
+        default=1,
+        help=(
+            "Number of parallel LLM KG extraction workers. Use 1 for serial "
+            "execution; 4-8 can speed up large builds if rate limits allow."
         ),
     )
 
@@ -1025,6 +1194,29 @@ def main():
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    kg_cache_dir = args.kg_cache_dir or (out_dir / "kg_cache")
+    kg_backend = (
+        "deterministic"
+        if args.kg_construction_backend == "none"
+        else args.kg_construction_backend
+    )
+    kg_config = KGConstructionConfig(
+        backend=kg_backend,
+        model=args.kg_construction_model,
+        max_triples=args.max_kg_bridge_triples,
+        max_context_sentences=args.kg_max_context_sentences,
+        sleep_seconds=args.kg_sleep_seconds,
+        request_timeout=args.kg_request_timeout,
+        max_retries=args.kg_max_retries,
+        retry_initial_sleep=args.kg_retry_initial_sleep,
+    )
+    if args.kg_construction_backend == "none":
+        kg_config.max_triples = 0
+    llm_kg_constructor = (
+        LLMKGConstructor(kg_config)
+        if args.kg_construction_backend in {"llm", "llm_with_provided"}
+        else None
+    )
 
     print("Loading HotpotQA...")
     train_raw_all = []
@@ -1069,7 +1261,12 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
-        max_kg_bridge_triples=args.max_kg_bridge_triples,
+        kg_config=kg_config,
+        llm_kg_constructor=llm_kg_constructor,
+        kg_construction_workers=max(1, args.kg_construction_workers),
+        kg_cache_path=(kg_cache_dir / "train_kg_cache.jsonl")
+        if llm_kg_constructor is not None
+        else None,
         seed=args.seed,
     )
 
@@ -1080,7 +1277,12 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
-        max_kg_bridge_triples=args.max_kg_bridge_triples,
+        kg_config=kg_config,
+        llm_kg_constructor=llm_kg_constructor,
+        kg_construction_workers=max(1, args.kg_construction_workers),
+        kg_cache_path=(kg_cache_dir / "dev_kg_cache.jsonl")
+        if llm_kg_constructor is not None
+        else None,
         seed=args.seed + 100000,
     )
 
@@ -1091,7 +1293,12 @@ def main():
         max_sentences_per_example=args.max_sentences_per_example,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
-        max_kg_bridge_triples=args.max_kg_bridge_triples,
+        kg_config=kg_config,
+        llm_kg_constructor=llm_kg_constructor,
+        kg_construction_workers=max(1, args.kg_construction_workers),
+        kg_cache_path=(kg_cache_dir / "test_kg_cache.jsonl")
+        if llm_kg_constructor is not None
+        else None,
         seed=args.seed + 200000,
     )
 
@@ -1118,11 +1325,19 @@ def main():
         "max_subgraph_size": args.max_subgraph_size,
         "max_candidates_per_question": args.max_candidates_per_question,
         "max_kg_bridge_triples": args.max_kg_bridge_triples,
+        "kg_construction_backend": args.kg_construction_backend,
+        "kg_construction_model": args.kg_construction_model,
+        "kg_max_context_sentences": args.kg_max_context_sentences,
+        "kg_construction_workers": args.kg_construction_workers,
+        "kg_request_timeout": args.kg_request_timeout,
+        "kg_max_retries": args.kg_max_retries,
+        "kg_retry_initial_sleep": args.kg_retry_initial_sleep,
+        "kg_cache_dir": str(kg_cache_dir) if llm_kg_constructor is not None else None,
         "evidence_representation": "sentence_text_with_optional_kg_bridges",
         "has_typed_nodes": "row_dependent",
         "has_structural_edges": "row_dependent",
         "kg_bonus_mode": "kg_bridge_nodes",
-        "kg_construction_required_for_full_sageqa": False,
+        "kg_construction_required_for_full_sageqa": True,
         "train_rows": len(train_rows),
         "dev_rows": len(dev_rows),
         "test_rows": len(test_rows),

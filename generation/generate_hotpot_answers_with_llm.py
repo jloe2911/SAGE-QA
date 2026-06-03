@@ -1,14 +1,38 @@
 import argparse
 import json
+import os
 import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+if __package__ is None or __package__ == "":
+    import sys
+
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from utils.llm_client import openai_compatible_client
+
 
 def load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_local_env(path: str = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+    with env_path.open("r", encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 
 def write_jsonl(path: str, rows: List[Dict[str, Any]]) -> None:
@@ -183,12 +207,10 @@ def call_openai(prompt: str, model: str, temperature: float = 0.0) -> str:
     Some newer models, e.g. gpt-5-mini, do not support custom temperature
     and require the default value. For those models, we omit temperature.
     """
-    from openai import OpenAI
-
-    client = OpenAI()
+    client, model_name, _ = openai_compatible_client(model)
 
     kwargs = {
-        "model": model,
+        "model": model_name,
         "messages": [
             {
                 "role": "system",
@@ -203,7 +225,7 @@ def call_openai(prompt: str, model: str, temperature: float = 0.0) -> str:
 
     # GPT-5 mini currently rejects explicit temperature=0.0.
     # Use default temperature for GPT-5-family models.
-    if not model.startswith("gpt-5"):
+    if not model_name.startswith("gpt-5"):
         kwargs["temperature"] = temperature
 
     response = client.chat.completions.create(**kwargs)
@@ -326,6 +348,7 @@ def generate_answers(
 
 
 def main():
+    load_local_env()
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--details", type=str, required=True)

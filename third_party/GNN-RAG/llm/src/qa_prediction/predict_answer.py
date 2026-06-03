@@ -24,6 +24,17 @@ import re
 import string
 
 
+def safe_path_name(name: str) -> str:
+    return (
+        str(name)
+        .replace(".", "_")
+        .replace("-", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+        .replace(":", "_")
+    )
+
+
 def normalize(s: str) -> str:
     """Lower text and remove punctuation, articles and extra whitespace."""
     s = s.lower()
@@ -221,7 +232,7 @@ def main(args, LLM):
     output_dir = os.path.join(
         args.predict_path,
         args.d,
-        args.model_name,
+        safe_path_name(args.model_name),
         args.split,
         rule_postfix,
         str(args.encrypt),

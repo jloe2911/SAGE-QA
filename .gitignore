@@ -207,14 +207,17 @@ marimo/_lsp/
 __marimo__/
 
 # Experiment data and artifacts
-data/FamilyOWL_*/
 data/HotpotQA/
 data/2WikiMultiHopQA/
+data/FamilyOWL_*/
+data/OWL2Bench_*/
 data/Pizza_*/
 data/raw/*
 !data/raw/family.zip
+!data/raw/owl2bench.zip
 outputs/
 checkpoints/
+results/
 
 # Vendored GNN-RAG generated results
 third_party/GNN-RAG/llm/results/

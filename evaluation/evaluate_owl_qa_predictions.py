@@ -4,7 +4,7 @@ import re
 import string
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def load_json(path: str):
@@ -227,9 +227,12 @@ def get_top_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
     return units
 
 
-def retrieval_at_k(item: Dict[str, Any], k: int) -> Dict[str, float]:
+def retrieval_at_k(item: Dict[str, Any], k: int) -> Optional[Dict[str, float]]:
     gold_explanations = item.get("gold_explanations", []) or []
-    top_list = item.get("top5") or item.get("topk") or []
+    top_list = item.get("top5") or item.get("topk")
+    if top_list is None:
+        return None
+
     top_list = sorted(top_list, key=lambda x: int(x.get("rank", 999)))[:k]
 
     exact = 0.0
@@ -294,6 +297,7 @@ def evaluate(
         f"exact@{top_k}": 0.0,
         f"contained@{top_k}": 0.0,
         f"support_set_f1@{top_k}": 0.0,
+        "retrieval_examples": 0,
         "examples": 0,
         "answer_examples": 0,
         "support_examples": 0,
@@ -384,9 +388,11 @@ def evaluate(
             metrics["joint_prec"] += joint_prec
             metrics["joint_recall"] += joint_recall
 
-            metrics[f"exact@{top_k}"] += ret[f"exact@{top_k}"]
-            metrics[f"contained@{top_k}"] += ret[f"contained@{top_k}"]
-            metrics[f"support_set_f1@{top_k}"] += ret[f"support_set_f1@{top_k}"]
+            if ret is not None:
+                metrics["retrieval_examples"] += 1
+                metrics[f"exact@{top_k}"] += ret[f"exact@{top_k}"]
+                metrics[f"contained@{top_k}"] += ret[f"contained@{top_k}"]
+                metrics[f"support_set_f1@{top_k}"] += ret[f"support_set_f1@{top_k}"]
         else:
             metrics["answer_only_examples"] += 1
 
@@ -436,11 +442,22 @@ def evaluate(
             "joint_f1",
             "joint_prec",
             "joint_recall",
+        ]:
+            metrics[key] /= support_n
+
+    retrieval_n = metrics["retrieval_examples"]
+
+    if retrieval_n > 0:
+        for key in [
             f"exact@{top_k}",
             f"contained@{top_k}",
             f"support_set_f1@{top_k}",
         ]:
-            metrics[key] /= support_n
+            metrics[key] /= retrieval_n
+    else:
+        metrics[f"exact@{top_k}"] = None
+        metrics[f"contained@{top_k}"] = None
+        metrics[f"support_set_f1@{top_k}"] = None
 
     result = {
         "metrics": metrics,

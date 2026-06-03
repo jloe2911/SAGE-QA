@@ -5,6 +5,7 @@ import random
 import re
 import sys
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
@@ -456,8 +457,13 @@ def relevant_context_axioms(
     return [axiom for _, axiom in scored[:max_context_units]]
 
 
+def answer_type_for(item: Dict, qa: Dict | None = None) -> str:
+    qa = qa or {}
+    return str(qa.get("Answer Type") or item.get("Answer Type") or "").strip()
+
+
 def build_split_map(
-    num_groups: int, train_ratio: float, dev_ratio: float
+    groups: List[Dict], train_ratio: float, dev_ratio: float
 ) -> Dict[int, str]:
     if not 0.0 <= train_ratio <= 1.0:
         raise ValueError(f"train_ratio must be in [0, 1], got {train_ratio}")
@@ -469,20 +475,33 @@ def build_split_map(
             f"(got {train_ratio + dev_ratio})"
         )
 
-    indices = list(range(num_groups))
-    random.Random(RANDOM_SEED).shuffle(indices)
+    buckets: Dict[str, List[int]] = defaultdict(list)
+    for group_index, item in enumerate(groups):
+        buckets[answer_type_for(item)].append(group_index)
 
-    train_end = int(num_groups * train_ratio)
-    dev_end = train_end + int(num_groups * dev_ratio)
+    rng = random.Random(RANDOM_SEED)
 
     split_by_group = {}
-    for rank, group_index in enumerate(indices):
-        if rank < train_end:
-            split_by_group[group_index] = "train"
-        elif rank < dev_end:
-            split_by_group[group_index] = "dev"
-        else:
-            split_by_group[group_index] = "test"
+    for answer_type, indices in buckets.items():
+        rng.shuffle(indices)
+
+        train_end = int(len(indices) * train_ratio)
+        dev_end = train_end + int(len(indices) * dev_ratio)
+
+        for rank, group_index in enumerate(indices):
+            if rank < train_end:
+                split_by_group[group_index] = "train"
+            elif rank < dev_end:
+                split_by_group[group_index] = "dev"
+            else:
+                split_by_group[group_index] = "test"
+
+        print(
+            "[SPLIT] "
+            f"answer_type={answer_type or 'UNKNOWN'} "
+            f"train={train_end} dev={dev_end - train_end} "
+            f"test={len(indices) - dev_end}"
+        )
 
     return split_by_group
 
@@ -578,7 +597,7 @@ def build_rows_for_qa(
             "question": question,
             "sparql_query": sparql_query,
             "task_type": item.get("Task Type", ""),
-            "answer_type": item.get("Answer Type", ""),
+            "answer_type": answer_type_for(item, qa),
             "answer": qa.get("Answer"),
             "source_name": source_name,
             "group_index": group_index,
@@ -645,7 +664,7 @@ def build_answer_only_row(
         "question": question,
         "sparql_query": sparql_query,
         "task_type": item.get("Task Type", ""),
-        "answer_type": item.get("Answer Type", ""),
+        "answer_type": answer_type_for(item, qa),
         "answer": qa.get("Answer"),
         "source_name": source_name,
         "group_index": group_index,
@@ -673,7 +692,7 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
         if args.max_groups:
             data = data[: args.max_groups]
         split_by_group = build_split_map(
-            num_groups=len(data),
+            groups=data,
             train_ratio=args.train_ratio,
             dev_ratio=args.dev_ratio,
         )
@@ -685,11 +704,8 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
 
             for qa_index, qa in enumerate(item.get("QAs", [])):
                 has_gold_support = bool(get_gold_explanations(qa))
-                is_binary = (
-                    str(item.get("Answer Type", qa.get("Answer Type", ""))) == "BIN"
-                )
 
-                if not has_gold_support and is_binary:
+                if not has_gold_support:
                     row = build_answer_only_row(
                         source_name=source_name,
                         group_index=group_index,
@@ -772,7 +788,13 @@ def parse_args() -> argparse.Namespace:
         default=320,
         help="Maximum non-gold candidate subgraphs generated per QA example.",
     )
-    parser.add_argument("--train-ratio", type=float, default=0.65)
+    parser.add_argument(
+        "--train-ratio",
+        "--train-size",
+        dest="train_ratio",
+        type=float,
+        default=0.65,
+    )
     parser.add_argument("--dev-ratio", type=float, default=0.1)
     parser.add_argument(
         "--combined",

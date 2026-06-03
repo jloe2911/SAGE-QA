@@ -3,6 +3,20 @@ import os
 import openai
 from .base_language_model import BaseLanguageModel
 import dotenv
+from pathlib import Path
+import importlib.util
+
+repo_root = Path(__file__).resolve().parents[6]
+llm_client_path = repo_root / "utils" / "llm_client.py"
+llm_client_spec = importlib.util.spec_from_file_location(
+    "sageqa_llm_client", llm_client_path
+)
+if llm_client_spec is None or llm_client_spec.loader is None:
+    raise ImportError(f"Could not load SAGE-QA LLM client from {llm_client_path}")
+llm_client = importlib.util.module_from_spec(llm_client_spec)
+llm_client_spec.loader.exec_module(llm_client)
+
+openai_compatible_client = llm_client.openai_compatible_client
 
 dotenv.load_dotenv()
 os.environ["TIKTOKEN_CACHE_DIR"] = "./tmp"
@@ -70,9 +84,9 @@ class ChatGPT(BaseLanguageModel):
             llm_input = llm_input[: self.maximun_token]
         while cur_retry <= num_retry:
             try:
-                client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                client, model_name, _ = openai_compatible_client(self.model_name)
                 response = client.chat.completions.create(
-                    model=self.model_name,
+                    model=model_name,
                     messages=query,
                     timeout=30,
                 )

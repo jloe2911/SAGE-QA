@@ -10,6 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+if __package__ is None or __package__ == "":
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from utils.llm_client import load_local_env, parse_model_ref
+
 
 DATASETS = {
     "hotpotqa": {
@@ -50,6 +55,20 @@ DATASETS = {
         "data_dir": "data/FamilyOWL_2hop",
         "output_dir": "outputs/full_results/FamilyOWL_2hop",
         "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_familyowl_2hop_full",
+    },
+    "owl2bench_1hop": {
+        "display": "OWL2Bench_1hop",
+        "type": "owl",
+        "data_dir": "data/OWL2Bench_1hop",
+        "output_dir": "outputs/full_results/OWL2Bench_1hop",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_owl2bench_1hop_full",
+    },
+    "owl2bench_2hop": {
+        "display": "OWL2Bench_2hop",
+        "type": "owl",
+        "data_dir": "data/OWL2Bench_2hop",
+        "output_dir": "outputs/full_results/OWL2Bench_2hop",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_owl2bench_2hop_full",
     },
     "pizza_100_1hop": {
         "display": "Pizza_100_1hop",
@@ -191,8 +210,11 @@ def capture_cmd(cmd: List[str], dry_run: bool = False) -> str:
 
 
 def ensure_file(path: str | Path, description: str) -> None:
-    if not Path(path).exists():
+    path = Path(path)
+    if not path.exists():
         raise FileNotFoundError(f"Missing {description}: {path}")
+    if path.suffix == ".jsonl" and path.stat().st_size == 0:
+        raise ValueError(f"{description} is empty: {path}")
 
 
 def parse_metrics_from_stdout(stdout: str) -> Dict[str, float]:
@@ -248,7 +270,31 @@ def load_metrics_json(path: Path) -> Dict[str, float]:
 
 
 def safe_model_name(model: str) -> str:
-    return model.replace(".", "_").replace("-", "_")
+    return (
+        model.replace(".", "_")
+        .replace("-", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+        .replace(":", "_")
+    )
+
+
+def has_key_for_model(model: str) -> bool:
+    ref = parse_model_ref(model)
+    if ref.provider == "openrouter":
+        return bool(os.getenv("OPENROUTER_API_KEY"))
+    if ref.provider == "openai":
+        return bool(os.getenv("OPENAI_API_KEY"))
+    return bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY"))
+
+
+def missing_key_message(model: str) -> str:
+    ref = parse_model_ref(model)
+    if ref.provider == "openrouter":
+        return "Model provider is openrouter, but OPENROUTER_API_KEY is not set."
+    if ref.provider == "openai":
+        return "Model provider is openai, but OPENAI_API_KEY is not set."
+    return "Neither OPENAI_API_KEY nor OPENROUTER_API_KEY is set."
 
 
 def default_methods_for_dataset(dataset_type: str) -> List[str]:
@@ -457,11 +503,8 @@ def run_llm_generation(
             log(f"LLM answers already exist, skipping: {output_jsonl}")
             return
 
-    if not os.getenv("OPENAI_API_KEY") and not dry_run:
-        raise EnvironmentError(
-            "OPENAI_API_KEY is not set in this terminal. "
-            "Set it before running GPT generation."
-        )
+    if not has_key_for_model(reader_model) and not dry_run:
+        raise EnvironmentError(missing_key_message(reader_model))
 
     if cfg["type"] == "text":
         script = "generation/generate_hotpot_answers_with_llm.py"
@@ -515,11 +558,8 @@ def run_gnn_rag_generation(
     text_max_candidates: int = 5,
     answer_only_paths: List[Path] | None = None,
 ) -> None:
-    if not os.getenv("OPENAI_API_KEY") and not dry_run:
-        raise EnvironmentError(
-            "OPENAI_API_KEY is not set in this terminal. "
-            "Set it before running GNN-RAG generation."
-        )
+    if not has_key_for_model(reader_model) and not dry_run:
+        raise EnvironmentError(missing_key_message(reader_model))
 
     repo_root = Path.cwd()
     gnn_rag_repo = repo_root / "third_party" / "GNN-RAG"
@@ -541,7 +581,7 @@ def run_gnn_rag_generation(
     raw_predictions = (
         predict_root
         / adapter_dataset
-        / reader_model
+        / safe_model_name(reader_model)
         / "test"
         / "no_rule"
         / "False"
@@ -1273,6 +1313,7 @@ def run_experiment(args) -> None:
 
 
 def main():
+    load_local_env()
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -1285,6 +1326,7 @@ def main():
         help=(
             "Comma-separated dataset keys. Choices: "
             "hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,"
+            "owl2bench_1hop,owl2bench_2hop,"
             "pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop"
         ),
     )

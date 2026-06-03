@@ -5,6 +5,13 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+if __package__ is None or __package__ == "":
+    import sys
+
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from utils.llm_client import openai_compatible_client, parse_model_ref
+
 
 def load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
@@ -484,12 +491,19 @@ def build_prompt(question: str, support_units: List[str]) -> str:
     if is_boolean_question(question):
         answer_format = (
             'This is a yes/no ontology question. The "answer" value must be exactly '
-            '"TRUE", "FALSE", or "Unknown".'
+            '"TRUE" or "FALSE". Do not return "Unknown".'
+        )
+        uncertainty_instruction = (
+            "- If the reasoning paths do not fully settle the question, choose the "
+            "better supported binary label from the retrieved facts and axioms."
         )
     else:
         answer_format = (
             'The "answer" value must be the shortest entity/name/value that answers '
             "the question. For multiple answers, separate items with semicolons."
+        )
+        uncertainty_instruction = (
+            '- If the reasoning paths are insufficient, answer "Unknown"; do not guess.'
         )
 
     return f"""You are answering an ontology-grounded question using retrieved reasoning paths.
@@ -504,7 +518,7 @@ Instructions:
 - Answer using only the retrieved reasoning paths.
 - Treat Facts as instance-level evidence and Axioms as schema/rule evidence.
 - If a fact and the necessary axiom together entail the question, answer with the entailed result.
-- If the reasoning paths are insufficient, answer "Unknown"; do not guess.
+{uncertainty_instruction}
 - {answer_format}
 - Return valid JSON only, with this exact schema:
 {{"answer": "...", "explanation": "..."}}
@@ -546,17 +560,10 @@ def parse_json_response(text: str) -> Dict[str, str]:
 
 
 def call_openai(prompt: str, model: str, max_tokens: int = 300) -> str:
-    try:
-        from openai import OpenAI
-    except Exception as e:
-        raise ImportError(
-            "Could not import openai. Install with: pip install openai"
-        ) from e
-
-    client = OpenAI()
+    client, model_name, _ = openai_compatible_client(model)
 
     kwargs = {
-        "model": model,
+        "model": model_name,
         "messages": [
             {
                 "role": "system",
@@ -571,7 +578,7 @@ def call_openai(prompt: str, model: str, max_tokens: int = 300) -> str:
     }
 
     # GPT-5 family may reject temperature=0.0, so omit temperature for gpt-5*.
-    if not model.lower().startswith("gpt-5"):
+    if not model_name.lower().startswith("gpt-5"):
         kwargs["temperature"] = 0.0
 
     response = client.chat.completions.create(**kwargs)
@@ -717,11 +724,23 @@ def main():
 
     args = parser.parse_args()
 
-    if args.backend == "openai" and not os.getenv("OPENAI_API_KEY"):
-        raise EnvironmentError(
-            "OPENAI_API_KEY is not set. In PowerShell, run: "
-            '$env:OPENAI_API_KEY="YOUR_KEY"'
-        )
+    if args.backend == "openai":
+        ref = parse_model_ref(args.model)
+        if ref.provider == "openrouter" and not os.getenv("OPENROUTER_API_KEY"):
+            raise EnvironmentError(
+                "Model provider is openrouter, but OPENROUTER_API_KEY is not set."
+            )
+        if ref.provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+            raise EnvironmentError(
+                "Model provider is openai, but OPENAI_API_KEY is not set."
+            )
+        if ref.provider is None and not (
+            os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        ):
+            raise EnvironmentError(
+                "Neither OPENAI_API_KEY nor OPENROUTER_API_KEY is set. In PowerShell, run: "
+                '$env:OPENROUTER_API_KEY="YOUR_KEY"'
+            )
 
     generate_answers(
         details_path=args.details,

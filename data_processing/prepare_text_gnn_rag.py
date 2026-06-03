@@ -10,7 +10,7 @@ TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
 def iter_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as f:
+    with path.open("r", encoding="utf-8-sig") as f:
         for line in f:
             if line.strip():
                 yield json.loads(line)
@@ -45,9 +45,26 @@ def sentence_parts(unit: str) -> Tuple[str, str, str]:
     return "Evidence", "0", clean(unit)
 
 
+def kg_parts(unit: str) -> Tuple[str, str, str] | None:
+    parts = str(unit).split("::", 3)
+    if len(parts) == 4 and parts[0] == "KG":
+        return clean(parts[1]), clean(parts[2]), clean(parts[3])
+    return None
+
+
 def evidence_node(unit: str) -> str:
     title, idx, sent = sentence_parts(unit)
     return f"EVIDENCE::{title}::{idx}::{sent}"
+
+
+def kg_entity_node(entity: str) -> str:
+    return f"KG_ENTITY::{clean(entity)}"
+
+
+def kg_relation(rel: str) -> str:
+    rel = clean(rel)
+    rel = re.sub(r"\s+", "_", rel)
+    return rel or "related_to"
 
 
 def question_node(example_id: str) -> str:
@@ -60,6 +77,43 @@ def add_unique(values: List[str], seen: set, items: Iterable[str]) -> None:
         if item and item not in seen:
             seen.add(item)
             values.append(item)
+
+
+def collect_kg_units(rows: List[Dict[str, Any]]) -> List[str]:
+    kg_units: List[str] = []
+    seen = set()
+    for row in rows:
+        for field in ("kg_evidence_units", "graph_context_units"):
+            for unit in row.get(field, []) or []:
+                if kg_parts(unit) is not None and unit not in seen:
+                    seen.add(unit)
+                    kg_units.append(unit)
+        for ev in row.get("evidences", []) or []:
+            if isinstance(ev, list) and len(ev) >= 3:
+                unit = f"KG::{clean(ev[0])}::{clean(ev[1])}::{clean(ev[2])}"
+                if unit not in seen:
+                    seen.add(unit)
+                    kg_units.append(unit)
+    return kg_units
+
+
+def text_tokens(text: str) -> set[str]:
+    return {tok.lower() for tok in TOKEN_RE.findall(str(text)) if len(tok) > 1}
+
+
+def text_mentions_entity(text: str, entity: str) -> bool:
+    entity = clean(entity)
+    text = clean(text)
+    if not entity or not text:
+        return False
+    entity_norm = entity.lower()
+    text_norm = text.lower()
+    if entity_norm in text_norm:
+        return True
+    entity_tokens = text_tokens(entity)
+    if not entity_tokens:
+        return False
+    return len(entity_tokens & text_tokens(text)) / len(entity_tokens) >= 0.6
 
 
 def flush_example(
@@ -86,6 +140,7 @@ def flush_example(
     if not candidate_units:
         candidate_units = gold_units[:]
 
+    kg_units = collect_kg_units(rows)
     target_units = gold_units or candidate_units[:1]
     target_nodes = [evidence_node(unit) for unit in target_units]
     if not target_nodes:
@@ -107,6 +162,33 @@ def flush_example(
         # Add a lexical bridge from question to every evidence sentence so
         # upstream path extraction has a direct reasoning path if title matching is weak.
         tuples.append([q_node, "retrieved_evidence", ev_node])
+
+    kg_entity_nodes = OrderedDict()
+    for unit in kg_units:
+        parts = kg_parts(unit)
+        if parts is None:
+            continue
+        subject, predicate, obj = parts
+        subj_node = kg_entity_node(subject)
+        obj_node = kg_entity_node(obj)
+        rel = kg_relation(predicate)
+        kg_entity_nodes[subj_node] = None
+        kg_entity_nodes[obj_node] = None
+        entities.update([subj_node, obj_node])
+        tuples.append([subj_node, rel, obj_node])
+        tuples.append([q_node, "kg_context", subj_node])
+        tuples.append([q_node, "kg_context", obj_node])
+
+        for sent_unit in candidate_units:
+            title, idx, sent = sentence_parts(sent_unit)
+            ev_node = evidence_node(sent_unit)
+            haystack = f"{title} {sent}"
+            if text_mentions_entity(haystack, subject):
+                tuples.append([ev_node, "mentions_kg_entity", subj_node])
+                tuples.append([subj_node, "mentioned_in_sentence", ev_node])
+            if text_mentions_entity(haystack, obj):
+                tuples.append([ev_node, "mentions_kg_entity", obj_node])
+                tuples.append([obj_node, "mentioned_in_sentence", ev_node])
 
     sample = {
         "id": example_id,
@@ -132,6 +214,7 @@ def flush_example(
         "answer_type": seed.get("answer_type", ""),
         "gold_explanations": seed.get("gold_explanations", []),
         "gold_units": gold_units,
+        "kg_units": kg_units,
     }
     return sample, details
 
