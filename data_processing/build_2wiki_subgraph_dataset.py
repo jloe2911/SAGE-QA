@@ -1140,7 +1140,7 @@ def main():
             "llm_with_deterministic: merge both."
         ),
     )
-    parser.add_argument("--kg-construction-model", type=str, default="gpt-4.1-mini")
+    parser.add_argument("--kg-construction-model", type=str, default="openrouter:google/gemma-4-31b-it:free")
     parser.add_argument("--kg-max-context-sentences", type=int, default=20)
     parser.add_argument("--kg-sleep-seconds", type=float, default=0.0)
     parser.add_argument("--kg-request-timeout", type=float, default=90.0)

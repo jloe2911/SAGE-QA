@@ -64,7 +64,7 @@ def dedupe(triples: List[List[str]]) -> List[List[str]]:
 @dataclass
 class ContextKGConfig:
     backend: str = "deterministic"   # "deterministic" | "llm" | "llm_with_deterministic"
-    model: str = "gpt-4.1-mini"
+    model: str = "openrouter:google/gemma-4-31b-it:free"
     max_triples: int = 64
     max_context_sentences: int = 20
     sleep_seconds: float = 0.0
