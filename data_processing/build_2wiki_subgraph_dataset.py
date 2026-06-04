@@ -16,12 +16,12 @@ import pandas as pd
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from data_processing.text_kg_constructor import (
-    KGConstructionConfig,
-    LLMKGConstructor,
-    construct_text_kg,
-    normalize_evidence_triples,
+from data_processing.context_kg_constructor import (
+    ContextKGConfig,
+    LLMContextKGBuilder,
+    build_context_kg,
 )
+from data_processing.text_kg_constructor import normalize_evidence_triples
 
 
 # ============================================================
@@ -101,66 +101,6 @@ def evidence_triple_units(evidences: List[List[str]]) -> List[str]:
     return units
 
 
-def construct_wiki_bridge_triples(
-    sentence_records: List[Dict[str, Any]],
-    answer: str,
-    max_triples: int,
-) -> List[List[str]]:
-    """
-    Deterministic KG fallback for Wikipedia text.
-
-    2Wiki normally provides evidence triples. This fallback keeps the same
-    bridge-node mechanism available for ablations or alternate text inputs
-    where those triples are missing.
-    """
-    if max_triples <= 0:
-        return []
-
-    titles = []
-    seen_titles = set()
-    for rec in sentence_records:
-        title = rec.get("title", "")
-        if title and title not in seen_titles:
-            seen_titles.add(title)
-            titles.append(title)
-
-    triples: List[List[str]] = []
-    seen = set()
-
-    def add(subject: str, predicate: str, obj: str) -> None:
-        if len(triples) >= max_triples:
-            return
-        subject = clean_sentence(subject)
-        predicate = clean_sentence(predicate)
-        obj = clean_sentence(obj)
-        if not subject or not predicate or not obj or subject == obj:
-            return
-        key = (subject, predicate, obj)
-        if key not in seen:
-            seen.add(key)
-            triples.append([subject, predicate, obj])
-
-    title_by_norm = {normalize_text(title): title for title in titles}
-    answer_norm = normalize_text(answer)
-
-    for rec in sentence_records:
-        source_title = rec.get("title", "")
-        sentence = rec.get("sentence", "")
-        sentence_norm = normalize_text(sentence)
-
-        if answer_norm not in {"yes", "no"} and phrase_in_text(answer, sentence):
-            add(source_title, "mentions_answer", answer)
-
-        for target_norm, target_title in title_by_norm.items():
-            if not target_norm or target_title == source_title:
-                continue
-            if phrase_in_text(target_title, sentence):
-                add(source_title, "mentions_page", target_title)
-
-        if len(triples) >= max_triples:
-            break
-
-    return triples
 
 
 def phrase_in_text(phrase: str, text: str) -> bool:
@@ -783,8 +723,8 @@ def build_rows_for_example(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
-    kg_config: KGConstructionConfig,
-    llm_kg_constructor: LLMKGConstructor | None,
+    kg_config: ContextKGConfig,
+    llm_kg_constructor: LLMContextKGBuilder | None,
     kg_cache: Dict[str, Dict[str, Any]] | None,
     kg_cache_path: Path | None,
     kg_cache_lock: Any,
@@ -795,8 +735,6 @@ def build_rows_for_example(
     question = str(example.get("question", ""))
     answer = str(example.get("answer", ""))
     q_type = str(example.get("type", "unknown"))
-    raw_evidences = example.get("evidences", [])
-
     sentence_records = flatten_context(example)
     sent_lookup = {
         (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
@@ -806,13 +744,11 @@ def build_rows_for_example(
         evidences = cached_kg.get("evidences", [])
         kg_construction_method = str(cached_kg.get("kg_construction_method", "cache"))
     else:
-        evidences, kg_construction_method = construct_text_kg(
-            provided_evidences=raw_evidences,
+        evidences, kg_construction_method = build_context_kg(
             sentence_records=sentence_records,
             question=question,
-            answer=answer,
             config=kg_config,
-            llm_constructor=llm_kg_constructor,
+            llm_builder=llm_kg_constructor,
         )
         if llm_kg_constructor is not None and kg_cache is not None:
             cache_row = {
@@ -1013,8 +949,8 @@ def build_split_rows(
     max_sentences_per_example: int,
     max_subgraph_size: int,
     max_candidates_per_question: int,
-    kg_config: KGConstructionConfig,
-    llm_kg_constructor: LLMKGConstructor | None,
+    kg_config: ContextKGConfig,
+    llm_kg_constructor: LLMContextKGBuilder | None,
     kg_construction_workers: int,
     kg_cache_path: Path | None,
     seed: int,
@@ -1055,7 +991,7 @@ def build_split_rows(
             idx_ex: Tuple[int, Dict[str, Any]],
         ) -> Tuple[int, List[Dict[str, Any]]]:
             idx, ex = idx_ex
-            local_constructor = LLMKGConstructor(kg_config)
+            local_constructor = LLMContextKGBuilder(kg_config)
             return idx, build_rows_for_example(
                 example=ex,
                 split_name=split_name,
@@ -1191,18 +1127,17 @@ def main():
     parser.add_argument(
         "--kg-construction-backend",
         choices=[
-            "auto",
-            "provided",
             "deterministic",
             "llm",
-            "llm_with_provided",
+            "llm_with_deterministic",
             "none",
         ],
-        default="auto",
+        default="deterministic",
         help=(
-            "How to build text benchmark KG triples. auto uses provided triples "
-            "when available, otherwise falls back to deterministic title/answer "
-            "bridges. llm extracts triples from the example context."
+            "How to build text benchmark KG triples from context sentences only. "
+            "deterministic: title co-occurrence (zero cost, zero leakage). "
+            "llm: LLM extracts typed triples from sentences (no answer hint). "
+            "llm_with_deterministic: merge both."
         ),
     )
     parser.add_argument("--kg-construction-model", type=str, default="gpt-4.1-mini")
@@ -1235,26 +1170,20 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     kg_cache_dir = args.kg_cache_dir or (out_dir / "kg_cache")
-    kg_backend = (
-        "deterministic"
-        if args.kg_construction_backend == "none"
-        else args.kg_construction_backend
-    )
-    kg_config = KGConstructionConfig(
+    kg_backend = "deterministic" if args.kg_construction_backend == "none" else args.kg_construction_backend
+    kg_config = ContextKGConfig(
         backend=kg_backend,
         model=args.kg_construction_model,
-        max_triples=args.max_kg_bridge_triples,
+        max_triples=args.max_kg_bridge_triples if args.kg_construction_backend != "none" else 0,
         max_context_sentences=args.kg_max_context_sentences,
         sleep_seconds=args.kg_sleep_seconds,
         request_timeout=args.kg_request_timeout,
         max_retries=args.kg_max_retries,
         retry_initial_sleep=args.kg_retry_initial_sleep,
     )
-    if args.kg_construction_backend == "none":
-        kg_config.max_triples = 0
     llm_kg_constructor = (
-        LLMKGConstructor(kg_config)
-        if args.kg_construction_backend in {"llm", "llm_with_provided"}
+        LLMContextKGBuilder(kg_config)
+        if args.kg_construction_backend in {"llm", "llm_with_deterministic"}
         else None
     )
 

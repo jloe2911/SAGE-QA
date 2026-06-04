@@ -22,7 +22,7 @@ DATASETS = {
         "type": "text",
         "data_dir": "data/HotpotQA",
         "output_dir": "outputs/full_results/HotpotQA",
-        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_hotpotqa_full",
+        "checkpoint_dir": "checkpoints/hotpotqa",
         "gold_file": "data/HotpotQA/hotpot_test_subset_gold.json",
         "export_script": "evaluation/export_hotpot_predictions.py",
         "gold_export_script": "data_processing/export_hotpot_gold_subset.py",
@@ -34,7 +34,7 @@ DATASETS = {
         "type": "text",
         "data_dir": "data/2WikiMultiHopQA",
         "output_dir": "outputs/full_results/2WikiMultiHopQA",
-        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_2wiki_full",
+        "checkpoint_dir": "checkpoints/2wiki",
         "gold_file": "data/2WikiMultiHopQA/2wiki_test_subset_gold.json",
         "export_script": "evaluation/export_2wiki_predictions.py",
         "gold_export_script": "data_processing/export_2wiki_gold_subset.py",
@@ -400,6 +400,7 @@ def run_gnn_details(
     candidate_batch_size: int,
     dry_run: bool,
     resume: bool,
+    max_examples: int = 0,
 ) -> Path:
     train_path = str(Path(cfg["data_dir"]) / "train_subgraph_retrieval.jsonl")
     dev_path = str(Path(cfg["data_dir"]) / "dev_subgraph_retrieval.jsonl")
@@ -408,10 +409,11 @@ def run_gnn_details(
     out_dir = Path(cfg["output_dir"]) / method_cfg["details_subdir"]
     details_path = out_dir / "test_details.json"
 
-    ensure_file(train_path, f"{dataset_key} train data")
-    ensure_file(dev_path, f"{dataset_key} dev data")
-    ensure_file(test_path, f"{dataset_key} test data")
-    ensure_file(checkpoint, f"{dataset_key} checkpoint")
+    if not dry_run:
+        ensure_file(train_path, f"{dataset_key} train data")
+        ensure_file(dev_path, f"{dataset_key} dev data")
+        ensure_file(test_path, f"{dataset_key} test data")
+        ensure_file(checkpoint, f"{dataset_key} checkpoint")
 
     if resume and details_path.exists():
         log(f"Reusing {method_cfg['display']} details: {details_path}")
@@ -436,6 +438,9 @@ def run_gnn_details(
         "--details-dir",
         str(out_dir),
     ]
+
+    if max_examples and max_examples > 0:
+        cmd.extend(["--max-test-examples", str(max_examples)])
 
     log(f"Evaluating {method_cfg['display']} retrieval for {cfg['display']}")
     run_cmd(cmd, dry_run=dry_run)
@@ -1123,6 +1128,7 @@ def run_experiment(args) -> None:
                     candidate_batch_size=args.candidate_batch_size,
                     dry_run=args.dry_run,
                     resume=args.resume,
+                    max_examples=args.max_examples,
                 )
 
             details_by_method[method_key] = details_path
@@ -1355,6 +1361,15 @@ def main():
     parser.add_argument("--skip-llm-if-exists", action="store_true")
     parser.add_argument("--resume-llm", action="store_true")
     parser.add_argument("--max-llm-examples", type=int, default=0)
+    parser.add_argument(
+        "--max-examples",
+        type=int,
+        default=0,
+        help=(
+            "Limit every stage (retrieval + LLM) to this many test examples. "
+            "0 = no limit. --max-llm-examples overrides this for the LLM stage."
+        ),
+    )
     parser.add_argument("--gnn-rag-text-max-candidates", type=int, default=5)
     parser.add_argument(
         "--resume",
@@ -1375,6 +1390,9 @@ def main():
     )
 
     args = parser.parse_args()
+    # --max-examples is a global cap; --max-llm-examples overrides only the LLM stage
+    if args.max_examples > 0 and args.max_llm_examples == 0:
+        args.max_llm_examples = args.max_examples
     run_experiment(args)
 
 

@@ -65,7 +65,7 @@ def extract_query_signature(question: str, sparql_query: str) -> Dict:
 @dataclass
 class ParsedAxiom:
     raw_axiom: str
-    axiom_type: str  # fact | rule
+    axiom_type: str  # fact | rule | sent | unknown
     subject: Optional[str] = None
     predicate: Optional[str] = None
     object: Optional[str] = None
@@ -75,6 +75,9 @@ class ParsedAxiom:
     property2: Optional[str] = None
     subproperty: Optional[str] = None
     superproperty: Optional[str] = None
+    entity: Optional[str] = None       # SENT:: article title
+    sent_idx: Optional[int] = None     # SENT:: sentence index
+    sent_text: Optional[str] = None    # SENT:: sentence text
 
     def entities(self) -> Set[str]:
         out = set()
@@ -82,6 +85,8 @@ class ParsedAxiom:
             out.add(self.subject)
         if self.object:
             out.add(self.object)
+        if self.entity:
+            out.add(self.entity)
         return out
 
     def properties(self) -> Set[str]:
@@ -160,6 +165,17 @@ def parse_axiom(raw_axiom: str) -> ParsedAxiom:
             property2=m.group(2).strip(),
         )
 
+    # -------- text sentences --------
+    m = re.match(r"^SENT::(.+?)::(\d+)::(.*)", ax, re.DOTALL)
+    if m:
+        return ParsedAxiom(
+            raw_axiom=ax,
+            axiom_type="sent",
+            entity=m.group(1).strip(),
+            sent_idx=int(m.group(2)),
+            sent_text=m.group(3).strip(),
+        )
+
     # -------- facts --------
     parts = ax.split()
     if len(parts) == 3:
@@ -189,6 +205,7 @@ class SymbolicComposer:
         query_alignment_bonus: float = 0.18,
         bridge_bonus: float = 0.22,
         redundancy_penalty: float = 0.05,
+        size_penalty: float = 0.01,
         beam_width: int = 96,
         max_combinations: int = 5000,
         learned_weights_path: str = "",
@@ -200,6 +217,7 @@ class SymbolicComposer:
         self.query_alignment_bonus = query_alignment_bonus
         self.bridge_bonus = bridge_bonus
         self.redundancy_penalty = redundancy_penalty
+        self.size_penalty = size_penalty
         self.beam_width = beam_width
         self.max_combinations = max_combinations
 
@@ -223,6 +241,7 @@ class SymbolicComposer:
             "query_alignment_bonus",
             "bridge_bonus",
             "redundancy_penalty",
+            "size_penalty",
         ):
             if name in weights:
                 setattr(self, name, float(weights[name]))
@@ -272,6 +291,26 @@ class SymbolicComposer:
                     "reason": f"Fact predicate matches rule property family: {', '.join(sorted(shared_properties))}",
                 }
 
+        # sent-sent edges (Text-Chain mode)
+        if a.axiom_type == "sent" and b.axiom_type == "sent":
+            if a.entity and b.entity:
+                if a.entity == b.entity:
+                    idx_diff = abs((a.sent_idx or 0) - (b.sent_idx or 0))
+                    weight = 0.65 if idx_diff <= 2 else 0.55
+                    return {
+                        "type": "same_article",
+                        "weight": weight,
+                        "reason": f"Same article: {a.entity}",
+                    }
+                a_name = a.entity.replace("_", " ").lower()
+                b_name = b.entity.replace("_", " ").lower()
+                if a_name in (b.sent_text or "").lower() or b_name in (a.sent_text or "").lower():
+                    return {
+                        "type": "cross_entity_bridge",
+                        "weight": 0.75,
+                        "reason": f"Cross-entity bridge: {a.entity} ↔ {b.entity}",
+                    }
+
         return None
 
     def _build_graph(self, parsed_nodes: List[Dict]) -> List[Dict]:
@@ -291,6 +330,24 @@ class SymbolicComposer:
                     }
                 )
         return edges
+
+    def _is_text_chain_nodes(self, nodes: List[Dict]) -> bool:
+        return bool(nodes) and all(n["parsed_obj"].axiom_type == "sent" for n in nodes)
+
+    def _text_chain_query_entities(self, question: str, parsed_nodes: List[Dict]) -> Set[str]:
+        """Match article entity keys against question text to find directly-mentioned entities."""
+        q_lower = question.lower()
+        relevant = set()
+        for n in parsed_nodes:
+            entity = n["parsed_obj"].entity
+            if not entity:
+                continue
+            entity_norm = entity.replace("_", " ").lower()
+            # Also try the base form before any parenthetical suffix, e.g. "Incubus (band)" → "incubus"
+            base_form = re.sub(r"\s*\([^)]*\)", "", entity_norm).strip()
+            if entity_norm in q_lower or (base_form and base_form in q_lower):
+                relevant.add(entity)
+        return relevant
 
     # -----------------------------------------------------
     # Scoring helpers
@@ -395,6 +452,70 @@ class SymbolicComposer:
             return 0.0
         return max(0.0, 1.0 - (unique / total))
 
+    def _score_text_chain(
+        self,
+        nodes: List[Dict],
+        edges: List[Dict],
+        query_entities: Set[str],
+    ) -> Dict:
+        """Score a candidate subgraph for SAGE-QA Text-Chain mode."""
+        node_ids = {n["node_id"] for n in nodes}
+        base = sum(self._node_score(n) for n in nodes) / len(nodes)
+        connected = self._is_connected(node_ids, edges)
+
+        entity_keys = {n["parsed_obj"].entity for n in nodes if n["parsed_obj"].entity}
+        cross_page = len(entity_keys) > 1
+
+        has_bridge = any(
+            e["type"] == "cross_entity_bridge"
+            for e in edges
+            if e["source"] in node_ids and e["target"] in node_ids
+        )
+
+        q_coverage = 0.0
+        if query_entities:
+            covered = sum(1 for qe in query_entities if qe in entity_keys)
+            q_coverage = covered / len(query_entities)
+
+        # Comparison-question bridge: when all query entities are covered across pages,
+        # the question itself connects the sentences — treat as virtually bridged.
+        full_query_bridge = cross_page and q_coverage >= 1.0 and len(query_entities) >= 2
+
+        # Ideal chain: 2–4 sentences; same-page-only chains with ≥2 units are penalised
+        oversize = max(0, len(nodes) - 4)
+        same_page_penalty = 0.015 if not cross_page and len(nodes) >= 2 else 0.0
+
+        score = base
+        if connected or full_query_bridge:
+            score += self.connectivity_bonus
+        if cross_page:
+            score += self.fact_rule_mix_bonus   # repurposed as cross_page_bonus
+        if has_bridge or full_query_bridge:
+            score += self.bridge_bonus
+        score += self.query_alignment_bonus * q_coverage
+        score -= self.size_penalty * oversize
+        score -= same_page_penalty
+
+        return {
+            "node_ids": sorted(node_ids),
+            "score": round(score, 6),
+            "connected": connected or full_query_bridge,
+            "fact_rule_mix": cross_page,        # cross_page in text-chain mode
+            "query_alignment": round(q_coverage, 6),
+            "bridge_score": round(float(has_bridge or full_query_bridge), 6),
+            "nodes": [
+                {
+                    "node_id": n["node_id"],
+                    "raw_axiom": n["raw_axiom"],
+                    "score": n["score"],
+                    "candidate_kind": n["candidate_kind"],
+                    "axiom_type": n["parsed_obj"].axiom_type,
+                    "parsed": asdict(n["parsed_obj"]),
+                }
+                for n in nodes
+            ],
+        }
+
     def _score_nodes(
         self,
         nodes: List[Dict],
@@ -402,14 +523,18 @@ class SymbolicComposer:
         query_entities: Set[str],
         query_properties: Set[str],
     ) -> Dict:
+        if self._is_text_chain_nodes(nodes):
+            return self._score_text_chain(nodes, edges, query_entities)
+
         node_ids = {n["node_id"] for n in nodes}
 
-        base = sum(self._node_score(n) for n in nodes)
+        base = sum(self._node_score(n) for n in nodes) / len(nodes)
         connected = self._is_connected(node_ids, edges)
         mix = self._fact_rule_mix(nodes)
         q_align = self._query_alignment(nodes, query_entities, query_properties)
         bridge = self._bridge_score(nodes, query_entities, query_properties)
         redundancy = self._redundancy(nodes)
+        oversize = max(0, len(nodes) - 2)
 
         score = base
         if connected:
@@ -419,6 +544,7 @@ class SymbolicComposer:
         score += self.query_alignment_bonus * q_align
         score += self.bridge_bonus * bridge
         score -= self.redundancy_penalty * redundancy
+        score -= self.size_penalty * oversize
 
         return {
             "node_ids": sorted(node_ids),
@@ -542,6 +668,41 @@ class SymbolicComposer:
         qsig = extract_query_signature(question=question, sparql_query=sparql_query)
         query_entities = set(qsig["query_entities"])
         query_properties = set(qsig["query_properties"])
+
+        # Text-Chain mode: derive query entities from article keys matching the question
+        if self._is_text_chain_nodes(parsed_nodes):
+            query_entities = self._text_chain_query_entities(question, parsed_nodes)
+            query_properties = set()
+            # Comparison questions: add virtual edges between nodes from different articles
+            # that are both matched as query entities so the beam search can explore them.
+            if len(query_entities) >= 2:
+                qe_nodes = [
+                    n for n in parsed_nodes if n["parsed_obj"].entity in query_entities
+                ]
+                existing_pairs = {
+                    (min(e["source"], e["target"]), max(e["source"], e["target"]))
+                    for e in edges
+                }
+                for na, nb in itertools.combinations(qe_nodes, 2):
+                    if na["parsed_obj"].entity == nb["parsed_obj"].entity:
+                        continue
+                    pair = (
+                        min(na["node_id"], nb["node_id"]),
+                        max(na["node_id"], nb["node_id"]),
+                    )
+                    if pair not in existing_pairs:
+                        edges.append(
+                            {
+                                "source": na["node_id"],
+                                "target": nb["node_id"],
+                                "type": "query_entity_bridge",
+                                "weight": 0.52,
+                                "reason": (
+                                    f"Query entity pair: {na['parsed_obj'].entity}"
+                                    f" / {nb['parsed_obj'].entity}"
+                                ),
+                            }
+                        )
 
         best = None
 

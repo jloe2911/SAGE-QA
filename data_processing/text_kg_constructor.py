@@ -76,7 +76,6 @@ def dedupe_triples(triples: Iterable[Iterable[Any]]) -> List[List[str]]:
 
 def construct_wiki_bridge_triples(
     sentence_records: List[Dict[str, Any]],
-    answer: str,
     max_triples: int,
 ) -> List[List[str]]:
     if max_triples <= 0:
@@ -106,14 +105,9 @@ def construct_wiki_bridge_triples(
             seen.add(key)
             triples.append([subject, predicate, obj])
 
-    answer_norm = normalize_text(answer)
-
     for rec in sentence_records:
         source_title = rec.get("title", "")
         sentence = rec.get("sentence", "")
-
-        if answer_norm not in {"yes", "no"} and phrase_in_text(answer, sentence):
-            add(source_title, "mentions_answer", answer)
 
         for target_title in titles:
             if target_title == source_title:
