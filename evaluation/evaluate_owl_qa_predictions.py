@@ -229,6 +229,10 @@ def get_top_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
 
 def retrieval_at_k(item: Dict[str, Any], k: int) -> Optional[Dict[str, float]]:
     gold_explanations = item.get("gold_explanations", []) or []
+    gold_support = item.get("gold_support_units", []) or []
+    if not gold_explanations and gold_support:
+        gold_explanations = [gold_support]
+
     top_list = item.get("top5") or item.get("topk")
     if top_list is None:
         return None
@@ -238,26 +242,42 @@ def retrieval_at_k(item: Dict[str, Any], k: int) -> Optional[Dict[str, float]]:
     exact = 0.0
     contained = 0.0
     best_f1 = 0.0
+    best_precision = 0.0
+    best_recall = 0.0
+    union_units = []
+    seen = set()
 
     for cand in top_list:
-        cand_units = cand.get("subgraph_units", [])
-        cset = set(cand_units)
+        for unit in cand.get("subgraph_units", []) or []:
+            if unit not in seen:
+                seen.add(unit)
+                union_units.append(unit)
 
-        for gold in gold_explanations:
-            gset = set(gold)
+    union_set = set(union_units)
 
-            if cset == gset:
-                exact = 1.0
+    for gold in gold_explanations:
+        gset = set(gold)
+        if not gset:
+            continue
 
-            if gset and gset.issubset(cset):
-                contained = 1.0
+        if union_set == gset:
+            exact = 1.0
 
-            cur = support_scores(cand_units, gold)
-            best_f1 = max(best_f1, cur["f1"])
+        if gset.issubset(union_set):
+            contained = 1.0
+
+        cur = support_scores(union_units, gold)
+        if cur["f1"] > best_f1:
+            best_f1 = cur["f1"]
+            best_precision = cur["precision"]
+            best_recall = cur["recall"]
 
     return {
         f"exact@{k}": exact,
         f"contained@{k}": contained,
+        f"retrieval_precision@{k}": best_precision,
+        f"retrieval_recall@{k}": best_recall,
+        f"retrieval_f1@{k}": best_f1,
         f"support_set_f1@{k}": best_f1,
     }
 
@@ -296,6 +316,9 @@ def evaluate(
         "joint_recall": 0.0,
         f"exact@{top_k}": 0.0,
         f"contained@{top_k}": 0.0,
+        f"retrieval_precision@{top_k}": 0.0,
+        f"retrieval_recall@{top_k}": 0.0,
+        f"retrieval_f1@{top_k}": 0.0,
         f"support_set_f1@{top_k}": 0.0,
         "retrieval_examples": 0,
         "examples": 0,
@@ -392,6 +415,11 @@ def evaluate(
                 metrics["retrieval_examples"] += 1
                 metrics[f"exact@{top_k}"] += ret[f"exact@{top_k}"]
                 metrics[f"contained@{top_k}"] += ret[f"contained@{top_k}"]
+                metrics[f"retrieval_precision@{top_k}"] += ret[
+                    f"retrieval_precision@{top_k}"
+                ]
+                metrics[f"retrieval_recall@{top_k}"] += ret[f"retrieval_recall@{top_k}"]
+                metrics[f"retrieval_f1@{top_k}"] += ret[f"retrieval_f1@{top_k}"]
                 metrics[f"support_set_f1@{top_k}"] += ret[f"support_set_f1@{top_k}"]
         else:
             metrics["answer_only_examples"] += 1
@@ -451,12 +479,18 @@ def evaluate(
         for key in [
             f"exact@{top_k}",
             f"contained@{top_k}",
+            f"retrieval_precision@{top_k}",
+            f"retrieval_recall@{top_k}",
+            f"retrieval_f1@{top_k}",
             f"support_set_f1@{top_k}",
         ]:
             metrics[key] /= retrieval_n
     else:
         metrics[f"exact@{top_k}"] = None
         metrics[f"contained@{top_k}"] = None
+        metrics[f"retrieval_precision@{top_k}"] = None
+        metrics[f"retrieval_recall@{top_k}"] = None
+        metrics[f"retrieval_f1@{top_k}"] = None
         metrics[f"support_set_f1@{top_k}"] = None
 
     result = {

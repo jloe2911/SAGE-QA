@@ -175,6 +175,8 @@ def eval_group(rows: List[Dict], scoring_fn, input_format: str) -> Dict:
                 "top1_contains_any_gold_explanation": as_bool(
                     top1, "contains_any_gold_explanation"
                 ),
+                "gold_explanations": top1.get("gold_explanations", []),
+                "gold_support_units": top1.get("gold_support_units", []),
                 "top1_best_jaccard_to_gold": as_float(top1, "best_jaccard_to_gold"),
                 "top1_best_set_f1_to_gold": as_float(top1, "best_set_f1_to_gold"),
                 "top1_best_precision_to_gold": as_float(
@@ -192,6 +194,12 @@ def eval_group(rows: List[Dict], scoring_fn, input_format: str) -> Dict:
                         ),
                         "best_jaccard_to_gold": as_float(r, "best_jaccard_to_gold"),
                         "best_set_f1_to_gold": as_float(r, "best_set_f1_to_gold"),
+                        "best_set_precision_to_gold": as_float(
+                            r, "best_set_precision_to_gold"
+                        ),
+                        "best_set_recall_to_gold": as_float(
+                            r, "best_set_recall_to_gold"
+                        ),
                         "subgraph_units": r.get("subgraph_units", []),
                     }
                     for i, r in enumerate(top5)
@@ -224,12 +232,60 @@ def compute_metrics(details: List[Dict]) -> Dict:
     contains3 = 0
     best_jaccard3 = 0.0
     best_f13 = 0.0
+    best_precision3 = 0.0
+    best_recall3 = 0.0
+    union_f13 = 0.0
+    union_precision3 = 0.0
+    union_recall3 = 0.0
 
     hit5 = 0
     exact5 = 0
     contains5 = 0
     best_jaccard5 = 0.0
     best_f15 = 0.0
+    best_precision5 = 0.0
+    best_recall5 = 0.0
+    union_f15 = 0.0
+    union_precision5 = 0.0
+    union_recall5 = 0.0
+
+    def union_scores(top_rows: List[Dict], detail: Dict) -> Tuple[float, float, float]:
+        gold_sets = detail.get("gold_explanations", []) or []
+        gold_support = detail.get("gold_support_units", []) or []
+        if not gold_sets and gold_support:
+            gold_sets = [gold_support]
+
+        union_units = []
+        seen = set()
+        for row in top_rows:
+            for unit in row.get("subgraph_units", []) or []:
+                if unit not in seen:
+                    seen.add(unit)
+                    union_units.append(unit)
+
+        pred_set = set(union_units)
+        best_precision = 0.0
+        best_recall = 0.0
+        best_f1 = 0.0
+
+        for gold in gold_sets:
+            gold_set = set(gold)
+            if not gold_set:
+                continue
+            inter = len(pred_set & gold_set)
+            precision = inter / max(len(pred_set), 1)
+            recall = inter / len(gold_set)
+            f1 = (
+                0.0
+                if precision + recall == 0
+                else (2 * precision * recall / (precision + recall))
+            )
+            if f1 > best_f1:
+                best_precision = precision
+                best_recall = recall
+                best_f1 = f1
+
+        return best_precision, best_recall, best_f1
 
     for d in details:
         top5 = d.get("top5", [])
@@ -251,11 +307,23 @@ def compute_metrics(details: List[Dict]) -> Dict:
             best3 = max(top3, key=lambda r: float(r.get("best_set_f1_to_gold", 0.0)))
             best_jaccard3 += float(best3.get("best_jaccard_to_gold", 0.0))
             best_f13 += float(best3.get("best_set_f1_to_gold", 0.0))
+            best_precision3 += float(best3.get("best_set_precision_to_gold", 0.0))
+            best_recall3 += float(best3.get("best_set_recall_to_gold", 0.0))
+            u_prec, u_rec, u_f1 = union_scores(top3, d)
+            union_precision3 += u_prec
+            union_recall3 += u_rec
+            union_f13 += u_f1
 
         if top5:
             best5 = max(top5, key=lambda r: float(r.get("best_set_f1_to_gold", 0.0)))
             best_jaccard5 += float(best5.get("best_jaccard_to_gold", 0.0))
             best_f15 += float(best5.get("best_set_f1_to_gold", 0.0))
+            best_precision5 += float(best5.get("best_set_precision_to_gold", 0.0))
+            best_recall5 += float(best5.get("best_set_recall_to_gold", 0.0))
+            u_prec, u_rec, u_f1 = union_scores(top5, d)
+            union_precision5 += u_prec
+            union_recall5 += u_rec
+            union_f15 += u_f1
 
     return {
         "examples": len(details),
@@ -270,12 +338,22 @@ def compute_metrics(details: List[Dict]) -> Dict:
         "exact@3": exact3 / n,
         "contains@3": contains3 / n,
         "jaccard@3": best_jaccard3 / n,
-        "set_f1@3": best_f13 / n,
+        "set_f1@3": union_f13 / n,
+        "precision@3": union_precision3 / n,
+        "recall@3": union_recall3 / n,
+        "best_set_f1@3": best_f13 / n,
+        "best_precision@3": best_precision3 / n,
+        "best_recall@3": best_recall3 / n,
         "hit@5": hit5 / n,
         "exact@5": exact5 / n,
         "contains@5": contains5 / n,
         "jaccard@5": best_jaccard5 / n,
-        "set_f1@5": best_f15 / n,
+        "set_f1@5": union_f15 / n,
+        "precision@5": union_precision5 / n,
+        "recall@5": union_recall5 / n,
+        "best_set_f1@5": best_f15 / n,
+        "best_precision@5": best_precision5 / n,
+        "best_recall@5": best_recall5 / n,
     }
 
 

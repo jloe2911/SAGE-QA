@@ -99,6 +99,104 @@ def get_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
     return units
 
 
+def detect_answer_guidance(question: str) -> str:
+    q = str(question or "").strip()
+    q_lower = q.lower()
+    guidance = []
+
+    if q_lower.startswith("which "):
+        guidance.append(
+            "This is a 'which' question. Return the requested item itself, "
+            "not the intermediate date, director, author, parent, country, or explanation."
+        )
+        choices = extract_or_choices(q)
+        if choices:
+            guidance.append(
+                "If the answer is one of the compared choices, copy exactly one "
+                f"of these choices: {'; '.join(choices)}."
+            )
+
+    if q_lower.startswith(("where ", "what is the place", "what was the place")):
+        guidance.append(
+            "This asks for a place. Return only the minimal place/entity name "
+            "needed to answer. Do not append broader locations unless the question "
+            "explicitly asks for them."
+        )
+
+    if q_lower.startswith("who "):
+        guidance.append(
+            "This asks for a person or organization. Return only the name, without titles, roles, or appositive descriptions unless they are part of the name."
+        )
+
+    if "grandfather" in q_lower:
+        guidance.append(
+            "For grandfather questions, identify the parent first, then return that parent's father; do not return the parent."
+        )
+
+    if "born first" in q_lower or "older" in q_lower:
+        guidance.append(
+            "For older/born-first comparisons, return the person or item asked for, not the birth date."
+        )
+
+    if "came out first" in q_lower or "released first" in q_lower:
+        guidance.append(
+            "For release-order comparisons, return the film/item title that was released earlier, not the release date."
+        )
+
+    if "died first" in q_lower:
+        guidance.append(
+            "For died-first comparisons, return the person or item asked for, not the death date."
+        )
+
+    if q_lower.startswith(
+        (
+            "is ",
+            "are ",
+            "was ",
+            "were ",
+            "do ",
+            "does ",
+            "did ",
+            "has ",
+            "have ",
+            "had ",
+        )
+    ):
+        guidance.append(
+            "This is a yes/no question. Compare the requested properties directly and answer exactly yes or no."
+        )
+
+    if not guidance:
+        return "No additional answer-type guidance."
+    return "\n".join(f"- {item}" for item in guidance)
+
+
+def extract_or_choices(question: str) -> List[str]:
+    q = re.sub(r"\s+", " ", str(question or "")).strip(" ?")
+    patterns = [
+        r",\s*([^,?]+?)\s+or\s+([^,?]+)$",
+        r"\bbetween\s+(.+?)\s+and\s+(.+)$",
+        r"\bboth\s+movies,\s*(.+?)\s+and\s+(.+?)(?:,|$)",
+        r"\bboth\s+films,\s*(.+?)\s+and\s+(.+?)(?:,|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, q, flags=re.IGNORECASE)
+        if match:
+            choices = [clean_choice(match.group(1)), clean_choice(match.group(2))]
+            return [choice for choice in choices if choice]
+    return []
+
+
+def clean_choice(choice: str) -> str:
+    choice = re.sub(
+        r"^(?:the|film|movie|person|song)\s+",
+        "",
+        str(choice).strip(),
+        flags=re.IGNORECASE,
+    )
+    return choice.strip(" ,;:")
+
+
 def build_prompt(question: str, support_units: List[str]) -> str:
     reasoning_lines = []
     for i, unit in enumerate(support_units, start=1):
@@ -122,12 +220,17 @@ Reasoning Paths:
 Question:
 {question}
 
+Answer Type Guidance:
+{detect_answer_guidance(question)}
+
 Instructions:
 - Use only the reasoning paths above. Do not use outside knowledge.
 - First identify the minimal path evidence needed to answer, but do not show hidden reasoning outside JSON.
 Return the shortest possible answer:
 - For yes/no questions, answer exactly "yes" or "no".
-- For entity, title, date, number, or place questions, copy the exact answer span from the evidence when possible.
+- For entity, title, date, number, or place questions, copy the shortest exact answer span from the evidence when possible.
+- If the question asks which of two named choices satisfies a comparison, the answer must be the choice name, not the evidence value used to compare them.
+- Do not include parenthetical explanations, appositives, occupations, or broader locations unless they are required to identify the answer.
 - For multiple answers, separate items with semicolons.
 - If the reasoning paths are insufficient, answer "unknown".
 - Provide a one-sentence explanation grounded in the reasoning paths.
@@ -164,6 +267,18 @@ def normalize_generated_answer(question: str, answer: str) -> str:
     if answer.lower() in {"unknown", "insufficient information"}:
         return "unknown"
     return answer
+
+
+def is_unknown_answer(answer: str) -> bool:
+    answer = str(answer or "").strip().lower()
+    return answer in {
+        "",
+        "unknown",
+        "insufficient information",
+        "not enough information",
+        "cannot be determined",
+        "cannot determine",
+    }
 
 
 def extract_json_object(text: str) -> Dict[str, Any]:
@@ -279,6 +394,7 @@ def generate_answers(
     model: str,
     max_examples: int = 0,
     sleep_seconds: float = 0.0,
+    fallback_top_k: int = 0,
 ):
     details = load_json(details_path)
 
@@ -294,20 +410,41 @@ def generate_answers(
         gold_answer = item.get("answer", "")
 
         support_units = get_support_units(item, top_k=top_k)
-        prompt = build_prompt(question, support_units)
 
         try:
-            if backend == "openai":
-                raw = call_openai(prompt=prompt, model=model)
-            elif backend == "local":
-                raw = call_local_transformers(prompt=prompt, model_name=model)
-            else:
-                raise ValueError(f"Unknown backend: {backend}")
 
-            parsed = extract_json_object(raw)
-            predicted_answer = normalize_generated_answer(
-                question, str(parsed.get("answer", "")).strip()
-            )
+            def ask(units: List[str]) -> Tuple[str, Dict[str, Any], str]:
+                prompt = build_prompt(question, units)
+                if backend == "openai":
+                    raw_text = call_openai(prompt=prompt, model=model)
+                elif backend == "local":
+                    raw_text = call_local_transformers(prompt=prompt, model_name=model)
+                else:
+                    raise ValueError(f"Unknown backend: {backend}")
+                parsed_obj = extract_json_object(raw_text)
+                answer_text = normalize_generated_answer(
+                    question, str(parsed_obj.get("answer", "")).strip()
+                )
+                return answer_text, parsed_obj, raw_text
+
+            predicted_answer, parsed, raw = ask(support_units)
+            answer_source_top_k = top_k
+
+            if (
+                fallback_top_k
+                and fallback_top_k > top_k
+                and is_unknown_answer(predicted_answer)
+            ):
+                fallback_units = get_support_units(item, top_k=fallback_top_k)
+                if fallback_units != support_units:
+                    fallback_answer, fallback_parsed, fallback_raw = ask(fallback_units)
+                    if not is_unknown_answer(fallback_answer):
+                        support_units = fallback_units
+                        predicted_answer = fallback_answer
+                        parsed = fallback_parsed
+                        raw = fallback_raw
+                        answer_source_top_k = fallback_top_k
+
             explanation = str(parsed.get("explanation", "")).strip()
 
             row = {
@@ -319,6 +456,8 @@ def generate_answers(
                 "explanation": explanation,
                 "support_units": support_units,
                 "top_k": top_k,
+                "answer_source_top_k": answer_source_top_k,
+                "fallback_top_k": fallback_top_k,
                 "raw_response": raw,
             }
 
@@ -332,6 +471,8 @@ def generate_answers(
                 "explanation": "",
                 "support_units": support_units,
                 "top_k": top_k,
+                "answer_source_top_k": top_k,
+                "fallback_top_k": fallback_top_k,
                 "error": repr(e),
             }
 
@@ -368,6 +509,15 @@ def main():
 
     parser.add_argument("--max-examples", type=int, default=0)
     parser.add_argument("--sleep-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--fallback-top-k",
+        type=int,
+        default=0,
+        help=(
+            "If the first reader call returns unknown/empty, retry with this "
+            "larger top-k evidence union."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -379,6 +529,7 @@ def main():
         model=args.model,
         max_examples=args.max_examples,
         sleep_seconds=args.sleep_seconds,
+        fallback_top_k=args.fallback_top_k,
     )
 
 

@@ -83,17 +83,10 @@ def collect_kg_units(rows: List[Dict[str, Any]]) -> List[str]:
     kg_units: List[str] = []
     seen = set()
     for row in rows:
-        for field in ("kg_evidence_units", "graph_context_units"):
-            for unit in row.get(field, []) or []:
-                if kg_parts(unit) is not None and unit not in seen:
-                    seen.add(unit)
-                    kg_units.append(unit)
-        for ev in row.get("evidences", []) or []:
-            if isinstance(ev, list) and len(ev) >= 3:
-                unit = f"KG::{clean(ev[0])}::{clean(ev[1])}::{clean(ev[2])}"
-                if unit not in seen:
-                    seen.add(unit)
-                    kg_units.append(unit)
+        for unit in row.get("graph_context_units", []) or []:
+            if kg_parts(unit) is not None and unit not in seen:
+                seen.add(unit)
+                kg_units.append(unit)
     return kg_units
 
 
@@ -128,12 +121,20 @@ def flush_example(
     seen_units = set()
     for row in rows[:max_candidates]:
         add_unique(candidate_units, seen_units, row.get("subgraph_units", []) or [])
-        add_unique(candidate_units, seen_units, row.get("gold_units", []) or [])
+        add_unique(
+            candidate_units,
+            seen_units,
+            row.get("gold_support_units", []) or [],
+        )
 
     gold_units: List[str] = []
     seen_gold = set()
     for row in rows:
-        add_unique(gold_units, seen_gold, row.get("gold_units", []) or [])
+        add_unique(
+            gold_units,
+            seen_gold,
+            row.get("gold_support_units", []) or [],
+        )
         if gold_units:
             break
 
@@ -212,8 +213,7 @@ def flush_example(
         "dataset": seed.get("dataset", seed.get("source_dataset", "")),
         "hop": seed.get("hop", ""),
         "answer_type": seed.get("answer_type", ""),
-        "gold_explanations": seed.get("gold_explanations", []),
-        "gold_units": gold_units,
+        "gold_support_units": gold_units,
         "kg_units": kg_units,
     }
     return sample, details

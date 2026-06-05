@@ -42,6 +42,56 @@ DATASETS = {
         # Use validation unless you intentionally built test_subgraph_retrieval.jsonl from test.
         "gold_source": "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet",
     },
+    "hotpotqa_openai": {
+        "display": "HotpotQA_openai_gpt41mini",
+        "type": "text",
+        "data_dir": "data/HotpotQA_openai_gpt41mini",
+        "output_dir": "outputs/full_results/HotpotQA_openai_gpt41mini",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_hotpotqa_openai_gpt41mini_full",
+        "gold_file": "data/HotpotQA_openai_gpt41mini/hotpot_test_subset_gold.json",
+        "export_script": "evaluation/export_hotpot_predictions.py",
+        "gold_export_script": "data_processing/export_hotpot_gold_subset.py",
+        "gold_source_arg": "--parquet",
+        "gold_source": "data/raw/hotpot_qa/distractor/validation-00000-of-00001.parquet",
+    },
+    "2wiki_openai": {
+        "display": "2WikiMultiHopQA_openai_gpt41mini",
+        "type": "text",
+        "data_dir": "data/2WikiMultiHopQA_openai_gpt41mini",
+        "output_dir": "outputs/full_results/2WikiMultiHopQA_openai_gpt41mini",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_2wiki_openai_gpt41mini_full",
+        "gold_file": "data/2WikiMultiHopQA_openai_gpt41mini/2wiki_test_subset_gold.json",
+        "export_script": "evaluation/export_2wiki_predictions.py",
+        "gold_export_script": "data_processing/export_2wiki_gold_subset.py",
+        "gold_source_arg": "--parquet",
+        # Use validation unless you intentionally built test_subgraph_retrieval.jsonl from test.
+        "gold_source": "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet",
+    },
+    "hotpotqa_contextkg_v2": {
+        "display": "HotpotQA_contextkg_v2",
+        "type": "text",
+        "data_dir": "data/HotpotQA_contextkg_v2",
+        "output_dir": "outputs/full_results/HotpotQA_contextkg_v2",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_hotpotqa_contextkg_v2_full",
+        "gold_file": "data/HotpotQA_contextkg_v2/hotpot_test_subset_gold.json",
+        "export_script": "evaluation/export_hotpot_predictions.py",
+        "gold_export_script": "data_processing/export_hotpot_gold_subset.py",
+        "gold_source_arg": "--parquet",
+        "gold_source": "data/raw/hotpot_qa/distractor/validation-00000-of-00001.parquet",
+    },
+    "2wiki_contextkg_v2": {
+        "display": "2WikiMultiHopQA_contextkg_v2",
+        "type": "text",
+        "data_dir": "data/2WikiMultiHopQA_contextkg_v2",
+        "output_dir": "outputs/full_results/2WikiMultiHopQA_contextkg_v2",
+        "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_2wiki_contextkg_v2_full",
+        "gold_file": "data/2WikiMultiHopQA_contextkg_v2/2wiki_test_subset_gold.json",
+        "export_script": "evaluation/export_2wiki_predictions.py",
+        "gold_export_script": "data_processing/export_2wiki_gold_subset.py",
+        "gold_source_arg": "--parquet",
+        # Use validation unless you intentionally built test_subgraph_retrieval.jsonl from test.
+        "gold_source": "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet",
+    },
     "familyowl_1hop": {
         "display": "FamilyOWL_1hop",
         "type": "owl",
@@ -318,6 +368,7 @@ def train_gnn_if_needed(
     candidate_batch_size: int,
     dry_run: bool,
     force_train: bool,
+    freeze_encoder: bool,
 ) -> None:
     checkpoint = Path(cfg["checkpoint_dir"]) / "best_model.pt"
 
@@ -344,7 +395,6 @@ def train_gnn_if_needed(
         model_name,
         "--epochs",
         str(epochs),
-        "--freeze-encoder",
         "--candidate-batch-size",
         str(candidate_batch_size),
         "--score-mode",
@@ -358,6 +408,8 @@ def train_gnn_if_needed(
         "--listwise-weight",
         "0.0",
     ]
+    if freeze_encoder:
+        cmd.append("--freeze-encoder")
 
     log(f"Training GNN retriever for {cfg['display']}")
     run_cmd(cmd, dry_run=dry_run)
@@ -411,7 +463,8 @@ def run_gnn_details(
     ensure_file(train_path, f"{dataset_key} train data")
     ensure_file(dev_path, f"{dataset_key} dev data")
     ensure_file(test_path, f"{dataset_key} test data")
-    ensure_file(checkpoint, f"{dataset_key} checkpoint")
+    if not dry_run:
+        ensure_file(checkpoint, f"{dataset_key} checkpoint")
 
     if resume and details_path.exists():
         log(f"Reusing {method_cfg['display']} details: {details_path}")
@@ -477,6 +530,7 @@ def run_llm_generation(
     details_path: Path,
     output_jsonl: Path,
     top_k: int,
+    fallback_top_k: int,
     reader_model: str,
     dry_run: bool,
     skip_llm_if_exists: bool,
@@ -528,6 +582,9 @@ def run_llm_generation(
         reader_model,
     ]
 
+    if cfg["type"] == "text" and fallback_top_k and fallback_top_k > top_k:
+        cmd.extend(["--fallback-top-k", str(fallback_top_k)])
+
     if max_llm_examples > 0:
         cmd.extend(["--max-examples", str(max_llm_examples)])
 
@@ -539,7 +596,7 @@ def run_llm_generation(
 
     log(
         f"Generating LLM answers: dataset={cfg['display']}, details={details_path}, "
-        f"top_k={top_k}, model={reader_model}"
+        f"top_k={top_k}, fallback_top_k={fallback_top_k}, model={reader_model}"
     )
     run_cmd(cmd, dry_run=dry_run)
 
@@ -770,6 +827,7 @@ def export_text_predictions(
     llm_answers_path: Path,
     pred_path: Path,
     top_k: int,
+    support_top_k: int,
     dry_run: bool,
     resume: bool,
 ) -> None:
@@ -790,10 +848,13 @@ def export_text_predictions(
         "--output",
         str(pred_path),
         "--top-k",
-        str(top_k),
+        str(support_top_k),
     ]
 
-    log(f"Exporting text predictions to {pred_path}")
+    log(
+        f"Exporting text predictions to {pred_path} "
+        f"(reader_top_k={top_k}, support_top_k={support_top_k})"
+    )
     run_cmd(cmd, dry_run=dry_run)
 
 
@@ -934,15 +995,25 @@ def load_retrieval_metrics(method_out_dir: Path, top_k: int) -> Dict[str, float]
         with metrics_path.open("r", encoding="utf-8") as f:
             m = json.load(f)
 
-        exact = m.get(f"exact_hit@{top_k}")
-        contained = m.get(f"contains_gold_hit@{top_k}")
-        support_f1 = m.get(f"best_set_f1@{top_k}")
+        exact = m.get(f"exact_hit@{top_k}", m.get(f"exact@{top_k}"))
+        contained = m.get(
+            f"contains_gold_hit@{top_k}",
+            m.get(f"gold_contained@{top_k}", m.get(f"contains@{top_k}")),
+        )
+        support_f1 = m.get(f"set_f1@{top_k}", m.get(f"support_f1@{top_k}"))
+        support_precision = m.get(
+            f"precision@{top_k}", m.get(f"support_precision@{top_k}")
+        )
+        support_recall = m.get(f"recall@{top_k}", m.get(f"support_recall@{top_k}"))
 
         if exact is not None and contained is not None and support_f1 is not None:
             return {
                 f"exact@{top_k}": exact,
                 f"contained@{top_k}": contained,
                 f"support_set_f1@{top_k}": support_f1,
+                f"retrieval_precision@{top_k}": support_precision,
+                f"retrieval_recall@{top_k}": support_recall,
+                f"retrieval_f1@{top_k}": support_f1,
             }
 
     details_path = method_out_dir / "test_details.json"
@@ -959,24 +1030,69 @@ def load_retrieval_metrics(method_out_dir: Path, top_k: int) -> Dict[str, float]
     exact_scores = []
     contained_scores = []
     f1_scores = []
+    precision_scores = []
+    recall_scores = []
 
     for ex in details:
         top = ex.get("top5", [])[:top_k]
+        gold_sets = ex.get("gold_explanations", []) or []
+        gold_support = ex.get("gold_support_units", []) or []
+        if not gold_sets and gold_support:
+            gold_sets = [gold_support]
 
-        exact_scores.append(
-            float(any(c.get("exact_match_any_gold", False) for c in top))
-        )
-        contained_scores.append(
-            float(any(c.get("contains_any_gold_explanation", False) for c in top))
-        )
-        f1_scores.append(
-            max([float(c.get("best_set_f1_to_gold", 0.0)) for c in top] or [0.0])
-        )
+        union_units = []
+        seen = set()
+        for cand in top:
+            for unit in cand.get("subgraph_units", []) or []:
+                if unit not in seen:
+                    seen.add(unit)
+                    union_units.append(unit)
+
+        union_set = set(union_units)
+        best_union = {
+            "exact": 0.0,
+            "contained": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+        }
+
+        for gold in gold_sets:
+            gold_set = set(gold)
+            if not gold_set:
+                continue
+
+            inter = len(union_set & gold_set)
+            precision = inter / max(len(union_set), 1)
+            recall = inter / len(gold_set)
+            f1 = (
+                0.0
+                if precision + recall == 0
+                else (2 * precision * recall / (precision + recall))
+            )
+
+            if union_set == gold_set:
+                best_union["exact"] = 1.0
+            if gold_set.issubset(union_set):
+                best_union["contained"] = 1.0
+            if f1 > best_union["f1"]:
+                best_union["precision"] = precision
+                best_union["recall"] = recall
+                best_union["f1"] = f1
+
+        exact_scores.append(best_union["exact"])
+        contained_scores.append(best_union["contained"])
+        f1_scores.append(best_union["f1"])
+        precision_scores.append(best_union["precision"])
+        recall_scores.append(best_union["recall"])
 
     return {
         f"exact@{top_k}": sum(exact_scores) / len(exact_scores),
         f"contained@{top_k}": sum(contained_scores) / len(contained_scores),
         f"support_set_f1@{top_k}": sum(f1_scores) / len(f1_scores),
+        f"retrieval_precision@{top_k}": sum(precision_scores) / len(precision_scores),
+        f"retrieval_recall@{top_k}": sum(recall_scores) / len(recall_scores),
+        f"retrieval_f1@{top_k}": sum(f1_scores) / len(f1_scores),
     }
 
 
@@ -1010,9 +1126,11 @@ def append_result_row(
         "Joint_F1": metrics.get("joint_f1"),
         "Joint_Prec": metrics.get("joint_prec"),
         "Joint_Recall": metrics.get("joint_recall"),
-        "Exact_at_k": metrics.get(f"exact@{top_k}"),
-        "Contained_at_k": metrics.get(f"contained@{top_k}"),
-        "Support_Set_F1_at_k": metrics.get(f"support_set_f1@{top_k}"),
+        "Retrieval_Precision_at_k": metrics.get(f"retrieval_precision@{top_k}"),
+        "Retrieval_Recall_at_k": metrics.get(f"retrieval_recall@{top_k}"),
+        "Retrieval_F1_at_k": metrics.get(f"retrieval_f1@{top_k}"),
+        "Exact_Evidence_Set_at_k": metrics.get(f"exact@{top_k}"),
+        "Complete_Evidence_Recall_at_k": metrics.get(f"contained@{top_k}"),
         **llm_stats,
     }
     results.append(row)
@@ -1093,6 +1211,7 @@ def run_experiment(args) -> None:
                 candidate_batch_size=args.candidate_batch_size,
                 dry_run=args.dry_run,
                 force_train=args.force_train,
+                freeze_encoder=not args.fine_tune_encoder,
             )
 
         details_by_method: Dict[str, Path] = {}
@@ -1153,14 +1272,30 @@ def run_experiment(args) -> None:
             method_out_dir = Path(cfg["output_dir"]) / method_cfg["details_subdir"]
 
             model_tag = safe_model_name(args.reader_model)
+            reader_top_k = args.reader_top_k or args.top_k
+            reader_fallback_top_k = args.reader_fallback_top_k or 0
+            support_top_k = args.support_top_k or args.top_k
+            reader_tag = (
+                f"_reader_top{reader_top_k}" if reader_top_k != args.top_k else ""
+            )
+            fallback_tag = (
+                f"_fallback_top{reader_fallback_top_k}" if reader_fallback_top_k else ""
+            )
+            support_tag = (
+                f"_support_top{support_top_k}" if support_top_k != args.top_k else ""
+            )
             llm_answers_path = (
-                method_out_dir / f"llm_answers_top{args.top_k}_{model_tag}.jsonl"
+                method_out_dir
+                / f"llm_answers_top{args.top_k}{reader_tag}{fallback_tag}_{model_tag}.jsonl"
             )
             pred_path = (
                 method_out_dir
-                / f"{dataset_key}_predictions_top{args.top_k}_{model_tag}.json"
+                / f"{dataset_key}_predictions_top{args.top_k}{reader_tag}{fallback_tag}{support_tag}_{model_tag}.json"
             )
-            metrics_path = method_out_dir / f"metrics_top{args.top_k}_{model_tag}.json"
+            metrics_path = (
+                method_out_dir
+                / f"metrics_top{args.top_k}{reader_tag}{fallback_tag}{support_tag}_{model_tag}.json"
+            )
             answer_only_paths: List[Path] = []
             if cfg["type"] == "owl":
                 answer_only_path = (
@@ -1173,14 +1308,15 @@ def run_experiment(args) -> None:
                 details_path = method_out_dir / "test_details.json"
                 llm_answers_path = (
                     method_out_dir
-                    / f"llm_answers_gnn_rag_top{args.top_k}_{model_tag}.jsonl"
+                    / f"llm_answers_gnn_rag_top{args.top_k}{reader_tag}_{model_tag}.jsonl"
                 )
                 pred_path = (
                     method_out_dir
-                    / f"{dataset_key}_predictions_gnn_rag_top{args.top_k}_{model_tag}.json"
+                    / f"{dataset_key}_predictions_gnn_rag_top{args.top_k}{reader_tag}{fallback_tag}{support_tag}_{model_tag}.json"
                 )
                 metrics_path = (
-                    method_out_dir / f"metrics_gnn_rag_top{args.top_k}_{model_tag}.json"
+                    method_out_dir
+                    / f"metrics_gnn_rag_top{args.top_k}{reader_tag}{fallback_tag}{support_tag}_{model_tag}.json"
                 )
 
                 if not args.skip_llm:
@@ -1189,7 +1325,7 @@ def run_experiment(args) -> None:
                         cfg=cfg,
                         details_path=details_path,
                         output_jsonl=llm_answers_path,
-                        top_k=args.top_k,
+                        top_k=reader_top_k,
                         reader_model=args.reader_model,
                         retriever_epochs=args.epochs,
                         dry_run=args.dry_run,
@@ -1207,6 +1343,7 @@ def run_experiment(args) -> None:
                         llm_answers_path=llm_answers_path,
                         pred_path=pred_path,
                         top_k=args.top_k,
+                        support_top_k=support_top_k,
                         dry_run=args.dry_run,
                         resume=args.resume,
                     )
@@ -1231,6 +1368,12 @@ def run_experiment(args) -> None:
                 llm_stats = (
                     count_llm_answers(llm_answers_path) if not args.dry_run else {}
                 )
+                retrieval_metrics = load_retrieval_metrics(
+                    method_out_dir=method_out_dir,
+                    top_k=args.top_k,
+                )
+                metrics = {**metrics, **retrieval_metrics}
+
                 append_result_row(
                     results=results,
                     dataset_key=dataset_key,
@@ -1249,7 +1392,8 @@ def run_experiment(args) -> None:
                     cfg=cfg,
                     details_path=details_path,
                     output_jsonl=llm_answers_path,
-                    top_k=args.top_k,
+                    top_k=reader_top_k,
+                    fallback_top_k=reader_fallback_top_k,
                     reader_model=args.reader_model,
                     dry_run=args.dry_run,
                     skip_llm_if_exists=args.skip_llm_if_exists,
@@ -1266,6 +1410,7 @@ def run_experiment(args) -> None:
                     llm_answers_path=llm_answers_path,
                     pred_path=pred_path,
                     top_k=args.top_k,
+                    support_top_k=support_top_k,
                     dry_run=args.dry_run,
                     resume=args.resume,
                 )
@@ -1342,6 +1487,34 @@ def main():
     )
 
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument(
+        "--reader-top-k",
+        type=int,
+        default=0,
+        help=(
+            "Number of ranked candidates passed to the LLM reader. "
+            "Default 0 means use --top-k. Use 1 when top-k union evidence is noisy."
+        ),
+    )
+    parser.add_argument(
+        "--reader-fallback-top-k",
+        type=int,
+        default=0,
+        help=(
+            "For text datasets, retry answer generation with this larger top-k "
+            "only when the first reader call returns unknown/empty."
+        ),
+    )
+    parser.add_argument(
+        "--support-top-k",
+        type=int,
+        default=0,
+        help=(
+            "Number of ranked candidates to union for text support export. "
+            "Default 0 means use --top-k. Use 1 to reduce noisy support "
+            "while keeping reader generation at --top-k."
+        ),
+    )
     parser.add_argument("--reader-model", type=str, default="gpt-4.1-mini")
     parser.add_argument(
         "--encoder-model", type=str, default="google/bert_uncased_L-2_H-128_A-2"
@@ -1350,6 +1523,11 @@ def main():
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--candidate-batch-size", type=int, default=512)
 
+    parser.add_argument(
+        "--fine-tune-encoder",
+        action="store_true",
+        help="Fine-tune the text encoder during GNN training instead of freezing it.",
+    )
     parser.add_argument("--force-train", action="store_true")
     parser.add_argument("--skip-llm", action="store_true")
     parser.add_argument("--skip-llm-if-exists", action="store_true")

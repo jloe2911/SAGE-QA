@@ -57,6 +57,49 @@ def normalize_evidence_triples(raw_evidences: Any) -> List[List[str]]:
     return dedupe_triples(triples)
 
 
+def normalize_relation(predicate: Any) -> str:
+    predicate = clean_text(predicate).lower()
+    predicate = predicate.replace("-", "_")
+    predicate = re.sub(r"\s+", "_", predicate)
+    predicate = re.sub(r"[^a-z0-9_]", "", predicate)
+    predicate = re.sub(r"_+", "_", predicate).strip("_")
+    relation_map = {
+        "birthplace": "born_in",
+        "place_of_birth": "born_in",
+        "was_born_in": "born_in",
+        "death_place": "died_in",
+        "place_of_death": "died_in",
+        "located_at": "located_in",
+        "is_located_in": "located_in",
+        "belongs_to": "member_of",
+        "is_member_of": "member_of",
+        "spouse": "spouse_of",
+        "married_to": "spouse_of",
+        "creator": "created_by",
+        "made_by": "created_by",
+        "director": "directed_by",
+        "writer": "written_by",
+        "author": "written_by",
+        "authored_by": "written_by",
+        "producer": "produced_by",
+        "founder": "founded_by",
+        "owner": "owned_by",
+        "capital": "capital_of",
+        "country": "country_of",
+        "nationality": "country_of",
+        "profession": "occupation",
+        "education": "educated_at",
+        "alma_mater": "educated_at",
+        "employed_by": "employer",
+        "works_for": "employer",
+        "published_on": "publication_date",
+        "released_on": "release_date",
+        "date_of_birth": "birth_date",
+        "date_of_death": "death_date",
+    }
+    return relation_map.get(predicate, predicate)
+
+
 def dedupe_triples(triples: Iterable[Iterable[Any]]) -> List[List[str]]:
     out: List[List[str]] = []
     seen = set()
@@ -76,9 +119,9 @@ def dedupe_triples(triples: Iterable[Iterable[Any]]) -> List[List[str]]:
 
 def construct_wiki_bridge_triples(
     sentence_records: List[Dict[str, Any]],
-    answer: str,
     max_triples: int,
 ) -> List[List[str]]:
+    """Build context-only title co-mention bridges between Wikipedia pages."""
     if max_triples <= 0:
         return []
 
@@ -106,14 +149,9 @@ def construct_wiki_bridge_triples(
             seen.add(key)
             triples.append([subject, predicate, obj])
 
-    answer_norm = normalize_text(answer)
-
     for rec in sentence_records:
         source_title = rec.get("title", "")
         sentence = rec.get("sentence", "")
-
-        if answer_norm not in {"yes", "no"} and phrase_in_text(answer, sentence):
-            add(source_title, "mentions_answer", answer)
 
         for target_title in titles:
             if target_title == source_title:
@@ -153,12 +191,10 @@ class LLMKGConstructor:
     def construct(
         self,
         question: str,
-        answer: str,
         sentence_records: List[Dict[str, Any]],
     ) -> List[List[str]]:
         prompt = build_llm_kg_prompt(
             question=question,
-            answer=answer,
             sentence_records=sentence_records[: self.config.max_context_sentences],
             max_triples=self.config.max_triples,
         )
@@ -171,7 +207,8 @@ class LLMKGConstructor:
                     "role": "system",
                     "content": (
                         "You extract concise knowledge-graph triples from "
-                        "multi-hop QA evidence. Return JSON only."
+                        "multi-hop QA evidence. The answer is unknown. "
+                        "Use only the question and evidence. Return JSON only."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -211,7 +248,6 @@ class LLMKGConstructor:
 
 def build_llm_kg_prompt(
     question: str,
-    answer: str,
     sentence_records: List[Dict[str, Any]],
     max_triples: int,
 ) -> str:
@@ -225,15 +261,17 @@ def build_llm_kg_prompt(
     return f"""Extract a compact knowledge graph from the evidence for this multi-hop QA example.
 
 Question: {clean_text(question)}
-Known answer, if labeled: {clean_text(answer)}
 
 Evidence:
 {evidence}
 
 Rules:
-- Use only entities, facts, and relations stated in the evidence.
-- Prefer triples that connect page titles, question entities, intermediate entities, and the answer.
-- Use short readable predicates such as "born_in", "located_in", "member_of", "created_by", or concise natural-language relations.
+- Use only entities, facts, and relations stated in the evidence sentences.
+- Do not use or infer the gold answer.
+- Prefer triples that connect page titles, question entities, intermediate entities, and plausible answer candidates.
+- Prioritize triples that may form multi-hop paths from question entities to answer candidates.
+- Use short readable predicates such as "born_in", "located_in", "member_of", "created_by", "directed_by", "written_by", "founded_by", "country_of", "occupation", or concise natural-language relations.
+- Avoid vague predicates like "related_to" unless no better predicate is possible.
 - Do not include sentence IDs as entities.
 - Return at most {max_triples} triples.
 
@@ -269,7 +307,22 @@ def parse_llm_triples(text: str) -> List[List[str]]:
     else:
         raw = []
 
-    return normalize_evidence_triples(raw)
+    triples: List[List[str]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            subject = item.get("subject", item.get("head", item.get("s")))
+            predicate = item.get("predicate", item.get("relation", item.get("p")))
+            obj = item.get("object", item.get("tail", item.get("o")))
+            item_list = [subject, predicate, obj]
+        else:
+            item_list = to_python_list(item)
+
+        if len(item_list) >= 3 and all(x is not None for x in item_list[:3]):
+            subject, predicate, obj = item_list[:3]
+            triples.append(
+                [clean_text(subject), normalize_relation(predicate), clean_text(obj)]
+            )
+    return dedupe_triples(triples)
 
 
 def construct_text_kg(
@@ -277,31 +330,50 @@ def construct_text_kg(
     provided_evidences: Any,
     sentence_records: List[Dict[str, Any]],
     question: str,
-    answer: str,
     config: KGConstructionConfig,
     llm_constructor: LLMKGConstructor | None = None,
 ) -> tuple[List[List[str]], str]:
-    provided = normalize_evidence_triples(provided_evidences)
+    """
+    Construct graph-context triples for text QA examples.
+
+    The gold answer is deliberately not accepted here. KG construction for text
+    benchmarks must be context/question-only to avoid answer leakage.
+    """
+    context_only_backends = {"llm", "llm_with_title_bridges", "deterministic"}
+    provided = (
+        []
+        if config.backend in context_only_backends
+        else normalize_evidence_triples(provided_evidences)
+    )
     if provided and config.backend in {"auto", "provided", "llm_with_provided"}:
         if config.backend == "llm_with_provided" and llm_constructor is not None:
-            llm_triples = llm_constructor.construct(question, answer, sentence_records)
+            llm_triples = llm_constructor.construct(question, sentence_records)
             return dedupe_triples([*provided, *llm_triples])[: config.max_triples], (
                 "provided_plus_llm"
             )
         return provided[: config.max_triples], "provided"
 
+    if config.backend == "llm_with_title_bridges" and llm_constructor:
+        llm_triples = llm_constructor.construct(question, sentence_records)
+        bridge_triples = construct_wiki_bridge_triples(
+            sentence_records=sentence_records,
+            max_triples=config.max_triples,
+        )
+        triples = dedupe_triples([*llm_triples, *bridge_triples])
+        if triples:
+            return triples[: config.max_triples], "llm_plus_title_bridges"
+
     if config.backend in {"llm", "auto", "llm_with_provided"} and llm_constructor:
-        triples = llm_constructor.construct(question, answer, sentence_records)
+        triples = llm_constructor.construct(question, sentence_records)
         if triples:
             return triples[: config.max_triples], "llm"
 
     if config.backend in {"auto", "deterministic"}:
         triples = construct_wiki_bridge_triples(
             sentence_records=sentence_records,
-            answer=answer,
             max_triples=config.max_triples,
         )
         if triples:
-            return triples, "title_answer_fallback"
+            return triples, "title_bridge_fallback"
 
     return [], "none"

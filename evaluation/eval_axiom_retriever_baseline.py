@@ -144,14 +144,16 @@ def random_score(_: str, __: str) -> float:
 def get_gold_explanations(row: Dict) -> List[List[str]]:
     """
     Expects gold_explanations if available.
-    Falls back to gold_units.
+    Falls back to gold_support_units/gold_units.
     """
     gold_explanations = row.get("gold_explanations", [])
 
     if gold_explanations:
         return [strip_tag_units(g) for g in gold_explanations if strip_tag_units(g)]
 
-    gold_units = strip_tag_units(row.get("gold_units", []))
+    gold_units = strip_tag_units(
+        row.get("gold_support_units", []) or row.get("gold_units", [])
+    )
     if gold_units:
         return [gold_units]
 
@@ -307,10 +309,14 @@ def evaluate_example(
         "top3_contains_any_gold_explanation": s3["contains"],
         "top3_best_jaccard_to_gold": s3["best_jaccard"],
         "top3_best_set_f1_to_gold": s3["best_f1"],
+        "top3_best_precision_to_gold": s3["best_precision"],
+        "top3_best_recall_to_gold": s3["best_recall"],
         "top5_exact_match_any_gold": s5["exact"],
         "top5_contains_any_gold_explanation": s5["contains"],
         "top5_best_jaccard_to_gold": s5["best_jaccard"],
         "top5_best_set_f1_to_gold": s5["best_f1"],
+        "top5_best_precision_to_gold": s5["best_precision"],
+        "top5_best_recall_to_gold": s5["best_recall"],
     }
 
 
@@ -336,6 +342,9 @@ def compute_metrics(details: List[Dict]) -> Dict:
         / n,
         "support_jaccard@3": sum(d["top3_best_jaccard_to_gold"] for d in details) / n,
         "support_f1@3": sum(d["top3_best_set_f1_to_gold"] for d in details) / n,
+        "support_precision@3": sum(d["top3_best_precision_to_gold"] for d in details)
+        / n,
+        "support_recall@3": sum(d["top3_best_recall_to_gold"] for d in details) / n,
         "em@5": sum(1 for d in details if d["top5_exact_match_any_gold"]) / n,
         "gold_contained@5": sum(
             1 for d in details if d["top5_contains_any_gold_explanation"]
@@ -343,6 +352,9 @@ def compute_metrics(details: List[Dict]) -> Dict:
         / n,
         "support_jaccard@5": sum(d["top5_best_jaccard_to_gold"] for d in details) / n,
         "support_f1@5": sum(d["top5_best_set_f1_to_gold"] for d in details) / n,
+        "support_precision@5": sum(d["top5_best_precision_to_gold"] for d in details)
+        / n,
+        "support_recall@5": sum(d["top5_best_recall_to_gold"] for d in details) / n,
     }
 
 

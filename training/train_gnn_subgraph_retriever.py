@@ -94,8 +94,9 @@ def reconstruct_candidate_axioms(example_rows: List[Dict]) -> List[str]:
         graph_units = []
         graph_units.extend(row.get("subgraph_units", []) or [])
         graph_units.extend(row.get("graph_context_units", []) or [])
-        graph_units.extend(row.get("kg_evidence_units", []) or [])
-        graph_units.extend(kg_units_from_evidences(row.get("evidences", []) or []))
+        if not _is_text_dataset(row):
+            graph_units.extend(row.get("kg_evidence_units", []) or [])
+            graph_units.extend(kg_units_from_evidences(row.get("evidences", []) or []))
 
         for unit in graph_units:
             if unit not in seen:
@@ -125,6 +126,22 @@ def kg_units_from_evidences(evidences: Any) -> List[str]:
             seen.add(unit)
             units.append(unit)
     return units
+
+
+def gold_support_units_from_row(row: Dict) -> List[str]:
+    if _is_text_dataset(row):
+        return row.get("gold_support_units", []) or []
+    return row.get("gold_units", []) or []
+
+
+def gold_explanations_from_row(row: Dict) -> List[List[str]]:
+    gold_units = gold_support_units_from_row(row)
+    if _is_text_dataset(row):
+        return [gold_units] if gold_units else []
+    explicit = row.get("gold_explanations", []) or []
+    if explicit:
+        return explicit
+    return [gold_units] if gold_units else []
 
 
 def subgraph_units_to_node_ids(
@@ -223,11 +240,14 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
 
             target = ranking_target(row)
             binary_label = binary_label_from_target(target)
-            kg_bridge_units = (
-                row.get("kg_evidence_units", [])
-                or row.get("graph_context_units", [])
-                or kg_units_from_evidences(row.get("evidences", []) or [])
-            )
+            if _is_text_dataset(row):
+                kg_bridge_units = row.get("graph_context_units", []) or []
+            else:
+                kg_bridge_units = (
+                    row.get("graph_context_units", [])
+                    or row.get("kg_evidence_units", [])
+                    or kg_units_from_evidences(row.get("evidences", []) or [])
+                )
 
             if _is_text_dataset(row):
                 # Text-QA builders already emit an inference-safe text feature
@@ -252,7 +272,6 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                 {
                     "example_id": example_id,
                     "dataset": dataset,
-                    "source_dataset": dataset,
                     "hop": hop,
                     "answer": answer,
                     "answer_type": answer_type,
@@ -261,41 +280,14 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                     "subgraph_units": subgraph_units,
                     "subgraph_node_ids": node_ids,
                     "subgraph_size": len(subgraph_units),
+                    "graph_context_units": kg_bridge_units,
                     "symbolic_features": symbolic_features,
-                    "evidence_representation": row.get(
-                        "evidence_representation",
-                        "sentence_text_with_kg_bridges"
-                        if (_is_text_dataset(row) and kg_bridge_units)
-                        else "sentence_text"
-                        if _is_text_dataset(row)
-                        else "typed_kg",
-                    ),
-                    "has_typed_nodes": bool(
-                        row.get(
-                            "has_typed_nodes",
-                            bool(kg_bridge_units) or not _is_text_dataset(row),
-                        )
-                    ),
-                    "has_structural_edges": bool(
-                        row.get(
-                            "has_structural_edges",
-                            bool(kg_bridge_units) or not _is_text_dataset(row),
-                        )
-                    ),
-                    "kg_bonus_mode": row.get(
-                        "kg_bonus_mode",
-                        "kg_bridge_nodes"
-                        if (_is_text_dataset(row) and kg_bridge_units)
-                        else "disabled_sentence_text"
-                        if _is_text_dataset(row)
-                        else "enabled_typed_kg",
-                    ),
                     # Ranking supervision
                     "rank_target": target,
                     "label": binary_label,
                     # Original/debug fields
-                    "gold_units": row.get("gold_units", []),
-                    "gold_explanations": row.get("gold_explanations", []),
+                    "gold_support_units": gold_support_units_from_row(row),
+                    "gold_explanations": gold_explanations_from_row(row),
                     "best_matching_gold_explanation": row.get(
                         "best_matching_gold_explanation", []
                     ),
@@ -436,32 +428,6 @@ def _candidate_question_overlap(question: str, units: List[str]) -> float:
     return len(q_tokens & c_tokens) / max(len(q_tokens), 1)
 
 
-def _answer_overlap(answer: str, units: List[str]) -> float:
-    """
-    Gold-free at inference only if answer is known. For dataset evaluation,
-    answer is known in the row. For real deployment, disable this or replace
-    with answer-candidate generation signal.
-
-    For yes/no answers, do not reward literal 'yes'/'no'.
-    """
-    ans = _normalize_text_for_chain(answer)
-    if not ans or ans in {"yes", "no", "noanswer"}:
-        return 0.0
-
-    cand = _normalize_text_for_chain(" ".join(units))
-
-    if ans and ans in cand:
-        return 1.0
-
-    a_tokens = _token_set_for_chain(ans)
-    c_tokens = _token_set_for_chain(cand)
-
-    if not a_tokens:
-        return 0.0
-
-    return len(a_tokens & c_tokens) / max(len(a_tokens), 1)
-
-
 def _cross_page_score(units: List[str]) -> float:
     titles = []
     for u in units:
@@ -569,6 +535,67 @@ def _comparison_question_score(question: str, units: List[str]) -> float:
     return 0.0
 
 
+def _parse_kg_unit_for_chain(unit: str) -> Tuple[str, str, str] | None:
+    parts = str(unit).split("::", 3)
+    if len(parts) == 4 and parts[0] == "KG":
+        return parts[1], parts[2], parts[3]
+    return None
+
+
+def _text_mentions_for_chain(text: str, entity: str) -> bool:
+    entity_norm = _normalize_text_for_chain(entity)
+    text_norm = _normalize_text_for_chain(text)
+    if not entity_norm or not text_norm:
+        return False
+    if entity_norm in text_norm:
+        return True
+
+    entity_tokens = _token_set_for_chain(entity)
+    if not entity_tokens:
+        return False
+
+    return len(entity_tokens & _token_set_for_chain(text)) / len(entity_tokens) >= 0.6
+
+
+def _kg_connectivity_score(
+    question: str,
+    units: List[str],
+    kg_units: List[str],
+) -> float:
+    """
+    Gold-free signal: does the candidate sentence set touch KG facts that are
+    also relevant to the question?
+    """
+    parsed_kg = [kg for unit in kg_units if (kg := _parse_kg_unit_for_chain(unit))]
+    if not units or not parsed_kg:
+        return 0.0
+
+    question_tokens = _token_set_for_chain(question)
+    connected_sentences = 0
+    question_relevant_facts = 0
+
+    for subject, predicate, obj in parsed_kg:
+        fact_text = f"{subject} {predicate} {obj}"
+        fact_tokens = _token_set_for_chain(fact_text)
+        if question_tokens and fact_tokens & question_tokens:
+            question_relevant_facts += 1
+
+    for unit in units:
+        title, _, sent = _parse_sent_unit(unit)
+        haystack = f"{title} {sent}"
+        if any(
+            _text_mentions_for_chain(haystack, subject)
+            or _text_mentions_for_chain(haystack, obj)
+            for subject, _, obj in parsed_kg
+        ):
+            connected_sentences += 1
+
+    sentence_coverage = connected_sentences / max(len(units), 1)
+    fact_relevance = question_relevant_facts / max(len(parsed_kg), 1)
+
+    return 0.70 * sentence_coverage + 0.30 * fact_relevance
+
+
 def _size_chain_penalty(units: List[str]) -> float:
     """
     Penalize excessive context, but allow 2Wiki-style 4-hop support.
@@ -596,25 +623,25 @@ def sageqa_text_chain_adjustment(row: Dict[str, Any]) -> float:
       - question/candidate overlap
       - cross-page support
       - bridge connectivity between titles and sentences
+      - KG bridge connectivity to candidate evidence
       - comparison-question coverage
-      - answer-bearing evidence when answer is not yes/no
 
     Penalizes:
       - excessive support size
       - duplicate-page-only candidates
     """
     question = str(row.get("question", ""))
-    answer = str(row.get("answer", ""))
     units = row.get("subgraph_units", []) or []
+    kg_units = row.get("graph_context_units", []) or []
 
     if not units:
         return 0.0
 
     q_title = _question_title_coverage(question, units)
     q_overlap = _candidate_question_overlap(question, units)
-    answer_sig = _answer_overlap(answer, units)
     cross_page = _cross_page_score(units)
     bridge = _bridge_overlap_score(units)
+    kg_bridge = _kg_connectivity_score(question, units, kg_units)
     comparison = _comparison_question_score(question, units)
     size_pen = _size_chain_penalty(units)
 
@@ -629,8 +656,8 @@ def sageqa_text_chain_adjustment(row: Dict[str, Any]) -> float:
         + 0.020 * q_overlap
         + 0.020 * cross_page
         + 0.025 * bridge
+        + 0.030 * kg_bridge
         + 0.020 * comparison
-        + 0.020 * answer_sig
         - size_pen
         - duplicate_page_pen
     )
@@ -1074,15 +1101,10 @@ def sageqa_compact_adjustment(
     )
 
 
-def _is_text_dataset(row):
-    dataset = str(row.get("dataset", "") or row.get("source_dataset", ""))
-    return dataset in {"HotpotQA", "2WikiMultiHopQA", "2WikiMultihopQA"}
-
-
 def sageqa_text_compact_adjustment(
     row,
     question_overlap_bonus=0.020,
-    answer_overlap_bonus=0.015,
+    title_coverage_bonus=0.015,
     cross_page_bonus=0.020,
     multi_sentence_bonus=0.015,
     size_penalty=0.006,
@@ -1092,7 +1114,7 @@ def sageqa_text_compact_adjustment(
 
     Expects symbolic_features:
       0 question-token overlap
-      1 answer-token overlap
+      1 title-token coverage by question tokens
       2 unique page ratio
       3 cross-page indicator
       4 multi-sentence indicator
@@ -1105,7 +1127,7 @@ def sageqa_text_compact_adjustment(
     size = int(row.get("subgraph_size", len(units)))
 
     q_overlap = feats[0] if len(feats) > 0 else 0.0
-    answer_overlap = feats[1] if len(feats) > 1 else 0.0
+    title_coverage = feats[1] if len(feats) > 1 else 0.0
     cross_page = feats[3] if len(feats) > 3 else 0.0
     multi_sentence = feats[4] if len(feats) > 4 else 0.0
 
@@ -1113,7 +1135,7 @@ def sageqa_text_compact_adjustment(
 
     return (
         question_overlap_bonus * float(q_overlap)
-        + answer_overlap_bonus * float(answer_overlap)
+        + title_coverage_bonus * float(title_coverage)
         + cross_page_bonus * float(cross_page)
         + multi_sentence_bonus * float(multi_sentence)
         - size_penalty * float(oversize)
@@ -1272,13 +1294,61 @@ def evaluate(
     best_f13 = 0.0
     best_precision3 = 0.0
     best_recall3 = 0.0
+    union_f13 = 0.0
+    union_precision3 = 0.0
+    union_recall3 = 0.0
 
     best_jaccard5 = 0.0
     best_f15 = 0.0
     best_precision5 = 0.0
     best_recall5 = 0.0
+    union_f15 = 0.0
+    union_precision5 = 0.0
+    union_recall5 = 0.0
 
     details = []
+
+    def union_scores(top_rows: List[Dict]) -> Tuple[float, float, float]:
+        if not top_rows:
+            return 0.0, 0.0, 0.0
+
+        first = top_rows[0]
+        gold_sets = first.get("gold_explanations", []) or []
+        gold_support = first.get("gold_support_units", []) or []
+        if not gold_sets and gold_support:
+            gold_sets = [gold_support]
+
+        union_units = []
+        seen = set()
+        for row in top_rows:
+            for unit in row.get("subgraph_units", []) or []:
+                if unit not in seen:
+                    seen.add(unit)
+                    union_units.append(unit)
+
+        pred_set = set(union_units)
+        best_precision = 0.0
+        best_recall = 0.0
+        best_f1 = 0.0
+
+        for gold in gold_sets:
+            gold_set = set(gold)
+            if not gold_set:
+                continue
+            inter = len(pred_set & gold_set)
+            precision = inter / max(len(pred_set), 1)
+            recall = inter / len(gold_set)
+            f1 = (
+                0.0
+                if precision + recall == 0
+                else (2 * precision * recall / (precision + recall))
+            )
+            if f1 > best_f1:
+                best_precision = precision
+                best_recall = recall
+                best_f1 = f1
+
+        return best_precision, best_recall, best_f1
 
     with torch.no_grad():
         for example in examples:
@@ -1366,11 +1436,19 @@ def evaluate(
             best_f13 += best3["best_set_f1_to_gold"]
             best_precision3 += best3["best_set_precision_to_gold"]
             best_recall3 += best3["best_set_recall_to_gold"]
+            u_prec3, u_rec3, u_f13 = union_scores(top3)
+            union_precision3 += u_prec3
+            union_recall3 += u_rec3
+            union_f13 += u_f13
 
             best_jaccard5 += best5["best_jaccard_to_gold"]
             best_f15 += best5["best_set_f1_to_gold"]
             best_precision5 += best5["best_set_precision_to_gold"]
             best_recall5 += best5["best_set_recall_to_gold"]
+            u_prec5, u_rec5, u_f15 = union_scores(top5)
+            union_precision5 += u_prec5
+            union_recall5 += u_rec5
+            union_f15 += u_f15
 
             details.append(
                 {
@@ -1390,10 +1468,7 @@ def evaluate(
                     "top1_contains_any_gold_explanation": top1[
                         "contains_any_gold_explanation"
                     ],
-                    "top1_best_matching_gold_explanation": top1[
-                        "best_matching_gold_explanation"
-                    ],
-                    "gold_explanations": top1["gold_explanations"],
+                    "gold_support_units": top1["gold_support_units"],
                     "top5": [
                         {
                             "rank": i + 1,
@@ -1404,6 +1479,10 @@ def evaluate(
                             "subgraph_size": r["subgraph_size"],
                             "subgraph_units": r["subgraph_units"],
                             "best_set_f1_to_gold": r["best_set_f1_to_gold"],
+                            "best_set_precision_to_gold": r[
+                                "best_set_precision_to_gold"
+                            ],
+                            "best_set_recall_to_gold": r["best_set_recall_to_gold"],
                             "best_jaccard_to_gold": r["best_jaccard_to_gold"],
                             "contains_any_gold_explanation": r[
                                 "contains_any_gold_explanation"
@@ -1439,6 +1518,9 @@ def evaluate(
         "best_set_f1@3": best_f13 / n,
         "best_precision@3": best_precision3 / n,
         "best_recall@3": best_recall3 / n,
+        "set_f1@3": union_f13 / n,
+        "precision@3": union_precision3 / n,
+        "recall@3": union_recall3 / n,
         "hit@5": hit5 / n,
         "exact_hit@5": exact_hit5 / n,
         "contains_gold_hit@5": contains_hit5 / n,
@@ -1446,6 +1528,9 @@ def evaluate(
         "best_set_f1@5": best_f15 / n,
         "best_precision@5": best_precision5 / n,
         "best_recall@5": best_recall5 / n,
+        "set_f1@5": union_f15 / n,
+        "precision@5": union_precision5 / n,
+        "recall@5": union_recall5 / n,
     }
 
     return metrics, details

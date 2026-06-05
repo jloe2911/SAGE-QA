@@ -141,15 +141,14 @@ def evidence_triple_units(evidences: List[List[str]]) -> List[str]:
 
 def construct_wiki_bridge_triples(
     sentence_records: List[Dict[str, Any]],
-    answer: str,
     max_triples: int,
 ) -> List[List[str]]:
     """
-    Deterministic KG fallback for Wikipedia text.
+    Deterministic context-only KG fallback for Wikipedia text.
 
-    It promotes page-title co-mentions and answer grounding into typed bridge
-    triples so vanilla HotpotQA can expose structural nodes to the GNN even
-    without REBEL/Wikidata enrichment.
+    It promotes page-title co-mentions into typed bridge triples so vanilla
+    HotpotQA can expose structural nodes to the GNN without REBEL/Wikidata
+    enrichment or gold-answer grounding.
     """
     if max_triples <= 0:
         return []
@@ -179,15 +178,9 @@ def construct_wiki_bridge_triples(
             triples.append([subject, predicate, obj])
 
     title_by_norm = {normalize_text(title): title for title in titles}
-    answer_norm = normalize_text(answer)
-
     for rec in sentence_records:
         source_title = rec.get("title", "")
         sentence = rec.get("sentence", "")
-        sentence_norm = normalize_text(sentence)
-
-        if answer_norm not in {"yes", "no"} and phrase_in_text(answer, sentence):
-            add(source_title, "mentions_answer", answer)
 
         for target_norm, target_title in title_by_norm.items():
             if not target_norm or target_title == source_title:
@@ -471,6 +464,20 @@ def get_gold_support_units(
     return deduped
 
 
+def get_raw_supporting_facts(example: Dict[str, Any]) -> List[List[Any]]:
+    facts: List[List[Any]] = []
+    for item in example.get("supporting_facts", []):
+        if not isinstance(item, list) or len(item) != 2:
+            continue
+        title, idx = item
+        try:
+            idx = int(idx)
+        except Exception:
+            continue
+        facts.append([safe_title(title), idx])
+    return facts
+
+
 # ============================================================
 # Candidate generation
 # ============================================================
@@ -529,10 +536,12 @@ def select_sentence_pool(
     Selects a limited pool of sentence units for candidate generation.
 
     Always keeps gold units so positives can be generated.
-    Then adds top lexical and answer-containing sentences.
+    Then adds top lexical sentences.
+
+    The gold answer is intentionally not used here. Gold support is used only
+    to create supervised positive candidates and labels.
     """
     question = example.get("question", "")
-    answer = example.get("answer", "")
 
     scored = []
     for rec in sentence_records:
@@ -541,8 +550,7 @@ def select_sentence_pool(
         title = rec["title"]
 
         q_score = lexical_overlap_score(question, sent + " " + title)
-        a_score = answer_overlap_score(answer, sent)
-        score = q_score + 0.5 * a_score
+        score = q_score
 
         scored.append((score, unit))
 
@@ -554,15 +562,6 @@ def select_sentence_pool(
     # Always include gold units.
     for u in gold_units:
         if u not in seen:
-            seen.add(u)
-            pool.append(u)
-
-    # Include answer-containing sentences.
-    for rec in sentence_records:
-        u = rec["unit"]
-        if u in seen:
-            continue
-        if answer_overlap_score(answer, rec["sentence"]) > 0:
             seen.add(u)
             pool.append(u)
 
@@ -598,7 +597,7 @@ def support_jaccard(candidate: Iterable[str], gold: Iterable[str]) -> float:
 
 
 def label_candidate(
-    candidate: List[str], gold_explanations: List[List[str]]
+    candidate: List[str], gold_reference_sets: List[List[str]]
 ) -> Tuple[int, float, float, bool, bool]:
     """
     Returns:
@@ -617,7 +616,7 @@ def label_candidate(
     exact = False
     contains = False
 
-    for gold in gold_explanations:
+    for gold in gold_reference_sets:
         gset = set(gold)
 
         f1 = support_f1(cset, gset)
@@ -722,7 +721,6 @@ def generate_candidate_subgraphs(
 
 def make_hotpot_symbolic_features(
     question: str,
-    answer: str,
     candidate_units: List[str],
     max_subgraph_size: int,
 ) -> List[float]:
@@ -747,7 +745,7 @@ def make_hotpot_symbolic_features(
     candidate_text = " ".join(candidate_text_parts)
 
     q_overlap = lexical_overlap_score(question, candidate_text)
-    a_overlap = answer_overlap_score(answer, candidate_text)
+    title_question_coverage = title_overlap_score(question, candidate_units)
 
     unique_titles = len(set(titles))
     size = len(candidate_units)
@@ -768,7 +766,7 @@ def make_hotpot_symbolic_features(
 
     return [
         float(q_overlap),
-        float(a_overlap),
+        float(title_question_coverage),
         float(unique_page_ratio),
         float(cross_page),
         float(multi_sentence),
@@ -800,30 +798,27 @@ def build_rows_for_example(
     example_id = f"HotpotQA__{split_name}__{ex_id}"
     question = str(example.get("question", ""))
     answer = str(example.get("answer", ""))
-    q_type = str(example.get("type", "unknown"))
-    level = str(example.get("level", "unknown"))
     sentence_records = flatten_context(example)
     sent_lookup = {
         (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
     }
     cached_kg = kg_cache.get(example_id) if kg_cache is not None else None
     if cached_kg:
-        evidences = cached_kg.get("evidences", [])
-        kg_construction_method = str(cached_kg.get("kg_construction_method", "cache"))
+        kg_triples = cached_kg.get("kg_triples", [])
+        kg_construction_method = str(cached_kg.get("construction_method", "cache"))
     else:
-        evidences, kg_construction_method = construct_text_kg(
+        kg_triples, kg_construction_method = construct_text_kg(
             provided_evidences=example.get("evidences", []),
             sentence_records=sentence_records,
             question=question,
-            answer=answer,
             config=kg_config,
             llm_constructor=llm_kg_constructor,
         )
         if llm_kg_constructor is not None and kg_cache is not None:
             cache_row = {
                 "example_id": example_id,
-                "evidences": evidences,
-                "kg_construction_method": kg_construction_method,
+                "kg_triples": kg_triples,
+                "construction_method": kg_construction_method,
             }
             if kg_cache_lock is not None:
                 with kg_cache_lock:
@@ -832,15 +827,16 @@ def build_rows_for_example(
             else:
                 kg_cache[example_id] = cache_row
                 append_kg_cache_row(kg_cache_path, cache_row)
-    kg_evidence_units = evidence_triple_units(evidences)
+    graph_context_units = evidence_triple_units(kg_triples)
 
     gold_units = get_gold_support_units(example, sent_lookup)
+    raw_supporting_facts = get_raw_supporting_facts(example)
 
     # Skip examples without gold support.
     if not gold_units:
         return []
 
-    gold_explanations = [gold_units]
+    gold_reference_sets = [gold_units]
 
     sentence_pool = select_sentence_pool(
         example=example,
@@ -866,12 +862,11 @@ def build_rows_for_example(
     for cand_idx, candidate_units in enumerate(candidates):
         label, best_f1, best_jaccard, exact, contains = label_candidate(
             candidate=candidate_units,
-            gold_explanations=gold_explanations,
+            gold_reference_sets=gold_reference_sets,
         )
 
         symbolic_features = make_hotpot_symbolic_features(
             question=question,
-            answer=answer,
             candidate_units=candidate_units,
             max_subgraph_size=max_subgraph_size,
         )
@@ -882,38 +877,19 @@ def build_rows_for_example(
             "row_id": row_id,
             "example_id": example_id,
             "dataset": "HotpotQA",
-            "source_dataset": "HotpotQA",
             "hop": "2hop",
             "answer_type": "OPEN",
             "question": question,
             "answer": answer,
-            "hotpot_type": q_type,
-            "level": level,
-            "evidences": evidences,
-            "kg_construction_method": kg_construction_method,
-            # Compatibility with OWL scripts.
-            "sparql_query": "",
-            "query": "",
             # Candidate support.
             "subgraph_units": candidate_units,
             "subgraph_size": len(candidate_units),
             # Graph context nodes are available to the GNN message-passing
             # graph, but are not scored as predicted support sentences.
-            "graph_context_units": kg_evidence_units,
-            "kg_evidence_units": kg_evidence_units,
-            "evidence_representation": (
-                "sentence_text_with_kg_bridges"
-                if kg_evidence_units
-                else "sentence_text"
-            ),
-            "has_typed_nodes": bool(kg_evidence_units),
-            "has_structural_edges": bool(kg_evidence_units),
-            "kg_bonus_mode": (
-                "kg_bridge_nodes" if kg_evidence_units else "disabled_sentence_text"
-            ),
+            "graph_context_units": graph_context_units,
             # Gold support.
-            "gold_units": gold_units,
-            "gold_explanations": gold_explanations,
+            "raw_supporting_facts": raw_supporting_facts,
+            "gold_support_units": gold_units,
             # Supervision.
             "label": int(label),
             "rank_target": float(best_f1),
@@ -1155,14 +1131,17 @@ def main():
             "provided",
             "deterministic",
             "llm",
+            "llm_with_title_bridges",
             "llm_with_provided",
             "none",
         ],
         default="auto",
         help=(
             "How to build text benchmark KG triples. auto uses provided triples "
-            "when available, otherwise falls back to deterministic title/answer "
-            "bridges. llm extracts triples from the example context."
+            "when available, otherwise falls back to deterministic title bridges. "
+            "llm extracts triples from the example context. "
+            "llm_with_title_bridges combines context-only LLM triples with "
+            "deterministic title co-mention bridges."
         ),
     )
     parser.add_argument("--kg-construction-model", type=str, default="gpt-4.1-mini")
@@ -1214,7 +1193,8 @@ def main():
         kg_config.max_triples = 0
     llm_kg_constructor = (
         LLMKGConstructor(kg_config)
-        if args.kg_construction_backend in {"llm", "llm_with_provided"}
+        if args.kg_construction_backend
+        in {"llm", "llm_with_provided", "llm_with_title_bridges"}
         else None
     )
 
@@ -1333,11 +1313,10 @@ def main():
         "kg_max_retries": args.kg_max_retries,
         "kg_retry_initial_sleep": args.kg_retry_initial_sleep,
         "kg_cache_dir": str(kg_cache_dir) if llm_kg_constructor is not None else None,
-        "evidence_representation": "sentence_text_with_optional_kg_bridges",
-        "has_typed_nodes": "row_dependent",
-        "has_structural_edges": "row_dependent",
-        "kg_bonus_mode": "kg_bridge_nodes",
-        "kg_construction_required_for_full_sageqa": True,
+        "schema_version": "text_retrieval_slim_v1",
+        "support_label_fields": ["raw_supporting_facts", "gold_support_units"],
+        "candidate_field": "subgraph_units",
+        "graph_context_field": "graph_context_units",
         "train_rows": len(train_rows),
         "dev_rows": len(dev_rows),
         "test_rows": len(test_rows),

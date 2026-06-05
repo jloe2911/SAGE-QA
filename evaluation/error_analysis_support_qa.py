@@ -303,7 +303,10 @@ def analyze_owl(
             pred_support.extend(c.get("subgraph_units", []))
         pred_support = list(dict.fromkeys(pred_support))
 
-        gold_explanations = detail.get("gold_explanations", []) or [[]]
+        gold_support_units = detail.get("gold_support_units", []) or []
+        gold_explanations = detail.get("gold_explanations", []) or (
+            [gold_support_units] if gold_support_units else [[]]
+        )
         # Use the gold explanation with best support F1.
         best_sp = None
         best_gold = None

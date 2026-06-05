@@ -57,7 +57,7 @@ def support_jaccard(pred_units: List[str], gold_units: List[str]) -> float:
 
 
 def best_against_gold(
-    pred_units: List[str], gold_explanations: List[List[str]]
+    pred_units: List[str], gold_reference_sets: List[List[str]]
 ) -> Dict[str, Any]:
     best_f1 = 0.0
     best_j = 0.0
@@ -69,7 +69,7 @@ def best_against_gold(
 
     pred_set = set(pred_units)
 
-    for gold in gold_explanations:
+    for gold in gold_reference_sets:
         gold_set = set(gold)
 
         if pred_set == gold_set:
@@ -159,9 +159,49 @@ def evaluate_group(
         f1 = []
         prec = []
         rec = []
+        union_f1 = []
+        union_prec = []
+        union_rec = []
 
         for item in details:
             top = item["top5"][:k]
+            gold_reference_sets = []
+            gold_support_units = item.get("gold_support_units", []) or []
+            if gold_support_units:
+                gold_reference_sets = [gold_support_units]
+
+            union_units = []
+            seen = set()
+            for cand in top:
+                for unit in cand.get("subgraph_units", []) or []:
+                    if unit not in seen:
+                        seen.add(unit)
+                        union_units.append(unit)
+
+            union_best = {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+            }
+
+            for gold in gold_reference_sets:
+                gold_set = set(gold)
+                pred_set = set(union_units)
+                if not gold_set:
+                    continue
+                inter = len(pred_set & gold_set)
+                precision = inter / max(len(pred_set), 1)
+                recall = inter / len(gold_set)
+                cur_f1 = (
+                    0.0
+                    if precision + recall == 0
+                    else (2 * precision * recall / (precision + recall))
+                )
+                if cur_f1 > union_best["f1"]:
+                    union_best["precision"] = precision
+                    union_best["recall"] = recall
+                    union_best["f1"] = cur_f1
+
             best = {
                 "exact": 0.0,
                 "contains": 0.0,
@@ -189,6 +229,9 @@ def evaluate_group(
             f1.append(best["f1"])
             prec.append(best["precision"])
             rec.append(best["recall"])
+            union_f1.append(union_best["f1"])
+            union_prec.append(union_best["precision"])
+            union_rec.append(union_best["recall"])
 
         metrics[f"exact_hit@{k}"] = sum(exact) / len(exact) if exact else 0.0
         metrics[f"contains_gold_hit@{k}"] = (
@@ -198,6 +241,11 @@ def evaluate_group(
         metrics[f"best_set_f1@{k}"] = sum(f1) / len(f1) if f1 else 0.0
         metrics[f"best_precision@{k}"] = sum(prec) / len(prec) if prec else 0.0
         metrics[f"best_recall@{k}"] = sum(rec) / len(rec) if rec else 0.0
+        metrics[f"set_f1@{k}"] = sum(union_f1) / len(union_f1) if union_f1 else 0.0
+        metrics[f"precision@{k}"] = (
+            sum(union_prec) / len(union_prec) if union_prec else 0.0
+        )
+        metrics[f"recall@{k}"] = sum(union_rec) / len(union_rec) if union_rec else 0.0
 
     return metrics
 
@@ -210,12 +258,13 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ranked = sorted(candidates, key=lexical_score, reverse=True)
 
         first = ranked[0]
-        gold_explanations = first.get("gold_explanations", [])
+        gold_support_units = first.get("gold_support_units", []) or []
+        gold_reference_sets = [gold_support_units] if gold_support_units else []
 
         top5 = []
         for rank, row in enumerate(ranked[:5], start=1):
             units = row.get("subgraph_units", [])
-            gold_stats = best_against_gold(units, gold_explanations)
+            gold_stats = best_against_gold(units, gold_reference_sets)
             score = lexical_score(row)
 
             top5.append(
@@ -242,7 +291,7 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "answer_type": first.get("answer_type", "OPEN"),
                 "question": first.get("question", ""),
                 "answer": first.get("answer", ""),
-                "gold_explanations": gold_explanations,
+                "gold_support_units": gold_support_units,
                 "top1_subgraph_units": top1_units,
                 "top1_score": top1["score"],
                 "top1_adjusted_score": top1["adjusted_score"],
@@ -254,9 +303,6 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "top1_exact_match_any_gold": top1["exact_match_any_gold"],
                 "top1_contains_any_gold_explanation": top1[
                     "contains_any_gold_explanation"
-                ],
-                "top1_best_matching_gold_explanation": top1[
-                    "best_matching_gold_explanation"
                 ],
                 "top5": top5,
             }
@@ -274,6 +320,15 @@ def main():
     rows = load_jsonl(args.test_path)
     details = build_details(rows)
     metrics = evaluate_group(rows)
+    if details:
+        first = details[0]
+        split_name = (
+            f"{first.get('dataset', 'unknown_dataset')} | "
+            f"{first.get('hop', 'unknown_hop')} | "
+            f"{first.get('answer_type', 'UNKNOWN_ANSWER_TYPE')}"
+        )
+    else:
+        split_name = "unknown_dataset | unknown_hop | UNKNOWN_ANSWER_TYPE"
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -282,9 +337,9 @@ def main():
         json.dump(details, f, indent=2, ensure_ascii=False)
 
     with (out_dir / "test_split_metrics.json").open("w", encoding="utf-8") as f:
-        json.dump({"HotpotQA | 2hop | OPEN": metrics}, f, indent=2, ensure_ascii=False)
+        json.dump({split_name: metrics}, f, indent=2, ensure_ascii=False)
 
-    print(json.dumps({"HotpotQA | 2hop | OPEN": metrics}, indent=2))
+    print(json.dumps({split_name: metrics}, indent=2))
     print(f"\nSaved lexical details to: {out_dir}")
 
 
