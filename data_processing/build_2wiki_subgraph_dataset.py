@@ -1,6 +1,5 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import itertools
 import json
 import random
 import re
@@ -9,18 +8,24 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import pandas as pd
 
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from data.build_subgraph_training_data import (
+    beam_connected_subgraphs,
+    materialize_retrieval_rows,
+)
 from data_processing.text_kg_constructor import (
     KGConstructionConfig,
     LLMKGConstructor,
     construct_text_kg,
     normalize_evidence_triples,
+    normalize_relation,
+    select_context_sentences,
 )
 
 
@@ -58,34 +63,14 @@ def clean_sentence(sent: str) -> str:
     return sent
 
 
-def make_sentence_unit(title: str, sent_idx: int, sent: str) -> str:
-    """
-    Main 2Wiki evidence unit format.
-
-    Example:
-    SENT::Move (1970 film)::0::Move is a 1970 American comedy film...
-    """
-    return f"SENT::{safe_title(title)}::{int(sent_idx)}::{clean_sentence(sent)}"
-
-
-def parse_sentence_unit(unit: str) -> Tuple[str, int, str]:
-    parts = str(unit).split("::", 3)
-    if len(parts) == 4 and parts[0] == "SENT":
-        title = parts[1]
-        try:
-            idx = int(parts[2])
-        except Exception:
-            idx = -1
-        sent = parts[3]
-        return title, idx, sent
-    return "", -1, str(unit)
-
-
 def make_kg_triple_unit(subject: str, predicate: str, obj: str) -> str:
     """
-    Structured 2Wiki evidence triple used as a graph-context bridge node.
+    Structured KG fact used by both text-derived and ontology-native graphs.
     """
-    return f"KG::{clean_sentence(subject)}::{clean_sentence(predicate)}::{clean_sentence(obj)}"
+    return (
+        f"KG::{clean_sentence(subject)}::"
+        f"{normalize_relation(predicate)}::{clean_sentence(obj)}"
+    )
 
 
 def evidence_triple_units(evidences: List[List[str]]) -> List[str]:
@@ -101,67 +86,23 @@ def evidence_triple_units(evidences: List[List[str]]) -> List[str]:
     return units
 
 
-def construct_wiki_bridge_triples(
-    sentence_records: List[Dict[str, Any]],
-    max_triples: int,
-) -> List[List[str]]:
-    """
-    Deterministic context-only KG fallback for Wikipedia text.
-
-    2Wiki normally provides evidence triples. This fallback keeps the same
-    bridge-node mechanism available for ablations or alternate text inputs
-    where those triples are missing, without gold-answer grounding.
-    """
-    if max_triples <= 0:
-        return []
-
-    titles = []
-    seen_titles = set()
-    for rec in sentence_records:
-        title = rec.get("title", "")
-        if title and title not in seen_titles:
-            seen_titles.add(title)
-            titles.append(title)
-
-    triples: List[List[str]] = []
-    seen = set()
-
-    def add(subject: str, predicate: str, obj: str) -> None:
-        if len(triples) >= max_triples:
-            return
-        subject = clean_sentence(subject)
-        predicate = clean_sentence(predicate)
-        obj = clean_sentence(obj)
-        if not subject or not predicate or not obj or subject == obj:
-            return
-        key = (subject, predicate, obj)
-        if key not in seen:
-            seen.add(key)
-            triples.append([subject, predicate, obj])
-
-    title_by_norm = {normalize_text(title): title for title in titles}
-    for rec in sentence_records:
-        source_title = rec.get("title", "")
-        sentence = rec.get("sentence", "")
-
-        for target_norm, target_title in title_by_norm.items():
-            if not target_norm or target_title == source_title:
-                continue
-            if phrase_in_text(target_title, sentence):
-                add(source_title, "mentions_page", target_title)
-
-        if len(triples) >= max_triples:
-            break
-
-    return triples
+def parse_kg_triple_unit(unit: str) -> Tuple[str, str, str] | None:
+    parts = str(unit).split("::", 3)
+    if len(parts) == 4 and parts[0] == "KG":
+        return parts[1], parts[2], parts[3]
+    return None
 
 
-def phrase_in_text(phrase: str, text: str) -> bool:
-    phrase_norm = normalize_text(phrase)
-    text_norm = normalize_text(text)
-    if len(phrase_norm) < 3 or not text_norm:
-        return False
-    return f" {phrase_norm} " in f" {text_norm} "
+def kg_triple_key(unit: str) -> Tuple[str, str, str] | None:
+    triple = parse_kg_triple_unit(unit)
+    if triple is None:
+        return None
+    subject, predicate, obj = triple
+    return (
+        normalize_text(subject),
+        normalize_relation(predicate),
+        normalize_text(obj),
+    )
 
 
 def get_first_present(mapping: Dict[str, Any], keys: List[str], default=None):
@@ -263,13 +204,7 @@ def normalize_2wiki_record(row: Dict[str, Any]) -> Dict[str, Any]:
     Normalizes HuggingFace 2WikiMultiHopQA rows.
 
     Expected input columns include:
-      id, question, answer, type, evidences, supporting_facts, context
-
-    supporting_facts usually looks like:
-      {
-        "title": array([...]),
-        "sent_id": array([...])
-      }
+      id, question, answer, type, evidences, context
 
     context usually looks like:
       {
@@ -325,56 +260,9 @@ def normalize_2wiki_record(row: Dict[str, Any]) -> Dict[str, Any]:
     else:
         out["context"] = []
 
-    # Normalize supporting_facts to:
-    #   [[title, sent_idx], ...]
-    sf = out.get("supporting_facts", {})
-
-    if isinstance(sf, dict):
-        titles = to_python_list(get_first_present(sf, ["title", "titles"], []))
-        sent_ids = to_python_list(
-            get_first_present(
-                sf,
-                ["sent_id", "sent_ids", "sentence_id", "sent_idx"],
-                [],
-            )
-        )
-
-        normalized_sf = []
-        for title, idx in zip(titles, sent_ids):
-            try:
-                idx = int(idx)
-            except Exception:
-                continue
-            normalized_sf.append([safe_title(title), idx])
-
-        out["supporting_facts"] = normalized_sf
-
-    elif isinstance(sf, list):
-        normalized_sf = []
-        for item in sf:
-            if isinstance(item, dict):
-                title = item.get("title", "")
-                idx = item.get(
-                    "sent_id", item.get("sentence_id", item.get("sent_idx", 0))
-                )
-                try:
-                    idx = int(idx)
-                except Exception:
-                    continue
-                normalized_sf.append([safe_title(title), idx])
-            elif isinstance(item, (list, tuple)) and len(item) == 2:
-                title, idx = item
-                try:
-                    idx = int(idx)
-                except Exception:
-                    continue
-                normalized_sf.append([safe_title(title), idx])
-        out["supporting_facts"] = normalized_sf
-
-    else:
-        out["supporting_facts"] = []
-
-    # Normalize evidences into readable triples, if present.
+    # Sentence-level supporting-fact annotations are deliberately excluded.
+    # 2Wiki evidence triples are the gold reasoning target for this pipeline.
+    out.pop("supporting_facts", None)
     out["evidences"] = normalize_evidence_triples(out.get("evidences", []))
 
     return out
@@ -400,63 +288,15 @@ def flatten_context(example: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not sent_clean:
                 continue
 
-            unit = make_sentence_unit(title, idx, sent_clean)
             records.append(
                 {
                     "title": title,
                     "sent_idx": idx,
                     "sentence": sent_clean,
-                    "unit": unit,
                 }
             )
 
     return records
-
-
-def get_gold_support_units(
-    example: Dict[str, Any], sent_lookup: Dict[Tuple[str, int], str]
-) -> List[str]:
-    gold_units: List[str] = []
-
-    for item in example.get("supporting_facts", []):
-        if not isinstance(item, list) or len(item) != 2:
-            continue
-
-        title, idx = item
-        title = safe_title(title)
-
-        try:
-            idx = int(idx)
-        except Exception:
-            continue
-
-        unit = sent_lookup.get((title, idx))
-        if unit is not None:
-            gold_units.append(unit)
-
-    # Deduplicate while preserving order.
-    seen = set()
-    deduped = []
-    for u in gold_units:
-        if u not in seen:
-            seen.add(u)
-            deduped.append(u)
-
-    return deduped
-
-
-def get_raw_supporting_facts(example: Dict[str, Any]) -> List[List[Any]]:
-    facts: List[List[Any]] = []
-    for item in example.get("supporting_facts", []):
-        if not isinstance(item, list) or len(item) != 2:
-            continue
-        title, idx = item
-        try:
-            idx = int(idx)
-        except Exception:
-            continue
-        facts.append([safe_title(title), idx])
-    return facts
 
 
 # ============================================================
@@ -472,294 +312,67 @@ def lexical_overlap_score(query: str, text: str) -> float:
     return len(q & t) / max(len(q), 1)
 
 
-def answer_overlap_score(answer: str, text: str) -> float:
-    answer = str(answer or "")
-    if not answer:
-        return 0.0
-
-    answer_norm = normalize_text(answer)
-    text_norm = normalize_text(text)
-
-    if not answer_norm:
-        return 0.0
-
-    if answer_norm in {"yes", "no"}:
-        # For comparison yes/no questions, answer string often does not appear
-        # literally in the evidence, so do not reward yes/no occurrence.
-        return 0.0
-
-    if answer_norm in text_norm:
-        return 1.0
-
-    a = token_set(answer_norm)
-    t = token_set(text_norm)
-    if not a:
-        return 0.0
-    return len(a & t) / max(len(a), 1)
-
-
-def title_overlap_score(question: str, units: List[str]) -> float:
-    q = token_set(question)
-    if not q:
-        return 0.0
-
-    title_tokens: Set[str] = set()
-    for u in units:
-        title, _, _ = parse_sentence_unit(u)
-        title_tokens |= token_set(title)
-
-    return len(q & title_tokens) / max(len(q), 1)
-
-
-def select_sentence_pool(
-    example: Dict[str, Any],
-    sentence_records: List[Dict[str, Any]],
-    gold_units: List[str],
-    max_sentences_per_example: int,
-) -> List[str]:
-    """
-    Select a sentence pool for candidate construction.
-
-    Always keeps gold sentences, then adds:
-      - top lexical-overlap sentences
-      - sentences from pages whose titles overlap with the question
-
-    The gold answer is intentionally not used here. Gold support is used only
-    to create supervised positive candidates and labels.
-    """
-    question = example.get("question", "")
-
-    scored = []
-    for rec in sentence_records:
-        unit = rec["unit"]
-        sent = rec["sentence"]
-        title = rec["title"]
-
-        q_score = lexical_overlap_score(question, sent + " " + title)
-        title_score = lexical_overlap_score(question, title)
-
-        score = q_score + 0.25 * title_score
-        scored.append((score, unit))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    pool: List[str] = []
-    seen = set()
-
-    # Always include gold units so positives are possible.
-    for u in gold_units:
-        if u not in seen:
-            seen.add(u)
-            pool.append(u)
-
-    # Include top lexical/title overlap sentences.
-    for _, u in scored:
-        if len(pool) >= max_sentences_per_example:
-            break
-        if u not in seen:
-            seen.add(u)
-            pool.append(u)
-
-    return pool[:max_sentences_per_example]
-
-
-def support_f1(candidate: Iterable[str], gold: Iterable[str]) -> float:
-    c = set(candidate)
-    g = set(gold)
-    if not c and not g:
-        return 1.0
-    if not c or not g:
-        return 0.0
-    return 2.0 * len(c & g) / (len(c) + len(g))
-
-
-def support_jaccard(candidate: Iterable[str], gold: Iterable[str]) -> float:
-    c = set(candidate)
-    g = set(gold)
-    if not c and not g:
-        return 1.0
-    if not c or not g:
-        return 0.0
-    return len(c & g) / len(c | g)
-
-
-def label_candidate(
-    candidate: List[str], gold_reference_sets: List[List[str]]
-) -> Tuple[int, float, float, bool, bool]:
-    cset = set(candidate)
-
-    best_f1 = 0.0
-    best_j = 0.0
-    exact = False
-    contains = False
-
-    for gold in gold_reference_sets:
-        gset = set(gold)
-
-        f1 = support_f1(cset, gset)
-        jac = support_jaccard(cset, gset)
-
-        best_f1 = max(best_f1, f1)
-        best_j = max(best_j, jac)
-
-        if cset == gset:
-            exact = True
-
-        if gset and gset.issubset(cset):
-            contains = True
-
-    label = 1 if contains else 0
-    return label, best_f1, best_j, exact, contains
-
-
-def generate_candidate_subgraphs(
-    sentence_pool: List[str],
-    gold_units: List[str],
-    max_subgraph_size: int,
-    max_candidates_per_question: int,
-    seed: int,
-) -> List[List[str]]:
-    """
-    Generates candidate support subgraphs.
-
-    Candidate = set/list of sentence units.
-
-    For 2Wiki, gold support may have size 4, so max_subgraph_size should
-    usually be 4.
-    """
-    rng = random.Random(seed)
-
-    candidates: List[Tuple[str, ...]] = []
-    seen = set()
-
-    def add_candidate(units: Iterable[str]):
-        cand = tuple(sorted(set(units)))
-        if not cand:
-            return
-        if len(cand) > max_subgraph_size:
-            return
-        if cand not in seen:
-            seen.add(cand)
-            candidates.append(cand)
-
-    # Exact gold support candidate.
-    if gold_units and len(set(gold_units)) <= max_subgraph_size:
-        add_candidate(gold_units)
-
-    # Gold supersets with one distractor if possible.
-    if gold_units and len(set(gold_units)) < max_subgraph_size:
-        for u in sentence_pool:
-            if u not in gold_units:
-                add_candidate(list(gold_units) + [u])
-
-    # Gold partials: useful ranking targets for multi-hop chains.
-    for size in range(1, min(len(gold_units), max_subgraph_size) + 1):
-        for combo in itertools.combinations(gold_units, size):
-            add_candidate(combo)
-
-    # Singletons.
-    for u in sentence_pool:
-        add_candidate([u])
-
-    # Pairs/triples/quads.
-    for size in range(2, max_subgraph_size + 1):
-        combos = list(itertools.combinations(sentence_pool, size))
-
-        # Avoid exploding combinations.
-        sample_limit = max_candidates_per_question * 4
-        if len(combos) > sample_limit:
-            combos = rng.sample(combos, sample_limit)
-
-        for combo in combos:
-            add_candidate(combo)
-            if len(candidates) >= max_candidates_per_question:
-                break
-
-        if len(candidates) >= max_candidates_per_question:
-            break
-
-    # If too many, prefer candidates with more gold overlap and smaller size.
-    if len(candidates) > max_candidates_per_question:
-        gold_set = set(gold_units)
-
-        def priority(c: Tuple[str, ...]):
-            cset = set(c)
-            overlap = len(cset & gold_set)
-            return (overlap, -len(cset))
-
-        candidates.sort(key=priority, reverse=True)
-        candidates = candidates[:max_candidates_per_question]
-
-    return [list(c) for c in candidates]
-
-
-# ============================================================
-# Symbolic/text features
-# ============================================================
-
-
-def make_2wiki_symbolic_features(
+def select_kg_pool(
     question: str,
-    candidate_units: List[str],
-    max_subgraph_size: int,
-) -> List[float]:
-    """
-    8-dimensional gold-free text feature vector.
+    kg_units: List[str],
+    max_candidate_units: int,
+) -> List[str]:
+    """Select inference-time KG facts using question relevance and connectivity."""
+    if max_candidate_units <= 0 or len(kg_units) <= max_candidate_units:
+        return list(kg_units)
 
-    0 question-token overlap
-    1 title-token coverage by question tokens
-    2 unique page ratio
-    3 cross-page indicator
-    4 multi-sentence indicator
-    5 candidate size normalized
-    6 average sentence position
-    7 title-question overlap
-    """
-    candidate_text_parts = []
-    titles = []
-    sent_positions = []
+    signatures = []
+    for unit in kg_units:
+        triple = parse_kg_triple_unit(unit)
+        entities = set()
+        if triple is not None:
+            entities = {normalize_text(triple[0]), normalize_text(triple[2])}
+        signatures.append(entities)
 
-    for u in candidate_units:
-        title, idx, sent = parse_sentence_unit(u)
-        candidate_text_parts.append(title)
-        candidate_text_parts.append(sent)
+    degrees = []
+    for i, entities in enumerate(signatures):
+        degree = sum(
+            bool(entities & other) for j, other in enumerate(signatures) if i != j
+        )
+        degrees.append(degree)
 
-        if title:
-            titles.append(title)
-        if idx >= 0:
-            sent_positions.append(idx)
-
-    candidate_text = " ".join(candidate_text_parts)
-
-    q_overlap = lexical_overlap_score(question, candidate_text)
-    title_question_coverage = title_overlap_score(question, candidate_units)
-
-    unique_titles = len(set(titles))
-    size = len(candidate_units)
-
-    unique_page_ratio = unique_titles / max(size, 1)
-    cross_page = 1.0 if unique_titles >= 2 else 0.0
-    multi_sentence = 1.0 if size >= 2 else 0.0
-    size_norm = min(size / max(max_subgraph_size, 1), 1.0)
-
-    if sent_positions:
-        avg_pos = sum(sent_positions) / len(sent_positions)
-        avg_sentence_position = min(avg_pos / 10.0, 1.0)
-    else:
-        avg_sentence_position = 0.0
-
-    title_overlap = title_overlap_score(question, candidate_units)
-
-    return [
-        float(q_overlap),
-        float(title_question_coverage),
-        float(unique_page_ratio),
-        float(cross_page),
-        float(multi_sentence),
-        float(size_norm),
-        float(avg_sentence_position),
-        float(title_overlap),
+    scored = [
+        (
+            lexical_overlap_score(question, unit) + 0.02 * min(degrees[i], 10),
+            unit,
+        )
+        for i, unit in enumerate(kg_units)
     ]
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [unit for _, unit in scored[:max_candidate_units]]
+
+
+def align_gold_evidence_to_candidate_kg(
+    gold_units: List[str],
+    candidate_units: List[str],
+) -> Tuple[List[str], float]:
+    """
+    Align gold annotations to inference-time KG spelling without adding facts.
+
+    An unmatched gold fact remains in the evaluation target, making extraction
+    coverage visible instead of silently inserting the target into the graph.
+    """
+    by_key = {
+        key: unit
+        for unit in candidate_units
+        if (key := kg_triple_key(unit)) is not None
+    }
+    aligned = []
+    matched = 0
+    for gold in gold_units:
+        key = kg_triple_key(gold)
+        if key is not None and key in by_key:
+            aligned.append(by_key[key])
+            matched += 1
+        else:
+            aligned.append(gold)
+    coverage = matched / max(len(gold_units), 1)
+    return aligned, coverage
 
 
 def infer_answer_type(answer: str) -> str:
@@ -786,24 +399,24 @@ def build_rows_for_example(
     kg_cache_path: Path | None,
     kg_cache_lock: Any,
     seed: int,
+    candidate_beam_width: int = 96,
 ) -> List[Dict[str, Any]]:
     raw_id = str(get_first_present(example, ["_id", "id"], f"no_id_{seed}"))
     example_id = f"2WikiMultiHopQA__{split_name}__{raw_id}"
     question = str(example.get("question", ""))
     answer = str(example.get("answer", ""))
-    raw_evidences = example.get("evidences", [])
+    raw_evidences = normalize_evidence_triples(example.get("evidences", []))
 
     sentence_records = flatten_context(example)
-    sent_lookup = {
-        (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
-    }
     cached_kg = kg_cache.get(example_id) if kg_cache is not None else None
-    if cached_kg:
+    if cached_kg and cached_kg.get("cache_signature") != kg_config.cache_signature:
+        cached_kg = None
+    cached_method = str(cached_kg.get("construction_method", "")) if cached_kg else ""
+    if cached_kg and "provided" not in cached_method:
         kg_triples = cached_kg.get("kg_triples", [])
-        kg_construction_method = str(cached_kg.get("construction_method", "cache"))
+        kg_construction_method = cached_method or "cache"
     else:
         kg_triples, kg_construction_method = construct_text_kg(
-            provided_evidences=raw_evidences,
             sentence_records=sentence_records,
             question=question,
             config=kg_config,
@@ -814,6 +427,7 @@ def build_rows_for_example(
                 "example_id": example_id,
                 "kg_triples": kg_triples,
                 "construction_method": kg_construction_method,
+                "cache_signature": kg_config.cache_signature,
             }
             if kg_cache_lock is not None:
                 with kg_cache_lock:
@@ -822,82 +436,89 @@ def build_rows_for_example(
             else:
                 kg_cache[example_id] = cache_row
                 append_kg_cache_row(kg_cache_path, cache_row)
-    graph_context_units = evidence_triple_units(kg_triples)
-
-    gold_units = get_gold_support_units(example, sent_lookup)
-    raw_supporting_facts = get_raw_supporting_facts(example)
-
-    if not gold_units:
+    constructed_kg_units = evidence_triple_units(kg_triples)
+    candidate_pool = select_kg_pool(
+        question=question,
+        kg_units=constructed_kg_units,
+        max_candidate_units=max_sentences_per_example,
+    )
+    if not candidate_pool:
         return []
 
-    gold_reference_sets = [gold_units]
-
-    sentence_pool = select_sentence_pool(
-        example=example,
+    raw_gold_evidence_units = evidence_triple_units(raw_evidences)
+    gold_units, gold_kg_coverage = align_gold_evidence_to_candidate_kg(
+        raw_gold_evidence_units,
+        candidate_pool,
+    )
+    candidate_keys = {
+        key for unit in candidate_pool if (key := kg_triple_key(unit)) is not None
+    }
+    matched_gold_units = [
+        unit
+        for unit in raw_gold_evidence_units
+        if kg_triple_key(unit) in candidate_keys
+    ]
+    missing_gold_units = [
+        unit
+        for unit in raw_gold_evidence_units
+        if kg_triple_key(unit) not in candidate_keys
+    ]
+    selected_context_records = select_context_sentences(
+        question=question,
         sentence_records=sentence_records,
-        gold_units=gold_units,
-        max_sentences_per_example=max_sentences_per_example,
+        limit=kg_config.max_context_sentences,
     )
+    gold_reference_sets = [gold_units] if gold_units else []
 
-    if not sentence_pool:
-        return []
-
-    candidates = generate_candidate_subgraphs(
-        sentence_pool=sentence_pool,
-        gold_units=gold_units,
+    candidate_paths = beam_connected_subgraphs(
+        candidate_units=candidate_pool,
+        question=question,
+        sparql_query="",
+        min_subgraph_size=1,
         max_subgraph_size=max_subgraph_size,
-        max_candidates_per_question=max_candidates_per_question,
-        seed=seed,
+        beam_width=candidate_beam_width,
+        max_candidate_subgraphs=max_candidates_per_question,
     )
-
-    rows: List[Dict[str, Any]] = []
+    candidates = [list(candidate) for candidate in sorted(candidate_paths)]
 
     answer_type = infer_answer_type(answer)
-
-    for cand_idx, candidate_units in enumerate(candidates):
-        label, best_f1, best_jaccard, exact, contains = label_candidate(
-            candidate=candidate_units,
-            gold_reference_sets=gold_reference_sets,
-        )
-
-        symbolic_features = make_2wiki_symbolic_features(
-            question=question,
-            candidate_units=candidate_units,
-            max_subgraph_size=max_subgraph_size,
-        )
-
-        row_id = f"{example_id}__cand{cand_idx}"
-
-        row = {
-            "row_id": row_id,
+    rows = materialize_retrieval_rows(
+        candidate_units=candidate_pool,
+        candidate_subgraphs=candidates,
+        gold_explanations=gold_reference_sets,
+        base_row={
             "example_id": example_id,
             "dataset": "2WikiMultiHopQA",
             "hop": "2hop",
             "answer_type": answer_type,
             "question": question,
             "answer": answer,
-            # Candidate support.
-            "subgraph_units": candidate_units,
-            "subgraph_size": len(candidate_units),
-            # Graph context nodes are available to the GNN message-passing
-            # graph, but are not scored as predicted support sentences.
-            "graph_context_units": graph_context_units,
-            # Gold support.
-            "raw_supporting_facts": raw_supporting_facts,
-            "gold_support_units": gold_units,
-            # Supervision.
-            "label": int(label),
-            "rank_target": float(best_f1),
-            # Diagnostics.
-            "best_set_f1_to_gold": float(best_f1),
-            "best_jaccard_to_gold": float(best_jaccard),
-            "exact_match_any_gold": bool(exact),
-            "contains_any_gold_explanation": bool(contains),
-            # Model features.
-            "symbolic_features": symbolic_features,
-        }
-
-        rows.append(row)
+            "evidence_unit_type": "kg_triple",
+            "kg_construction_method": kg_construction_method,
+            "candidate_kg_units": candidate_pool,
+            # Candidate reasoning path.
+            "graph_context_units": [],
+            # Triple-level gold reasoning supervision.
+            "gold_explanations": gold_reference_sets,
+            "gold_units": gold_units,
+            "raw_gold_evidence_units": raw_gold_evidence_units,
+            "gold_kg_coverage": float(gold_kg_coverage),
+            "matched_gold_kg_units": matched_gold_units,
+            "missing_gold_kg_units": missing_gold_units,
+            "context_sentence_count": len(sentence_records),
+            "selected_context_sentence_count": len(selected_context_records),
+            "context_page_count": len(
+                {
+                    normalize_text(record.get("title", ""))
+                    for record in sentence_records
+                    if normalize_text(record.get("title", ""))
+                }
+            ),
+            "kg_cache_signature": kg_config.cache_signature,
+        },
+    )
+    for candidate_index, row in enumerate(rows):
+        row["row_id"] = f"{example_id}__cand{candidate_index}"
 
     return rows
 
@@ -945,6 +566,47 @@ def limit_examples(
     shuffled = list(examples)
     rng.shuffle(shuffled)
     return shuffled[:max_examples]
+
+
+def load_selection_manifest(path: Path | None) -> Dict[str, List[str]] | None:
+    if path is None:
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    splits = manifest.get("splits", {})
+    selected = {}
+    for split in ("train", "dev", "test"):
+        details = splits.get(split, {})
+        ids = details.get("selected_example_ids")
+        if not isinstance(ids, list):
+            raise ValueError(
+                f"Selection manifest {path} has no selected IDs for {split}"
+            )
+        selected[split] = [str(example_id) for example_id in ids]
+    return selected
+
+
+def select_manifest_examples(
+    examples: List[Dict[str, Any]],
+    split_name: str,
+    selected_example_ids: List[str],
+) -> List[Dict[str, Any]]:
+    by_id = {}
+    for example in examples:
+        raw_id = str(get_first_present(example, ["_id", "id"], ""))
+        example_id = f"2WikiMultiHopQA__{split_name}__{raw_id}"
+        if example_id in by_id:
+            raise ValueError(f"Duplicate 2Wiki source ID: {example_id}")
+        by_id[example_id] = example
+    missing = [
+        example_id for example_id in selected_example_ids if example_id not in by_id
+    ]
+    if missing:
+        raise ValueError(
+            f"Selection manifest contains {len(missing)} IDs absent from the "
+            f"{split_name} source, including: {missing[:3]}"
+        )
+    return [by_id[example_id] for example_id in selected_example_ids]
 
 
 def split_train_dev_from_train(
@@ -995,6 +657,7 @@ def build_split_rows(
     kg_construction_workers: int,
     kg_cache_path: Path | None,
     seed: int,
+    candidate_beam_width: int = 96,
 ) -> List[Dict[str, Any]]:
     all_rows: List[Dict[str, Any]] = []
     start_time = time.time()
@@ -1045,6 +708,7 @@ def build_split_rows(
                 kg_cache_path=kg_cache_path,
                 kg_cache_lock=kg_cache_lock,
                 seed=seed + idx,
+                candidate_beam_width=candidate_beam_width,
             )
 
         with ThreadPoolExecutor(max_workers=kg_construction_workers) as pool:
@@ -1073,6 +737,7 @@ def build_split_rows(
             kg_cache_path=kg_cache_path,
             kg_cache_lock=kg_cache_lock,
             seed=seed + idx,
+            candidate_beam_width=candidate_beam_width,
         )
         all_rows.extend(rows)
         progress_every = 5 if uses_llm else 25
@@ -1088,6 +753,11 @@ def summarize_rows(name: str, rows: List[Dict[str, Any]]) -> None:
     total = len(rows)
     bin_count = len({r["example_id"] for r in rows if r.get("answer_type") == "BIN"})
     open_count = len({r["example_id"] for r in rows if r.get("answer_type") == "OPEN"})
+    coverage_by_example = {}
+    for row in rows:
+        coverage_by_example.setdefault(
+            row["example_id"], float(row.get("gold_kg_coverage", 0.0))
+        )
 
     print(f"{name}:")
     print(f"  rows:       {total}")
@@ -1098,13 +768,18 @@ def summarize_rows(name: str, rows: List[Dict[str, Any]]) -> None:
     print(f"  negatives:  {total - positives}")
     if total:
         print(f"  pos rate:   {positives / total:.4f}")
+    if coverage_by_example:
+        mean_coverage = sum(coverage_by_example.values()) / len(coverage_by_example)
+        complete_coverage = sum(v >= 1.0 for v in coverage_by_example.values())
+        print(f"  gold KG coverage: {mean_coverage:.4f} mean")
+        print(
+            f"  complete KG extraction: {complete_coverage}/{len(coverage_by_example)}"
+        )
 
 
 def count_labeled_examples(examples: List[Dict[str, Any]]) -> int:
     return sum(
-        1
-        for example in examples
-        if example.get("answer") and example.get("supporting_facts")
+        1 for example in examples if example.get("answer") and example.get("evidences")
     )
 
 
@@ -1122,13 +797,13 @@ def require_nonempty_split(
     message = (
         f"No rows were built for 2Wiki {split_name} split from {source_text}. "
         f"Selected examples: {len(selected_examples)}; examples with answer and "
-        f"supporting_facts: {labeled_count}."
+        f"gold evidence triples: {labeled_count}."
     )
     if split_name == "test" and labeled_count == 0:
         message += (
             " The public 2Wiki test parquet is unlabeled in this distribution. "
-            "For supervised retrieval evaluation, omit --test-file or point it "
-            "to the labeled validation parquet."
+            "It can still be used for inference when context-to-KG extraction "
+            "produces candidate triples; use validation for supervised metrics."
         )
     raise ValueError(message)
 
@@ -1152,34 +827,51 @@ def main():
     parser.add_argument("--max-train-examples", type=int, default=1000)
     parser.add_argument("--max-dev-examples", type=int, default=200)
     parser.add_argument("--max-test-examples", type=int, default=300)
+    parser.add_argument(
+        "--selection-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "A gnn_dev_sample_v1 manifest whose exact example IDs override "
+            "--max-*-examples. Candidate rows are rebuilt from the raw records."
+        ),
+    )
 
-    parser.add_argument("--max-sentences-per-example", type=int, default=30)
+    parser.add_argument(
+        "--max-kg-candidate-triples",
+        "--max-sentences-per-example",
+        dest="max_kg_candidate_triples",
+        type=int,
+        default=30,
+        help=(
+            "Maximum context-derived KG facts retained per example. The old "
+            "--max-sentences-per-example name remains as a deprecated alias."
+        ),
+    )
     parser.add_argument("--max-subgraph-size", type=int, default=4)
     parser.add_argument("--max-candidates-per-question", type=int, default=512)
+    parser.add_argument(
+        "--candidate-beam-width",
+        type=int,
+        default=96,
+        help=("Beam width for the shared FamilyOWL/2Wiki connected-subgraph composer."),
+    )
     parser.add_argument(
         "--max-kg-bridge-triples",
         type=int,
         default=64,
-        help=(
-            "Maximum KG triples to attach per example. Applies to provided, "
-            "deterministic, and LLM-constructed triples."
-        ),
+        help=("Maximum context-derived KG triples constructed per example."),
     )
     parser.add_argument(
         "--kg-construction-backend",
         choices=[
-            "auto",
-            "provided",
             "deterministic",
             "llm",
             "llm_with_title_bridges",
-            "llm_with_provided",
-            "none",
         ],
-        default="auto",
+        default="deterministic",
         help=(
-            "How to build text benchmark KG triples. auto uses provided triples "
-            "when available, otherwise falls back to deterministic title bridges. "
+            "How to build candidate KG triples from question/context only. "
             "llm extracts triples from the example context. "
             "llm_with_title_bridges combines context-only LLM triples with "
             "deterministic title co-mention bridges."
@@ -1215,13 +907,8 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     kg_cache_dir = args.kg_cache_dir or (out_dir / "kg_cache")
-    kg_backend = (
-        "deterministic"
-        if args.kg_construction_backend == "none"
-        else args.kg_construction_backend
-    )
     kg_config = KGConstructionConfig(
-        backend=kg_backend,
+        backend=args.kg_construction_backend,
         model=args.kg_construction_model,
         max_triples=args.max_kg_bridge_triples,
         max_context_sentences=args.kg_max_context_sentences,
@@ -1230,12 +917,9 @@ def main():
         max_retries=args.kg_max_retries,
         retry_initial_sleep=args.kg_retry_initial_sleep,
     )
-    if args.kg_construction_backend == "none":
-        kg_config.max_triples = 0
     llm_kg_constructor = (
         LLMKGConstructor(kg_config)
-        if args.kg_construction_backend
-        in {"llm", "llm_with_provided", "llm_with_title_bridges"}
+        if args.kg_construction_backend in {"llm", "llm_with_title_bridges"}
         else None
     )
 
@@ -1253,23 +937,33 @@ def main():
     print(f"Raw dev examples:   {len(dev_raw_all)}")
     print(f"Raw test examples:  {len(test_raw_all)}")
 
-    # Train, dev, and test are sampled from their respective source files. If
-    # --test-file is omitted, the provided dev/validation file is used as test.
-    train_examples = limit_examples(
-        examples=train_raw_all,
-        max_examples=args.max_train_examples,
-        seed=args.seed,
-    )
-    dev_examples = limit_examples(
-        examples=dev_raw_all,
-        max_examples=args.max_dev_examples,
-        seed=args.seed + 100000,
-    )
-    test_examples = limit_examples(
-        examples=test_raw_all,
-        max_examples=args.max_test_examples,
-        seed=args.seed + 200000,
-    )
+    selection = load_selection_manifest(args.selection_manifest)
+    if selection is not None:
+        train_examples = select_manifest_examples(
+            train_raw_all, "train", selection["train"]
+        )
+        dev_examples = select_manifest_examples(dev_raw_all, "dev", selection["dev"])
+        test_examples = select_manifest_examples(
+            test_raw_all, "test", selection["test"]
+        )
+    else:
+        # Train, dev, and test are sampled from their respective source files. If
+        # --test-file is omitted, the provided dev/validation file is used as test.
+        train_examples = limit_examples(
+            examples=train_raw_all,
+            max_examples=args.max_train_examples,
+            seed=args.seed,
+        )
+        dev_examples = limit_examples(
+            examples=dev_raw_all,
+            max_examples=args.max_dev_examples,
+            seed=args.seed + 100000,
+        )
+        test_examples = limit_examples(
+            examples=test_raw_all,
+            max_examples=args.max_test_examples,
+            seed=args.seed + 200000,
+        )
 
     print(f"Selected train examples: {len(train_examples)}")
     print(f"Selected dev examples:   {len(dev_examples)}")
@@ -1279,7 +973,7 @@ def main():
     train_rows = build_split_rows(
         examples=train_examples,
         split_name="train",
-        max_sentences_per_example=args.max_sentences_per_example,
+        max_sentences_per_example=args.max_kg_candidate_triples,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
         kg_config=kg_config,
@@ -1289,13 +983,14 @@ def main():
         if llm_kg_constructor is not None
         else None,
         seed=args.seed,
+        candidate_beam_width=args.candidate_beam_width,
     )
 
     print("Building dev rows...")
     dev_rows = build_split_rows(
         examples=dev_examples,
         split_name="dev",
-        max_sentences_per_example=args.max_sentences_per_example,
+        max_sentences_per_example=args.max_kg_candidate_triples,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
         kg_config=kg_config,
@@ -1305,13 +1000,14 @@ def main():
         if llm_kg_constructor is not None
         else None,
         seed=args.seed + 100000,
+        candidate_beam_width=args.candidate_beam_width,
     )
 
     print("Building test rows...")
     test_rows = build_split_rows(
         examples=test_examples,
         split_name="test",
-        max_sentences_per_example=args.max_sentences_per_example,
+        max_sentences_per_example=args.max_kg_candidate_triples,
         max_subgraph_size=args.max_subgraph_size,
         max_candidates_per_question=args.max_candidates_per_question,
         kg_config=kg_config,
@@ -1321,6 +1017,7 @@ def main():
         if llm_kg_constructor is not None
         else None,
         seed=args.seed + 200000,
+        candidate_beam_width=args.candidate_beam_width,
     )
 
     summarize_rows("TRAIN", train_rows)
@@ -1343,25 +1040,34 @@ def main():
         "effective_test_file": test_files,
         "output_dir": str(out_dir),
         "seed": args.seed,
+        "selection_manifest": (
+            str(args.selection_manifest) if args.selection_manifest else None
+        ),
         "max_train_examples": args.max_train_examples,
         "max_dev_examples": args.max_dev_examples,
         "max_test_examples": args.max_test_examples,
-        "max_sentences_per_example": args.max_sentences_per_example,
+        "max_kg_candidate_triples": args.max_kg_candidate_triples,
         "max_subgraph_size": args.max_subgraph_size,
         "max_candidates_per_question": args.max_candidates_per_question,
+        "candidate_beam_width": args.candidate_beam_width,
         "max_kg_bridge_triples": args.max_kg_bridge_triples,
         "kg_construction_backend": args.kg_construction_backend,
         "kg_construction_model": args.kg_construction_model,
+        "kg_extraction_version": kg_config.extraction_version,
+        "kg_cache_signature": kg_config.cache_signature,
         "kg_max_context_sentences": args.kg_max_context_sentences,
         "kg_construction_workers": args.kg_construction_workers,
         "kg_request_timeout": args.kg_request_timeout,
         "kg_max_retries": args.kg_max_retries,
         "kg_retry_initial_sleep": args.kg_retry_initial_sleep,
         "kg_cache_dir": str(kg_cache_dir) if llm_kg_constructor is not None else None,
-        "schema_version": "text_retrieval_slim_v1",
-        "support_label_fields": ["raw_supporting_facts", "gold_support_units"],
+        "schema_version": "unified_kg_reasoning_v3",
+        "evidence_unit_type": "kg_triple",
+        "gold_label_fields": ["raw_gold_evidence_units", "gold_explanations"],
         "candidate_field": "subgraph_units",
-        "graph_context_field": "graph_context_units",
+        "kg_source": "question_and_context_only",
+        "candidate_composer": "beam_connected_subgraphs",
+        "row_materializer": "materialize_retrieval_rows",
         "train_rows": len(train_rows),
         "dev_rows": len(dev_rows),
         "test_rows": len(test_rows),

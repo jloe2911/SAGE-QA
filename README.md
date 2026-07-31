@@ -20,6 +20,7 @@ models/                     GNN and symbolic retriever components
 generation/                 LLM answer-generation scripts
 evaluation/                 Retrieval, QA, support, and error evaluators
 experiments/                End-to-end experiment runner
+notebooks/                  Worked, executable pipeline walkthroughs
 third_party/GNN-RAG/        Adapted GNN-RAG baseline
 patches/                    Notes and patch for local GNN-RAG changes
 checkpoints/                Generated model checkpoints
@@ -29,6 +30,10 @@ outputs/                    Generated experiment outputs
 Key entry points:
 
 - Main runner: `experiments/run_experiments.py`
+- Worked single-record reference examples, with explicit raw-field mappings, in
+  conceptual order:
+  `notebooks/familyowl_walkthrough.ipynb`, then
+  `notebooks/2wiki_walkthrough.ipynb`
 - GNN training: `training/train_gnn_subgraph_retriever.py`
 - Text builders:
   `data_processing/build_hotpot_subgraph_dataset.py` and
@@ -125,8 +130,8 @@ hf download framolfese/2WikiMultihopQA data/ `
 
 For 2WikiMultiHopQA, the commands below use the labeled validation Parquet file
 as the evaluation source because the public test Parquet file in this
-distribution does not include usable gold answers/supporting facts for
-supervised evaluation.
+distribution does not include gold answers or evidence triples for supervised
+evaluation.
 
 ## Build Retrieval Datasets
 
@@ -187,15 +192,16 @@ python data_processing/build_2wiki_subgraph_dataset.py `
   --max-train-examples 3000 `
   --max-dev-examples 500 `
   --max-test-examples 1000 `
-  --max-sentences-per-example 30 `
+  --max-kg-candidate-triples 30 `
   --max-subgraph-size 4 `
   --max-kg-bridge-triples 64 `
-  --kg-construction-backend llm_with_provided `
+  --kg-construction-backend llm `
   --kg-construction-model openai:gpt-4.1-mini `
   --kg-construction-workers 3 `
   --kg-request-timeout 90 `
   --kg-max-retries 6 `
   --kg-retry-initial-sleep 10 `
+  --candidate-beam-width 96 `
   --max-candidates-per-question 256 `
   --seed 42
 ```
@@ -210,6 +216,15 @@ interrupted text builds can be resumed without repeating completed examples.
 For quick checks without API calls, use `--kg-construction-backend deterministic`
 and small `--max-*-examples` values.
 
+`experiments/run_experiments.py` consumes these generated JSONL files; it does
+not rebuild them. After changing candidate construction, rebuild 2Wiki with the
+command above before rerunning results. The current builder writes schema
+`unified_kg_reasoning_v3`, including the shared composer and row-materializer
+identifiers. The experiment runner rejects older 2Wiki metadata rather than
+silently evaluating stale candidates. Existing text-to-KG cache files remain
+reusable because candidate subgraphs and retrieval rows are regenerated from
+the cached triples.
+
 ## Reproduce Main Results
 
 After building all six retrieval datasets, run the main manuscript command:
@@ -223,6 +238,10 @@ python experiments/run_experiments.py `
   --epochs 3 `
   --candidate-batch-size 512
 ```
+
+When regenerating results after rebuilding 2Wiki, add `--force-train` and do
+not use `--resume` or `--skip-llm-if-exists`; those options intentionally reuse
+older checkpoints, retrieval details, or generated answers.
 
 To reuse existing checkpoints, details, predictions, metrics, and generated
 answers:
@@ -241,8 +260,10 @@ python experiments/run_experiments.py `
 
 `--methods auto` expands by dataset type:
 
-- Text datasets: `lexical_subgraph`, `gnn_neural`,
+- Sentence-support text datasets: `lexical_subgraph`, `gnn_neural`,
   `sageqa_text_chain`, `gnn_rag`
+- KG datasets, including text-to-KG 2Wiki: `lexical_subgraph`, `gnn_neural`,
+  `sageqa_proof`, `gnn_rag`
 - OWL datasets: `lexical_subgraph`, `gnn_neural`,
   `sageqa_proof`, `gnn_rag`
 
@@ -318,6 +339,45 @@ Frequently used runner flags:
   export
 - `--gnn-rag-text-max-candidates N`: cap text candidates passed to GNN-RAG
 
+## Compare Retrieval Revisions
+
+Use `evaluation/compare_retrieval_runs.py` to compare a versioned candidate
+dataset with a previous run before running an answer-generation model. It
+reports candidate availability, oracle retrieval ceilings, KG/context
+coverage, paired changes on shared example IDs, and optional GNN test metrics.
+It also warns when a run contains a `provided` KG-construction method.
+
+FamilyOWL 1-hop:
+
+```powershell
+python evaluation/compare_retrieval_runs.py `
+  --baseline-data data/FamilyOWL_1hop `
+  --current-data data/comparisons/family_shared_v3/FamilyOWL_1hop `
+  --baseline-gnn outputs/full_results/FamilyOWL_1hop/gnn_neural `
+  --current-gnn outputs/comparisons/FamilyOWL_1hop_shared_v3_gnn `
+  --baseline-label legacy `
+  --current-label shared_v3 `
+  --output-dir outputs/comparisons/reports/FamilyOWL_1hop_shared_v3
+```
+
+For FamilyOWL 2-hop, replace `FamilyOWL_1hop` with `FamilyOWL_2hop` in all
+paths. For 2Wiki:
+
+```powershell
+python evaluation/compare_retrieval_runs.py `
+  --baseline-data data/2WikiMultiHopQA `
+  --current-data data/2WikiMultiHopQA_shared_v3 `
+  --baseline-gnn outputs/full_results/2WikiMultiHopQA/gnn_neural `
+  --current-gnn outputs/comparisons/2WikiMultiHopQA_shared_v3_gnn `
+  --baseline-label legacy_gold_assisted `
+  --current-label shared_v3 `
+  --output-dir outputs/comparisons/reports/2WikiMultiHopQA_shared_v3
+```
+
+Omit `--baseline-gnn` and `--current-gnn` to compare candidate construction
+before training. Each invocation writes `comparison.json` and `comparison.csv`.
+It refuses to replace either file unless `--overwrite` is explicitly supplied.
+
 ## Metrics
 
 The final CSV has one row per dataset/method. The main columns are:
@@ -338,38 +398,61 @@ Per-method `test_details.json` files contain ranked retrieved subgraphs and
 supports for each example. Per-method `metrics*.json` files contain the exact
 evaluator output used to build the final CSV.
 
-## Text Benchmark Representation
+## Unified Reasoning Representation
 
-HotpotQA and 2WikiMultiHopQA are evaluated as text-support retrieval tasks. Raw
-benchmark context is flattened into sentence evidence units:
+FamilyOWL and the other ontology datasets already provide a KG. Their
+`OWL Context` is parsed into candidate facts/axioms, while `Explanations` are
+used only as gold reasoning targets.
+
+2WikiMultiHopQA uses the same graph-level task after one modality bridge:
 
 ```text
-SENT::<title>::<sentence_id>::<sentence text>
+FamilyOWL: OWL Context             -> parse KG facts/axioms --+
+                                                               |
+2Wiki: question + raw context      -> text-to-KG triples -------+
+                                                               v
+                  shared connected-subgraph composer -> shared GNN retrieval
+
+2Wiki: raw evidences               -> gold triple-level reasoning target
 ```
 
-Constructed or provided KG triples are auxiliary graph context:
+Thus, text-to-KG construction is the only extra reasoning-pipeline step for
+2Wiki. Once its independent candidate triples have been constructed, 2Wiki
+uses the same `beam_connected_subgraphs` composer as FamilyOWL. Since 2Wiki has
+no SPARQL query, the composer receives the natural-language question and an
+empty SPARQL string. Both datasets then use the same
+`materialize_retrieval_rows` function to create GNN candidates and gold-derived
+training targets.
+
+Both candidate and gold triple units use:
 
 ```text
 KG::<subject>::<predicate>::<object>
 ```
 
-Only `SENT::...` units are exported as predicted support and compared against
-official gold supporting facts. `KG::...` units can enrich the retriever/GNN
-graph but are not counted as support facts.
+The 2Wiki builder does not read `supporting_facts`. It never uses annotated
+`evidences` to construct the candidate graph. The constructor accepts exactly
+three backends: `deterministic`, `llm`, and `llm_with_title_bridges`.
+Generated rows include:
 
-Generated text candidate rows include:
+- `subgraph_units`: a candidate triple-level reasoning path
+- `candidate_kg_units`: the context-derived local KG
+- `gold_explanations` and `gold_units`: targets derived from `evidences`
+- `gold_kg_coverage`: fraction of gold triples recovered by text-to-KG
+- `evidence_unit_type`: `kg_triple`
+- `label` and `rank_target`: candidate/gold path supervision
 
-- `example_id`: shared id for all candidate rows derived from one QA example
-- `question`, `answer`: raw question and gold answer
-- `subgraph_units`: candidate sentence support set scored by the retriever
-- `graph_context_units`: optional KG context nodes
-- `raw_supporting_facts`: original benchmark support labels
-- `gold_support_units`: gold support labels resolved to `SENT::...` units
-- `label`: positive when the candidate contains a complete gold support set
-- `rank_target`: soft support-overlap target
-- `symbolic_features`: gold-free lexical/structural features
+HotpotQA remains a sentence-support task. Its raw context is flattened into:
 
-More details and worked examples are in `TEXT_BENCHMARK_RETRIEVAL.md`.
+```text
+SENT::<title>::<sentence_id>::<sentence text>
+```
+
+and context-derived KG triples may be auxiliary graph context:
+
+```text
+KG::<subject>::<predicate>::<object>
+```
 
 ## GNN-RAG Adaptation
 
@@ -383,10 +466,9 @@ third_party/GNN-RAG/llm/src/qa_prediction/predict_answer.py
 
 and converts upstream predictions back to the common evaluator format.
 
-For text datasets, constructed `KG::subject::predicate::object` bridge units are
-mapped into upstream KG triples and linked back to matching sentence evidence
-nodes. KG triples enrich the GNN-RAG graph but are not counted as predicted
-support sentences.
+For HotpotQA, constructed KG bridge units are linked back to sentence evidence.
+For 2Wiki and ontology datasets, the retrieved units are graph facts/axioms
+themselves.
 
 Local changes are documented in:
 

@@ -3,6 +3,7 @@ import ast
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -31,7 +32,7 @@ DATASETS = {
     },
     "2wiki": {
         "display": "2WikiMultiHopQA",
-        "type": "text",
+        "type": "kg",
         "data_dir": "data/2WikiMultiHopQA",
         "output_dir": "outputs/full_results/2WikiMultiHopQA",
         "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_2wiki_full",
@@ -56,7 +57,7 @@ DATASETS = {
     },
     "2wiki_openai": {
         "display": "2WikiMultiHopQA_openai_gpt41mini",
-        "type": "text",
+        "type": "kg",
         "data_dir": "data/2WikiMultiHopQA_openai_gpt41mini",
         "output_dir": "outputs/full_results/2WikiMultiHopQA_openai_gpt41mini",
         "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_2wiki_openai_gpt41mini_full",
@@ -81,7 +82,7 @@ DATASETS = {
     },
     "2wiki_contextkg_v2": {
         "display": "2WikiMultiHopQA_contextkg_v2",
-        "type": "text",
+        "type": "kg",
         "data_dir": "data/2WikiMultiHopQA_contextkg_v2",
         "output_dir": "outputs/full_results/2WikiMultiHopQA_contextkg_v2",
         "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_2wiki_contextkg_v2_full",
@@ -98,6 +99,13 @@ DATASETS = {
         "data_dir": "data/FamilyOWL_1hop",
         "output_dir": "outputs/full_results/FamilyOWL_1hop",
         "checkpoint_dir": "checkpoints/gnn_subgraph_ranker_familyowl_1hop_full",
+    },
+    "familyowl_1hop_dev": {
+        "display": "FamilyOWL_1hop_dev",
+        "type": "owl",
+        "data_dir": "data/development/familyowl_v3/FamilyOWL_1hop",
+        "output_dir": "outputs/development_runs/FamilyOWL_1hop",
+        "checkpoint_dir": "checkpoints/development/gnn_familyowl_1hop",
     },
     "familyowl_2hop": {
         "display": "FamilyOWL_2hop",
@@ -157,14 +165,14 @@ METHODS = {
         "needs_training": False,
         "details_subdir": "lexical_subgraph",
         "score_mode": None,
-        "valid_for": ["text", "owl"],
+        "valid_for": ["text", "kg", "owl"],
     },
     "gnn_neural": {
         "display": "GNN Subgraph",
         "needs_training": True,
         "details_subdir": "gnn_neural",
         "score_mode": "neural",
-        "valid_for": ["text", "owl"],
+        "valid_for": ["text", "kg", "owl"],
     },
     "sageqa_text_chain": {
         "display": "sageqa Text-Chain",
@@ -178,7 +186,7 @@ METHODS = {
         "needs_training": False,
         "details_subdir": "gnn_rag",
         "score_mode": None,
-        "valid_for": ["text", "owl"],
+        "valid_for": ["text", "kg", "owl"],
         "gnn_rag": True,
     },
     "sageqa_compact": {
@@ -186,14 +194,14 @@ METHODS = {
         "needs_training": True,
         "details_subdir": "gnn_sageqa_compact",
         "score_mode": "sageqa_compact",
-        "valid_for": ["owl"],
+        "valid_for": ["kg", "owl"],
     },
     "sageqa_proof": {
         "display": "sageqa Proof",
         "needs_training": True,
         "details_subdir": "gnn_sageqa_proof",
         "score_mode": "sageqa_proof",
-        "valid_for": ["owl"],
+        "valid_for": ["kg", "owl"],
     },
 }
 
@@ -350,7 +358,7 @@ def missing_key_message(model: str) -> str:
 def default_methods_for_dataset(dataset_type: str) -> List[str]:
     if dataset_type == "text":
         return ["lexical_subgraph", "gnn_neural", "sageqa_text_chain", "gnn_rag"]
-    if dataset_type == "owl":
+    if dataset_type in {"kg", "owl"}:
         return [
             "lexical_subgraph",
             "gnn_neural",
@@ -358,6 +366,43 @@ def default_methods_for_dataset(dataset_type: str) -> List[str]:
             "gnn_rag",
         ]
     raise ValueError(f"Unknown dataset type: {dataset_type}")
+
+
+def dataset_metadata_path(cfg: Dict) -> Path:
+    return Path(cfg["data_dir"]) / "metadata.json"
+
+
+def validate_dataset_schema(cfg: Dict) -> None:
+    if cfg["type"] != "kg":
+        return
+    metadata_path = dataset_metadata_path(cfg)
+    ensure_file(metadata_path, f"{cfg['display']} dataset metadata")
+    metadata = load_metrics_json(metadata_path)
+    expected_schema = "unified_kg_reasoning_v3"
+    expected_components = {
+        "candidate_composer": "beam_connected_subgraphs",
+        "row_materializer": "materialize_retrieval_rows",
+    }
+    invalid_components = {
+        key: metadata.get(key)
+        for key, expected_value in expected_components.items()
+        if metadata.get(key) != expected_value
+    }
+    if metadata.get("schema_version") != expected_schema or invalid_components:
+        raise ValueError(
+            f"{cfg['display']} data uses schema "
+            f"{metadata.get('schema_version')!r} and components "
+            f"{invalid_components or 'current'}; rebuild it with the current "
+            "shared KG reasoning pipeline before running experiments."
+        )
+
+
+def artifact_is_current(path: Path, cfg: Dict) -> bool:
+    metadata_path = dataset_metadata_path(cfg)
+    return path.exists() and (
+        not metadata_path.exists()
+        or path.stat().st_mtime >= metadata_path.stat().st_mtime
+    )
 
 
 def train_gnn_if_needed(
@@ -369,12 +414,19 @@ def train_gnn_if_needed(
     dry_run: bool,
     force_train: bool,
     freeze_encoder: bool,
+    max_train_examples: int = 0,
+    max_dev_examples: int = 0,
 ) -> None:
     checkpoint = Path(cfg["checkpoint_dir"]) / "best_model.pt"
 
-    if checkpoint.exists() and not force_train:
+    if artifact_is_current(checkpoint, cfg) and not force_train:
         log(f"Checkpoint already exists, skipping training: {checkpoint}")
         return
+    if checkpoint.exists() and not force_train:
+        raise ValueError(
+            f"Checkpoint predates the rebuilt {cfg['display']} dataset: "
+            f"{checkpoint}. Re-run with --force-train."
+        )
 
     train_path = str(Path(cfg["data_dir"]) / "train_subgraph_retrieval.jsonl")
     dev_path = str(Path(cfg["data_dir"]) / "dev_subgraph_retrieval.jsonl")
@@ -399,17 +451,17 @@ def train_gnn_if_needed(
         str(candidate_batch_size),
         "--score-mode",
         "neural",
-        "--ranking-margin",
-        "0.2",
-        "--ranking-weight",
-        "2.0",
-        "--bce-weight",
-        "0.2",
-        "--listwise-weight",
-        "0.0",
+        "--architecture-version",
+        "3",
+        "--head-lr",
+        "0.001",
     ]
     if freeze_encoder:
         cmd.append("--freeze-encoder")
+    if max_train_examples > 0:
+        cmd.extend(["--max-train-examples", str(max_train_examples)])
+    if max_dev_examples > 0:
+        cmd.extend(["--max-dev-examples", str(max_dev_examples)])
 
     log(f"Training GNN retriever for {cfg['display']}")
     run_cmd(cmd, dry_run=dry_run)
@@ -424,7 +476,7 @@ def run_lexical_details(
 
     ensure_file(test_path, f"{dataset_key} test data")
 
-    if resume and details_path.exists():
+    if resume and artifact_is_current(details_path, cfg):
         log(f"Reusing lexical details: {details_path}")
         return details_path
 
@@ -452,6 +504,9 @@ def run_gnn_details(
     candidate_batch_size: int,
     dry_run: bool,
     resume: bool,
+    max_train_examples: int = 0,
+    max_dev_examples: int = 0,
+    max_test_examples: int = 0,
 ) -> Path:
     train_path = str(Path(cfg["data_dir"]) / "train_subgraph_retrieval.jsonl")
     dev_path = str(Path(cfg["data_dir"]) / "dev_subgraph_retrieval.jsonl")
@@ -466,7 +521,7 @@ def run_gnn_details(
     if not dry_run:
         ensure_file(checkpoint, f"{dataset_key} checkpoint")
 
-    if resume and details_path.exists():
+    if resume and artifact_is_current(details_path, cfg):
         log(f"Reusing {method_cfg['display']} details: {details_path}")
         return details_path
 
@@ -489,6 +544,12 @@ def run_gnn_details(
         "--details-dir",
         str(out_dir),
     ]
+    if max_train_examples > 0:
+        cmd.extend(["--max-train-examples", str(max_train_examples)])
+    if max_dev_examples > 0:
+        cmd.extend(["--max-dev-examples", str(max_dev_examples)])
+    if max_test_examples > 0:
+        cmd.extend(["--max-test-examples", str(max_test_examples)])
 
     log(f"Evaluating {method_cfg['display']} retrieval for {cfg['display']}")
     run_cmd(cmd, dry_run=dry_run)
@@ -562,7 +623,7 @@ def run_llm_generation(
 
     if cfg["type"] == "text":
         script = "generation/generate_hotpot_answers_with_llm.py"
-    elif cfg["type"] == "owl":
+    elif cfg["type"] in {"kg", "owl"}:
         script = "generation/generate_owl_answers_with_llm.py"
     else:
         raise ValueError(f"Unknown dataset type: {cfg['type']}")
@@ -591,7 +652,7 @@ def run_llm_generation(
     if existing_answer_only:
         cmd.extend(["--answer-only", *existing_answer_only])
 
-    if resume_llm and cfg["type"] == "owl":
+    if resume_llm and cfg["type"] in {"kg", "owl"}:
         cmd.append("--resume")
 
     log(
@@ -1194,7 +1255,11 @@ def run_experiment(args) -> None:
     results: List[Dict] = []
 
     for dataset_key in selected_datasets:
-        cfg = DATASETS[dataset_key]
+        cfg = dict(DATASETS[dataset_key])
+        if args.run_tag:
+            cfg["checkpoint_dir"] = f"{cfg['checkpoint_dir']}_{args.run_tag}"
+            cfg["output_dir"] = str(Path(cfg["output_dir"]) / "runs" / args.run_tag)
+        validate_dataset_schema(cfg)
         selected_methods = methods_by_dataset[dataset_key]
 
         print("\n" + "#" * 100, flush=True)
@@ -1212,6 +1277,8 @@ def run_experiment(args) -> None:
                 dry_run=args.dry_run,
                 force_train=args.force_train,
                 freeze_encoder=not args.fine_tune_encoder,
+                max_train_examples=args.max_train_examples,
+                max_dev_examples=args.max_dev_examples,
             )
 
         details_by_method: Dict[str, Path] = {}
@@ -1242,6 +1309,9 @@ def run_experiment(args) -> None:
                     candidate_batch_size=args.candidate_batch_size,
                     dry_run=args.dry_run,
                     resume=args.resume,
+                    max_train_examples=args.max_train_examples,
+                    max_dev_examples=args.max_dev_examples,
+                    max_test_examples=args.max_test_examples,
                 )
 
             details_by_method[method_key] = details_path
@@ -1319,6 +1389,22 @@ def run_experiment(args) -> None:
                     / f"metrics_gnn_rag_top{args.top_k}{reader_tag}{fallback_tag}{support_tag}_{model_tag}.json"
                 )
 
+                if args.skip_llm:
+                    retrieval_metrics = load_retrieval_metrics(
+                        method_out_dir=method_out_dir,
+                        top_k=args.top_k,
+                    )
+                    append_result_row(
+                        results=results,
+                        dataset_key=dataset_key,
+                        method_key=method_key,
+                        metrics=retrieval_metrics,
+                        llm_stats={},
+                        top_k=args.top_k,
+                        reader_model=args.reader_model,
+                    )
+                    continue
+
                 if not args.skip_llm:
                     run_gnn_rag_generation(
                         dataset_key=dataset_key,
@@ -1386,6 +1472,22 @@ def run_experiment(args) -> None:
                 continue
 
             details_path = details_by_method[method_key]
+
+            if args.skip_llm:
+                retrieval_metrics = load_retrieval_metrics(
+                    method_out_dir=method_out_dir,
+                    top_k=args.top_k,
+                )
+                append_result_row(
+                    results=results,
+                    dataset_key=dataset_key,
+                    method_key=method_key,
+                    metrics=retrieval_metrics,
+                    llm_stats={},
+                    top_k=args.top_k,
+                    reader_model=args.reader_model,
+                )
+                continue
 
             if not args.skip_llm:
                 run_llm_generation(
@@ -1470,7 +1572,7 @@ def main():
         ),
         help=(
             "Comma-separated dataset keys. Choices: "
-            "hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,"
+            "hotpotqa,2wiki,familyowl_1hop,familyowl_1hop_dev,familyowl_2hop,"
             "owl2bench_1hop,owl2bench_2hop,"
             "pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop"
         ),
@@ -1522,6 +1624,18 @@ def main():
 
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--candidate-batch-size", type=int, default=512)
+    parser.add_argument(
+        "--run-tag",
+        type=str,
+        default="",
+        help=(
+            "Isolate development checkpoints and outputs under this tag "
+            "instead of overwriting full-run artifacts."
+        ),
+    )
+    parser.add_argument("--max-train-examples", type=int, default=0)
+    parser.add_argument("--max-dev-examples", type=int, default=0)
+    parser.add_argument("--max-test-examples", type=int, default=0)
 
     parser.add_argument(
         "--fine-tune-encoder",
@@ -1553,6 +1667,15 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.run_tag:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", args.run_tag):
+            parser.error(
+                "--run-tag must contain only letters, numbers, '.', '_' or '-'"
+            )
+        if args.output_csv == "outputs/full_results/full_pipeline_results.csv":
+            args.output_csv = f"outputs/development_runs/{args.run_tag}/results.csv"
+        if args.output_json == "outputs/full_results/full_pipeline_results.json":
+            args.output_json = f"outputs/development_runs/{args.run_tag}/results.json"
     run_experiment(args)
 
 

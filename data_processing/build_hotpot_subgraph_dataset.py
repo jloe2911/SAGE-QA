@@ -808,7 +808,6 @@ def build_rows_for_example(
         kg_construction_method = str(cached_kg.get("construction_method", "cache"))
     else:
         kg_triples, kg_construction_method = construct_text_kg(
-            provided_evidences=example.get("evidences", []),
             sentence_records=sentence_records,
             question=question,
             config=kg_config,
@@ -1119,26 +1118,18 @@ def main():
         "--max-kg-bridge-triples",
         type=int,
         default=64,
-        help=(
-            "Maximum KG triples to attach per example. Applies to provided, "
-            "deterministic, and LLM-constructed triples."
-        ),
+        help=("Maximum context-derived KG triples to attach per example."),
     )
     parser.add_argument(
         "--kg-construction-backend",
         choices=[
-            "auto",
-            "provided",
             "deterministic",
             "llm",
             "llm_with_title_bridges",
-            "llm_with_provided",
-            "none",
         ],
-        default="auto",
+        default="deterministic",
         help=(
-            "How to build text benchmark KG triples. auto uses provided triples "
-            "when available, otherwise falls back to deterministic title bridges. "
+            "How to build KG triples from question/context only. "
             "llm extracts triples from the example context. "
             "llm_with_title_bridges combines context-only LLM triples with "
             "deterministic title co-mention bridges."
@@ -1174,13 +1165,8 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     kg_cache_dir = args.kg_cache_dir or (out_dir / "kg_cache")
-    kg_backend = (
-        "deterministic"
-        if args.kg_construction_backend == "none"
-        else args.kg_construction_backend
-    )
     kg_config = KGConstructionConfig(
-        backend=kg_backend,
+        backend=args.kg_construction_backend,
         model=args.kg_construction_model,
         max_triples=args.max_kg_bridge_triples,
         max_context_sentences=args.kg_max_context_sentences,
@@ -1189,12 +1175,9 @@ def main():
         max_retries=args.kg_max_retries,
         retry_initial_sleep=args.kg_retry_initial_sleep,
     )
-    if args.kg_construction_backend == "none":
-        kg_config.max_triples = 0
     llm_kg_constructor = (
         LLMKGConstructor(kg_config)
-        if args.kg_construction_backend
-        in {"llm", "llm_with_provided", "llm_with_title_bridges"}
+        if args.kg_construction_backend in {"llm", "llm_with_title_bridges"}
         else None
     )
 

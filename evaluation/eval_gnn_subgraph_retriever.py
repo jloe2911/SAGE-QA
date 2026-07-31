@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import torch
@@ -35,6 +36,7 @@ def load_gnn_checkpoint(checkpoint_path: str, device):
         "gnn_hidden_dim": 128,
         "gnn_layers": 2,
         "classifier_hidden_dim": 128,
+        "architecture_version": 1,
         "freeze_encoder": False,
         "score_mode": "neural",
         "size_penalty": 0.01,
@@ -45,6 +47,29 @@ def print_samples(details, n=3):
     print("\nSample predictions:")
     for item in details[:n]:
         print(json.dumps(item, indent=2, ensure_ascii=False))
+
+
+def summarize_failure_modes(details):
+    counts = Counter(item.get("failure_mode", "unknown") for item in details)
+    failures = [
+        {
+            "example_id": item["example_id"],
+            "question": item["question"],
+            "failure_mode": item.get("failure_mode", "unknown"),
+            "oracle_f1": item.get("candidate_oracle_f1"),
+            "best_exact_rank": item.get("best_exact_rank"),
+            "best_entailing_rank": item.get("best_entailing_rank"),
+            "top1_f1": item.get("top1_best_set_f1_to_gold"),
+            "top1_query_entailed": item.get("top1_query_entailed"),
+            "top1_units": item.get("top1_subgraph_units", []),
+        }
+        for item in details
+        if item.get("failure_mode") != "pass_exact"
+    ]
+    return {
+        "counts": dict(sorted(counts.items())),
+        "failures": failures,
+    }
 
 
 def evaluate_file(
@@ -60,11 +85,15 @@ def evaluate_file(
     max_examples: int = 0,
     source_name: str | None = None,
 ):
-    rows = load_jsonl(path, source_name=source_name)
-    examples = prepare_examples(rows)
-
-    if max_examples and max_examples > 0:
-        examples = examples[:max_examples]
+    rows = load_jsonl(
+        path,
+        source_name=source_name,
+        max_examples=max_examples,
+    )
+    # Evaluation must rank the complete materialized candidate pool. Reusing
+    # training-time negative subsampling makes metrics stochastic and can hide
+    # the model's actual highest-scoring false positives.
+    examples = prepare_examples(rows, subsample_candidates=False)
 
     criterion = nn.BCEWithLogitsLoss()
 
@@ -85,11 +114,14 @@ def evaluate_file(
     print_samples(details, n=3)
 
     split_metrics = split_support_metrics(details)
+    failure_summary = summarize_failure_modes(details)
 
     print(f"\n=== {split_name} SPLIT METRICS ===")
     print(json.dumps(split_metrics, indent=2, ensure_ascii=False))
+    print(f"\n=== {split_name} FAILURE DIAGNOSTICS ===")
+    print(json.dumps(failure_summary, indent=2, ensure_ascii=False))
 
-    return metrics, details, split_metrics
+    return metrics, details, split_metrics, failure_summary
 
 
 def main():
@@ -198,6 +230,7 @@ def main():
         classifier_hidden_dim=checkpoint.get("classifier_hidden_dim", 128),
         dropout=0.1,
         freeze_encoder=checkpoint.get("freeze_encoder", False),
+        architecture_version=checkpoint.get("architecture_version", 1),
     ).to(device)
 
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -216,7 +249,7 @@ def main():
             print(f"[WARN] Skipping missing split file: {path}")
             continue
 
-        metrics, details, split_metrics = evaluate_file(
+        metrics, details, split_metrics, failure_summary = evaluate_file(
             split_name=split_name,
             path=path,
             model=model,
@@ -234,6 +267,7 @@ def main():
             "metrics": metrics,
             "details": details,
             "split_metrics": split_metrics,
+            "failure_summary": failure_summary,
         }
 
     if args.save_details:
@@ -261,6 +295,18 @@ def main():
                 encoding="utf-8",
             ) as f:
                 json.dump(result["details"], f, indent=2, ensure_ascii=False)
+
+            with open(
+                out_dir / f"{split_name}_failure_summary.json",
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(
+                    result["failure_summary"],
+                    f,
+                    indent=2,
+                    ensure_ascii=False,
+                )
 
         # Convenience copy for collect_final_results.py
         if "test" in all_results:

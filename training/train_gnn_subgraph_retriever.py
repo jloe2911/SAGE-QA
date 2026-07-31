@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import random
 import string
@@ -9,7 +10,6 @@ from typing import Any, Dict, List, Set, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.optim import AdamW
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 from tqdm import tqdm
@@ -23,8 +23,8 @@ from models.gnn_subgraph_retriever import (
     GNNSubgraphRetriever,
     build_graph_inputs_for_example,
     compute_subgraph_symbolic_features,
+    token_set_for_match,
 )
-from utils.tokenizer import load_tokenizer
 from utils.eval_splits import infer_dataset_name, infer_hop, infer_answer_type
 
 
@@ -57,12 +57,34 @@ def row_matches_source(row: Dict, source_name: str | None) -> bool:
     return source_name in candidates or example_id.startswith(f"{source_name}__")
 
 
-def load_jsonl(path: str, source_name: str | None = None) -> List[Dict]:
+def load_jsonl(
+    path: str,
+    source_name: str | None = None,
+    max_examples: int = 0,
+    sample_seed: int = RANDOM_SEED,
+) -> List[Dict]:
+    selected_ids = None
+    if max_examples > 0:
+        example_ids = set()
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                if row_matches_source(row, source_name):
+                    example_ids.add(str(row["example_id"]))
+
+        def sample_key(example_id: str) -> str:
+            value = f"{sample_seed}:{example_id}".encode("utf-8")
+            return hashlib.sha256(value).hexdigest()
+
+        selected_ids = set(sorted(example_ids, key=sample_key)[:max_examples])
+
     rows = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             row = json.loads(line)
-            if row_matches_source(row, source_name):
+            if row_matches_source(row, source_name) and (
+                selected_ids is None or str(row["example_id"]) in selected_ids
+            ):
                 rows.append(row)
     return rows
 
@@ -94,9 +116,7 @@ def reconstruct_candidate_axioms(example_rows: List[Dict]) -> List[str]:
         graph_units = []
         graph_units.extend(row.get("subgraph_units", []) or [])
         graph_units.extend(row.get("graph_context_units", []) or [])
-        if not _is_text_dataset(row):
-            graph_units.extend(row.get("kg_evidence_units", []) or [])
-            graph_units.extend(kg_units_from_evidences(row.get("evidences", []) or []))
+        graph_units.extend(row.get("kg_evidence_units", []) or [])
 
         for unit in graph_units:
             if unit not in seen:
@@ -106,38 +126,12 @@ def reconstruct_candidate_axioms(example_rows: List[Dict]) -> List[str]:
     return axioms
 
 
-def clean_kg_part(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "").replace("\n", " ")).strip()
-
-
-def kg_units_from_evidences(evidences: Any) -> List[str]:
-    units = []
-    seen = set()
-    if not isinstance(evidences, list):
-        return units
-    for ev in evidences:
-        if not isinstance(ev, list) or len(ev) < 3:
-            continue
-        unit = (
-            f"KG::{clean_kg_part(ev[0])}::"
-            f"{clean_kg_part(ev[1])}::{clean_kg_part(ev[2])}"
-        )
-        if unit not in seen:
-            seen.add(unit)
-            units.append(unit)
-    return units
-
-
 def gold_support_units_from_row(row: Dict) -> List[str]:
-    if _is_text_dataset(row):
-        return row.get("gold_support_units", []) or []
-    return row.get("gold_units", []) or []
+    return row.get("gold_units", []) or row.get("gold_support_units", []) or []
 
 
 def gold_explanations_from_row(row: Dict) -> List[List[str]]:
     gold_units = gold_support_units_from_row(row)
-    if _is_text_dataset(row):
-        return [gold_units] if gold_units else []
     explicit = row.get("gold_explanations", []) or []
     if explicit:
         return explicit
@@ -199,7 +193,11 @@ def binary_label_from_target(target: float) -> int:
 # =========================================================
 
 
-def prepare_examples(rows: List[Dict]) -> List[Dict]:
+def prepare_examples(
+    rows: List[Dict],
+    *,
+    subsample_candidates: bool = True,
+) -> List[Dict]:
     """
     Converts flat candidate-subgraph rows into example-level graph objects.
 
@@ -220,7 +218,9 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
             or example_id
         )
         question = str(question)
-        sparql_query = str(first.get("sparql_query") or "")
+        # Retrieval is natural-language-only across FamilyOWL and text QA.
+        # Stored SPARQL annotations are evaluation metadata, not model input.
+        sparql_query = ""
         dataset = infer_dataset_name(example_id, first)
         hop = infer_hop(example_id, first)
         answer_type = infer_answer_type(example_id, first)
@@ -240,16 +240,14 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
 
             target = ranking_target(row)
             binary_label = binary_label_from_target(target)
-            if _is_text_dataset(row):
+            if _uses_sentence_support(row):
                 kg_bridge_units = row.get("graph_context_units", []) or []
             else:
-                kg_bridge_units = (
-                    row.get("graph_context_units", [])
-                    or row.get("kg_evidence_units", [])
-                    or kg_units_from_evidences(row.get("evidences", []) or [])
+                kg_bridge_units = row.get("graph_context_units", []) or row.get(
+                    "kg_evidence_units", []
                 )
 
-            if _is_text_dataset(row):
+            if _uses_sentence_support(row):
                 # Text-QA builders already emit an inference-safe text feature
                 # vector. Recomputing it with OWL axiom parsing would turn
                 # SENT::... units into mostly-zero KG features.
@@ -259,7 +257,7 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
             else:
                 symbolic_features = compute_subgraph_symbolic_features(
                     question=str(row.get("question") or question),
-                    sparql_query=str(row.get("sparql_query") or sparql_query),
+                    sparql_query="",
                     subgraph_units=subgraph_units,
                     use_gold_features=False,
                     exact_match_any_gold=row.get("exact_match_any_gold", False),
@@ -273,14 +271,22 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                     "example_id": example_id,
                     "dataset": dataset,
                     "hop": hop,
-                    "answer": answer,
                     "answer_type": answer_type,
                     "question": str(row.get("question") or question),
-                    "sparql_query": str(row.get("sparql_query") or sparql_query),
+                    "sparql_query": "",
+                    "reference_sparql_query": row.get(
+                        "reference_sparql_query",
+                        row.get("sparql_query", ""),
+                    ),
                     "subgraph_units": subgraph_units,
                     "subgraph_node_ids": node_ids,
                     "subgraph_size": len(subgraph_units),
                     "graph_context_units": kg_bridge_units,
+                    "evidence_unit_type": row.get("evidence_unit_type", ""),
+                    "gold_kg_coverage": float(row.get("gold_kg_coverage", 0.0)),
+                    "gold_context_coverage": float(
+                        row.get("gold_context_coverage", 0.0)
+                    ),
                     "symbolic_features": symbolic_features,
                     # Ranking supervision
                     "rank_target": target,
@@ -306,20 +312,18 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                     "contains_any_gold_explanation": bool(
                         row.get("contains_any_gold_explanation", False)
                     ),
-                    "dataset": dataset,
-                    "hop": hop,
                     "answer": row.get("answer", row.get("Answer", answer)),
-                    "answer_type": answer_type,
                     "task_type": row.get("task_type", row.get("Task Type", "")),
                 }
             )
 
-        candidate_rows = subsample_candidate_rows(
-            candidate_rows,
-            max_pos=64,
-            max_hard_neg=128,
-            max_easy_neg=128,
-        )
+        if subsample_candidates:
+            candidate_rows = subsample_candidate_rows(
+                candidate_rows,
+                max_pos=64,
+                max_hard_neg=128,
+                max_easy_neg=128,
+            )
 
         if not candidate_rows:
             continue
@@ -388,15 +392,15 @@ def _parse_sent_unit(unit: str) -> Tuple[str, int, str]:
     return "", -1, str(unit)
 
 
-def _is_text_dataset(row: Dict[str, Any]) -> bool:
+def _uses_sentence_support(row: Dict[str, Any]) -> bool:
+    unit_type = str(row.get("evidence_unit_type", "")).lower()
+    if unit_type:
+        return unit_type == "sentence"
+    units = row.get("subgraph_units", []) or []
+    if units:
+        return any(str(unit).startswith("SENT::") for unit in units)
     dataset = str(row.get("dataset", "") or row.get("source_dataset", ""))
-    return dataset in {
-        "HotpotQA",
-        "2WikiMultiHopQA",
-        "2WikiMultihopQA",
-        "MuSiQue",
-        "Musique",
-    }
+    return dataset in {"HotpotQA", "MuSiQue", "Musique"}
 
 
 def _question_title_coverage(question: str, units: List[str]) -> float:
@@ -673,7 +677,7 @@ def adjusted_score(row, score_mode="neural", size_penalty=0.01):
         )
 
     if score_mode == "completeness_adjusted":
-        if _is_text_dataset(row):
+        if _uses_sentence_support(row):
             return float(row["score"]) + sageqa_text_compact_adjustment(row)
 
         feats = row.get("symbolic_features", [])
@@ -692,12 +696,12 @@ def adjusted_score(row, score_mode="neural", size_penalty=0.01):
         )
 
     if score_mode == "sageqa_compact":
-        if _is_text_dataset(row):
+        if _uses_sentence_support(row):
             return float(row["score"]) + sageqa_text_compact_adjustment(row)
         return float(row["score"]) + sageqa_compact_adjustment(row)
 
     if score_mode == "sageqa_text_chain":
-        if _is_text_dataset(row):
+        if _uses_sentence_support(row):
             return float(row["score"]) + sageqa_text_chain_adjustment(row)
         return float(row["score"]) + sageqa_compact_adjustment(row)
 
@@ -752,35 +756,39 @@ def score_candidate_rows(
     candidate_rows: List[Dict],
     device,
 ):
-    query_embeddings = []
-    node_text_embeddings = []
-    node_symbolic_features = []
-    edge_indices = []
-    subgraph_node_ids = []
-    subgraph_symbolic_features = []
+    query_embedding = encoded_graph["query_embedding"]
+    # All candidates in this call belong to the same question-level graph.
+    # Run message passing once and reuse the contextualized nodes for every
+    # candidate instead of recomputing the GNN hundreds of times.
+    node_embeddings = encoded_graph.get("contextual_node_embeddings")
+    if node_embeddings is None:
+        node_embeddings = model.encode_graph(
+            node_text_embeddings=encoded_graph["node_text_embeddings"],
+            node_symbolic_features=encoded_graph["node_symbolic_features"],
+            edge_index=encoded_graph["edge_index"],
+            query_embedding=query_embedding,
+        )
+        encoded_graph["contextual_node_embeddings"] = node_embeddings
 
+    outputs = []
     for row in candidate_rows:
-        query_embeddings.append(encoded_graph["query_embedding"])
-        node_text_embeddings.append(encoded_graph["node_text_embeddings"])
-        node_symbolic_features.append(encoded_graph["node_symbolic_features"])
-        edge_indices.append(encoded_graph["edge_index"])
-
-        subgraph_node_ids.append(
-            torch.tensor(row["subgraph_node_ids"], dtype=torch.long, device=device)
+        outputs.append(
+            model.score_encoded_subgraph(
+                query_embedding=query_embedding,
+                node_embeddings=node_embeddings,
+                subgraph_node_ids=torch.tensor(
+                    row["subgraph_node_ids"], dtype=torch.long, device=device
+                ),
+                subgraph_symbolic_features=torch.tensor(
+                    row["symbolic_features"], dtype=torch.float, device=device
+                ),
+            )
         )
 
-        subgraph_symbolic_features.append(
-            torch.tensor(row["symbolic_features"], dtype=torch.float, device=device)
-        )
-
-    return model.forward_batch_graphs(
-        query_embeddings=query_embeddings,
-        node_text_embeddings=node_text_embeddings,
-        node_symbolic_features=node_symbolic_features,
-        edge_indices=edge_indices,
-        subgraph_node_ids=subgraph_node_ids,
-        subgraph_symbolic_features=subgraph_symbolic_features,
-    )
+    return {
+        "logits": torch.stack([output["logit"] for output in outputs]),
+        "probs": torch.stack([output["prob"] for output in outputs]),
+    }
 
 
 def subsample_candidate_rows(
@@ -834,149 +842,58 @@ def subsample_candidate_rows(
 # =========================================================
 
 
-def pairwise_ranking_loss(
+def graded_listwise_loss(
     scores: torch.Tensor,
-    targets: torch.Tensor,
-    margin: float = 0.2,
-    max_pairs: int = 512,
-) -> torch.Tensor:
+    candidate_rows: List[Dict],
+) -> Tuple[torch.Tensor, Dict[str, Any]]:
     """
-    Focused within-question ranking loss.
+    Match the score distribution to graded evidence-set quality.
 
-    Prioritizes:
-      complete supports > partial supports
-      complete supports > irrelevant supports
-      exact supports > sufficient supersets
+    Each candidate receives target probability proportional to its gold-set
+    F1. Exact proofs therefore have the highest individual relevance, useful
+    partial proofs retain signal, and irrelevant candidates receive no target
+    mass. The same coefficient-free rule applies when upstream extraction
+    prevents an exact proof from entering the candidate pool.
     """
-    device = scores.device
-
-    exact = []
-    sufficient = []
-    partial = []
-    irrelevant = []
-
-    for i, t in enumerate(targets.detach().cpu().tolist()):
-        if t >= 0.999:
-            exact.append(i)
-        elif t >= 0.899:
-            sufficient.append(i)
-        elif t > 0.0:
-            partial.append(i)
-        else:
-            irrelevant.append(i)
-
-    weighted_pairs = []
-
-    # Exact should outrank sufficient supersets.
-    for i in exact:
-        for j in sufficient:
-            weighted_pairs.append((i, j, 2.0))
-
-    # Exact and sufficient supports should strongly outrank partial supports.
-    for i in exact + sufficient:
-        for j in partial:
-            weighted_pairs.append((i, j, 3.0))
-
-    # Exact and sufficient supports should outrank irrelevant subgraphs.
-    for i in exact + sufficient:
-        for j in irrelevant:
-            weighted_pairs.append((i, j, 2.0))
-
-    # Partial supports should weakly outrank irrelevant subgraphs.
-    for i in partial:
-        for j in irrelevant:
-            weighted_pairs.append((i, j, 0.5))
-
-    if not weighted_pairs:
-        return torch.tensor(0.0, device=device)
-
-    if len(weighted_pairs) > max_pairs:
-        weighted_pairs = random.sample(weighted_pairs, max_pairs)
-
-    better = torch.tensor(
-        [p[0] for p in weighted_pairs], dtype=torch.long, device=device
+    targets = torch.tensor(
+        [float(row.get("rank_target", 0.0)) for row in candidate_rows],
+        dtype=torch.float,
+        device=scores.device,
     )
-    worse = torch.tensor(
-        [p[1] for p in weighted_pairs], dtype=torch.long, device=device
-    )
-    weights = torch.tensor(
-        [p[2] for p in weighted_pairs], dtype=torch.float, device=device
-    )
+    target_sum = targets.sum()
+    if target_sum <= 0:
+        # This is normally excluded as unrankable, but keep the function safe
+        # for direct use and future datasets with no aligned evidence.
+        loss = scores.sum() * 0.0
+        target_distribution = torch.zeros_like(targets)
+    else:
+        target_distribution = targets / target_sum
+        loss = -(target_distribution * torch.log_softmax(scores, dim=0)).sum()
 
-    losses = F.relu(margin - scores[better] + scores[worse])
-    return (losses * weights).mean()
-
-
-def listwise_soft_target_loss(
-    scores: torch.Tensor,
-    targets: torch.Tensor,
-    temperature: float = 0.1,
-) -> torch.Tensor:
-    """
-    Optional listwise loss.
-
-    Converts graded targets into a soft distribution and encourages
-    the model score distribution to match it.
-
-    This helps when many candidates have similar pairwise relationships.
-    """
-    if targets.max() <= 0:
-        return torch.tensor(0.0, device=scores.device)
-
-    target_dist = F.softmax(targets / temperature, dim=0)
-    score_log_dist = F.log_softmax(scores, dim=0)
-    return F.kl_div(score_log_dist, target_dist, reduction="batchmean")
+    return loss, {
+        "target_support": int((targets > 0).sum().item()),
+        "exact_candidates": sum(
+            bool(row.get("exact_match_any_gold", False)) for row in candidate_rows
+        ),
+        "best_available_target": float(targets.max().detach().cpu()),
+        "best_target_probability": float(target_distribution.max().detach().cpu()),
+    }
 
 
 def compute_example_loss(
     scores: torch.Tensor,
     candidate_rows: List[Dict],
-    bce_criterion,
-    ranking_margin: float,
-    ranking_weight: float,
-    bce_weight: float,
-    listwise_weight: float,
-    max_pairs: int,
 ) -> Tuple[torch.Tensor, Dict]:
-    device = scores.device
-
-    targets = torch.tensor(
-        [float(r["rank_target"]) for r in candidate_rows],
-        dtype=torch.float,
-        device=device,
-    )
-
-    binary_labels = torch.tensor(
-        [float(r["label"]) for r in candidate_rows],
-        dtype=torch.float,
-        device=device,
-    )
-
-    ranking = pairwise_ranking_loss(
+    graded_listwise, target_stats = graded_listwise_loss(
         scores=scores,
-        targets=targets,
-        margin=ranking_margin,
-        max_pairs=max_pairs,
+        candidate_rows=candidate_rows,
     )
-
-    bce = bce_criterion(scores, binary_labels)
-
-    listwise = listwise_soft_target_loss(
-        scores=scores,
-        targets=targets,
-        temperature=0.1,
-    )
-
-    total = ranking_weight * ranking + bce_weight * bce + listwise_weight * listwise
-
     stats = {
-        "ranking_loss": float(ranking.detach().cpu()),
-        "bce_loss": float(bce.detach().cpu()),
-        "listwise_loss": float(listwise.detach().cpu()),
-        "total_loss": float(total.detach().cpu()),
+        "graded_listwise_loss": float(graded_listwise.detach().cpu()),
+        "total_loss": float(graded_listwise.detach().cpu()),
+        **target_stats,
     }
-
-    return total, stats
+    return graded_listwise, stats
 
 
 def _unit_text(row: Dict[str, Any]) -> str:
@@ -1027,25 +944,17 @@ def is_fact_unit(unit: str) -> bool:
 
 
 def query_property_match(row: Dict[str, Any]) -> float:
-    sparql = row.get("sparql_query", "") or row.get("SPARQL Query", "")
-    props = extract_query_properties(sparql)
-    text = _unit_text(row)
-
-    if not props:
-        return 0.0
-
-    return 1.0 if any(p in text for p in props) else 0.0
+    question_tokens = token_set_for_match(row.get("question", ""))
+    unit_tokens = token_set_for_match(_unit_text(row))
+    return 1.0 if question_tokens & unit_tokens else 0.0
 
 
 def query_entity_coverage(row: Dict[str, Any]) -> float:
-    sparql = row.get("sparql_query", "") or row.get("SPARQL Query", "")
-    ents = extract_query_entities(sparql)
-    text = _unit_text(row)
-
-    if not ents:
+    question_tokens = token_set_for_match(row.get("question", ""))
+    unit_tokens = token_set_for_match(_unit_text(row))
+    if not question_tokens:
         return 0.0
-
-    return sum(1 for e in ents if e in text) / max(len(ents), 1)
+    return len(question_tokens & unit_tokens) / len(question_tokens)
 
 
 def fact_rule_mix_symbolic(row: Dict[str, Any]) -> float:
@@ -1158,12 +1067,12 @@ def sageqa_proof_adjustment(
     by answer generation. Smaller terms reward query coverage and compact
     fact/schema mixtures, then penalize noisy oversized candidates.
     """
-    if _is_text_dataset(row):
+    if _uses_sentence_support(row):
         return sageqa_text_chain_adjustment(row)
 
     units = row.get("subgraph_units", []) or []
     size = subgraph_size(row)
-    query = str(row.get("sparql_query", "") or row.get("question", ""))
+    query = str(row.get("question", ""))
 
     proof_score = 0.0
     try:
@@ -1214,7 +1123,7 @@ def compute_adjusted_score(
         return base_score - size_penalty * size
 
     if score_mode == "completeness_adjusted":
-        if _is_text_dataset(row):
+        if _uses_sentence_support(row):
             return base_score + sageqa_text_compact_adjustment(row)
 
         feats = row.get("symbolic_features", [])
@@ -1233,13 +1142,13 @@ def compute_adjusted_score(
         )
 
     if score_mode == "sageqa_compact":
-        if _is_text_dataset(row):
+        if _uses_sentence_support(row):
             return base_score + sageqa_text_compact_adjustment(row)
 
         return base_score + sageqa_compact_adjustment(row)
 
     if score_mode == "sageqa_text_chain":
-        if _is_text_dataset(row):
+        if _uses_sentence_support(row):
             return base_score + sageqa_text_chain_adjustment(row)
 
         return base_score + sageqa_compact_adjustment(row)
@@ -1307,6 +1216,10 @@ def evaluate(
     union_recall5 = 0.0
 
     details = []
+    score_std_total = 0.0
+    collapsed_score_examples = 0
+    exact_reciprocal_rank = 0.0
+    exact_candidate_examples = 0
 
     def union_scores(top_rows: List[Dict]) -> Tuple[float, float, float]:
         if not top_rows:
@@ -1399,6 +1312,13 @@ def evaluate(
 
             if not scored_rows:
                 continue
+            neural_scores = torch.tensor(
+                [row["score"] for row in scored_rows], dtype=torch.float
+            )
+            score_std = float(neural_scores.std(unbiased=False))
+            score_range = float(neural_scores.max() - neural_scores.min())
+            score_std_total += score_std
+            collapsed_score_examples += int(score_range <= 1e-6)
 
             scored_rows = sorted(
                 scored_rows,
@@ -1410,7 +1330,47 @@ def evaluate(
             top3 = scored_rows[:3]
             top5 = scored_rows[:5]
 
+            exact_ranked = [
+                (rank, row)
+                for rank, row in enumerate(scored_rows, start=1)
+                if row["exact_match_any_gold"]
+            ]
+            entailing_ranked = [
+                (rank, row)
+                for rank, row in enumerate(scored_rows, start=1)
+                if len(row.get("symbolic_features", [])) >= 7
+                and float(row["symbolic_features"][6]) > 0.5
+            ]
+            oracle_row = max(
+                scored_rows,
+                key=lambda row: row["best_set_f1_to_gold"],
+            )
+            best_exact_rank = exact_ranked[0][0] if exact_ranked else None
+            best_exact_score = exact_ranked[0][1]["score"] if exact_ranked else None
+            best_entailing_rank = entailing_ranked[0][0] if entailing_ranked else None
+            top1_query_entailed = bool(
+                len(top1.get("symbolic_features", [])) >= 7
+                and float(top1["symbolic_features"][6]) > 0.5
+            )
+            top1_proof_compactness = (
+                float(top1["symbolic_features"][7])
+                if len(top1.get("symbolic_features", [])) >= 8
+                else 0.0
+            )
+
+            if top1["exact_match_any_gold"]:
+                failure_mode = "pass_exact"
+            elif top1_query_entailed:
+                failure_mode = "alternative_entailing_or_gold_mismatch"
+            elif not exact_ranked:
+                failure_mode = "candidate_generation_no_exact"
+            else:
+                failure_mode = "ranking_exact_available"
+
             total_examples += 1
+            if best_exact_rank is not None:
+                exact_candidate_examples += 1
+                exact_reciprocal_rank += 1.0 / best_exact_rank
 
             hit1 += int(top1["label"] == 1)
             exact_hit1 += int(top1["exact_match_any_gold"])
@@ -1468,7 +1428,28 @@ def evaluate(
                     "top1_contains_any_gold_explanation": top1[
                         "contains_any_gold_explanation"
                     ],
+                    "top1_query_entailed": top1_query_entailed,
+                    "top1_proof_compactness": top1_proof_compactness,
+                    "candidate_pool_size": len(scored_rows),
+                    "candidate_score_std": score_std,
+                    "candidate_score_range": score_range,
+                    "candidate_oracle_f1": oracle_row["best_set_f1_to_gold"],
+                    "exact_candidate_available": bool(exact_ranked),
+                    "best_exact_rank": best_exact_rank,
+                    "best_exact_score": best_exact_score,
+                    "rank1_minus_exact_score_gap": (
+                        top1["score"] - best_exact_score
+                        if best_exact_score is not None
+                        else None
+                    ),
+                    "entailing_candidate_available": bool(entailing_ranked),
+                    "best_entailing_rank": best_entailing_rank,
+                    "failure_mode": failure_mode,
                     "gold_support_units": top1["gold_support_units"],
+                    "gold_explanations": top1["gold_explanations"],
+                    "evidence_unit_type": top1.get("evidence_unit_type", ""),
+                    "gold_kg_coverage": top1.get("gold_kg_coverage", 0.0),
+                    "gold_context_coverage": top1.get("gold_context_coverage", 0.0),
                     "top5": [
                         {
                             "rank": i + 1,
@@ -1488,6 +1469,15 @@ def evaluate(
                                 "contains_any_gold_explanation"
                             ],
                             "exact_match_any_gold": r["exact_match_any_gold"],
+                            "query_entailed": bool(
+                                len(r.get("symbolic_features", [])) >= 7
+                                and float(r["symbolic_features"][6]) > 0.5
+                            ),
+                            "proof_compactness": (
+                                float(r["symbolic_features"][7])
+                                if len(r.get("symbolic_features", [])) >= 8
+                                else 0.0
+                            ),
                         }
                         for i, r in enumerate(top5)
                     ],
@@ -1504,6 +1494,10 @@ def evaluate(
         "loss": total_loss / max(total_batches, 1),
         "score_mode": score_mode,
         "size_penalty": size_penalty,
+        "mean_candidate_score_std": score_std_total / n,
+        "collapsed_score_rate": collapsed_score_examples / n,
+        "exact_candidate_rate": exact_candidate_examples / n,
+        "exact_mrr": exact_reciprocal_rank / max(exact_candidate_examples, 1),
         "hit@1": hit1 / n,
         "exact_hit@1": exact_hit1 / n,
         "contains_gold_hit@1": contains_hit1 / n,
@@ -1547,40 +1541,39 @@ def train(
     save_dir: str,
     model_name: str = "google/bert_uncased_L-2_H-128_A-2",
     lr: float = 2e-5,
+    head_lr: float = 1e-3,
     epochs: int = 5,
     max_length: int = 128,
     candidate_batch_size: int = 256,
     max_train_examples: int = 0,
     max_dev_examples: int = 0,
     freeze_encoder: bool = False,
-    ranking_margin: float = 0.1,
-    ranking_weight: float = 1.0,
-    bce_weight: float = 0.2,
-    listwise_weight: float = 0.2,
-    max_pairs: int = 512,
     score_mode: str = "neural",
     size_penalty: float = 0.01,
     source_name: str | None = None,
+    architecture_version: int = 2,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    train_rows = load_jsonl(train_path, source_name=source_name)
-    dev_rows = load_jsonl(dev_path, source_name=source_name)
+    train_rows = load_jsonl(
+        train_path,
+        source_name=source_name,
+        max_examples=max_train_examples,
+    )
+    dev_rows = load_jsonl(
+        dev_path,
+        source_name=source_name,
+        max_examples=max_dev_examples,
+    )
 
     train_examples = prepare_examples(train_rows)
-    dev_examples = prepare_examples(dev_rows)
+    dev_examples = prepare_examples(dev_rows, subsample_candidates=False)
 
-    # Only rankable examples can contribute ranking loss.
-    # Keep all examples for BCE/listwise, but report rankable count.
+    # Only rankable examples can contribute ranking loss. Count after optional
+    # truncation so smoke-run diagnostics describe the examples actually used.
     train_rankable = sum(int(ex["has_rankable_pairs"]) for ex in train_examples)
     dev_rankable = sum(int(ex["has_rankable_pairs"]) for ex in dev_examples)
-
-    if max_train_examples and max_train_examples > 0:
-        train_examples = train_examples[:max_train_examples]
-
-    if max_dev_examples and max_dev_examples > 0:
-        dev_examples = dev_examples[:max_dev_examples]
 
     print(f"Loaded train subgraph rows: {len(train_rows)}")
     print(f"Loaded dev subgraph rows:   {len(dev_rows)}")
@@ -1589,8 +1582,15 @@ def train(
     print(f"Rankable train examples:    {train_rankable}")
     print(f"Rankable dev examples:      {dev_rankable}")
 
+    # An example with no graded positive/negative pair cannot teach ranking.
+    # Treating every candidate in such an example as a BCE negative is
+    # especially harmful when upstream KG extraction missed the gold evidence.
+    excluded_unrankable = len(train_examples) - train_rankable
+    train_examples = [ex for ex in train_examples if ex["has_rankable_pairs"]]
+    print(f"Excluded unrankable train examples: {excluded_unrankable}")
+
     if not train_examples:
-        raise ValueError("No train examples available.")
+        raise ValueError("No rankable train examples available.")
     if not dev_examples:
         raise ValueError("No dev examples available.")
 
@@ -1605,32 +1605,26 @@ def train(
         classifier_hidden_dim=128,
         dropout=0.1,
         freeze_encoder=freeze_encoder,
+        architecture_version=architecture_version,
     ).to(device)
 
-    # Auxiliary BCE pos_weight
-    all_labels = []
-    for ex in train_examples:
-        for row in ex["candidate_rows"]:
-            all_labels.append(int(row["label"]))
+    print("Training objective: coefficient-free graded listwise ranking")
+    bce_criterion = nn.BCEWithLogitsLoss()
 
-    pos = sum(all_labels)
-    neg = len(all_labels) - pos
-    pos_weight = torch.tensor([neg / max(pos, 1)], dtype=torch.float, device=device)
-
-    print(f"Auxiliary positive rows: {pos}")
-    print(f"Auxiliary negative rows: {neg}")
-    print(f"Using auxiliary BCE pos_weight={pos_weight.item():.4f}")
-    print(f"Ranking margin={ranking_margin}")
-    print(
-        f"Loss weights: ranking={ranking_weight}, bce={bce_weight}, listwise={listwise_weight}"
-    )
-
-    bce_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-
-    optimizer = AdamW(
-        [p for p in model.parameters() if p.requires_grad],
-        lr=lr,
-    )
+    encoder_params = [
+        parameter for parameter in model.encoder.parameters() if parameter.requires_grad
+    ]
+    encoder_param_ids = {id(parameter) for parameter in encoder_params}
+    head_params = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in encoder_param_ids
+    ]
+    optimizer_groups = [{"params": head_params, "lr": head_lr}]
+    if encoder_params:
+        optimizer_groups.append({"params": encoder_params, "lr": lr})
+    optimizer = AdamW(optimizer_groups)
+    print(f"Optimizer learning rates: head={head_lr}, encoder={lr}")
 
     total_steps = max(1, len(train_examples) * epochs)
     scheduler = get_linear_schedule_with_warmup(
@@ -1642,16 +1636,14 @@ def train(
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    best_dev_metric = -1.0
+    best_dev_metric = (-1.0, -1.0, -1.0)
 
     for epoch in range(1, epochs + 1):
         model.train()
         random.shuffle(train_examples)
 
         running_total_loss = 0.0
-        running_ranking_loss = 0.0
-        running_bce_loss = 0.0
-        running_listwise_loss = 0.0
+        exact_candidate_examples = 0
         update_count = 0
 
         pbar = tqdm(train_examples, desc=f"Epoch {epoch}")
@@ -1690,12 +1682,6 @@ def train(
             loss, loss_stats = compute_example_loss(
                 scores=scores,
                 candidate_rows=all_batch_rows,
-                bce_criterion=bce_criterion,
-                ranking_margin=ranking_margin,
-                ranking_weight=ranking_weight,
-                bce_weight=bce_weight,
-                listwise_weight=listwise_weight,
-                max_pairs=max_pairs,
             )
 
             loss.backward()
@@ -1706,22 +1692,16 @@ def train(
             scheduler.step()
 
             running_total_loss += loss_stats["total_loss"]
-            running_ranking_loss += loss_stats["ranking_loss"]
-            running_bce_loss += loss_stats["bce_loss"]
-            running_listwise_loss += loss_stats["listwise_loss"]
+            exact_candidate_examples += int(loss_stats["exact_candidates"] > 0)
             update_count += 1
 
             pbar.set_postfix(
-                total=loss_stats["total_loss"],
-                rank=loss_stats["ranking_loss"],
-                bce=loss_stats["bce_loss"],
-                listwise=loss_stats["listwise_loss"],
+                loss=loss_stats["graded_listwise_loss"],
+                target_support=loss_stats["target_support"],
             )
 
         train_total_loss = running_total_loss / max(update_count, 1)
-        train_ranking_loss = running_ranking_loss / max(update_count, 1)
-        train_bce_loss = running_bce_loss / max(update_count, 1)
-        train_listwise_loss = running_listwise_loss / max(update_count, 1)
+        exact_candidate_rate = exact_candidate_examples / max(update_count, 1)
 
         dev_metrics, dev_details = evaluate(
             model=model,
@@ -1737,19 +1717,31 @@ def train(
 
         print(
             f"Epoch {epoch} | "
-            f"train_total={train_total_loss:.4f} | "
-            f"train_rank={train_ranking_loss:.4f} | "
-            f"train_bce={train_bce_loss:.4f} | "
-            f"train_listwise={train_listwise_loss:.4f} | "
+            f"train_graded_listwise={train_total_loss:.4f} | "
+            f"train_exact_candidates={exact_candidate_rate:.4f} | "
             f"dev_loss={dev_metrics['loss']:.4f} | "
             f"dev_hit@1={dev_metrics['hit@1']:.4f} | "
             f"dev_exact@1={dev_metrics['exact_hit@1']:.4f} | "
+            f"dev_exact_mrr={dev_metrics['exact_mrr']:.4f} | "
             f"dev_contains@1={dev_metrics['contains_gold_hit@1']:.4f} | "
-            f"dev_f1@1={dev_metrics['best_set_f1@1']:.4f}"
+            f"dev_f1@1={dev_metrics['best_set_f1@1']:.4f} | "
+            f"dev_set_f1@3={dev_metrics['set_f1@3']:.4f} | "
+            f"dev_precision@3={dev_metrics['precision@3']:.4f} | "
+            f"dev_recall@3={dev_metrics['recall@3']:.4f}"
         )
+        if dev_metrics["collapsed_score_rate"] > 0.5:
+            print(
+                "[WARN] Candidate-score collapse detected on "
+                f"{dev_metrics['collapsed_score_rate']:.1%} of dev examples."
+            )
 
-        # Choose by dev top-1 F1, because this measures support quality.
-        selection_metric = dev_metrics["best_set_f1@1"]
+        # Shared coefficient-free selection: balance union precision and recall
+        # first, then prefer precision and exact-proof ranking when tied.
+        selection_metric = (
+            dev_metrics["set_f1@3"],
+            dev_metrics["precision@3"],
+            dev_metrics["exact_mrr"],
+        )
 
         if selection_metric > best_dev_metric:
             best_dev_metric = selection_metric
@@ -1762,13 +1754,19 @@ def train(
                 "gnn_hidden_dim": 128,
                 "gnn_layers": 2,
                 "classifier_hidden_dim": 128,
+                "architecture_version": architecture_version,
                 "freeze_encoder": freeze_encoder,
-                "training_objective": "within_question_pairwise_ranking",
-                "ranking_margin": ranking_margin,
-                "ranking_weight": ranking_weight,
-                "bce_weight": bce_weight,
-                "listwise_weight": listwise_weight,
-                "max_pairs": max_pairs,
+                "inference_inputs": ["question", "candidate_units"],
+                "uses_sparql_at_inference": False,
+                "training_objective": "coefficient_free_graded_listwise",
+                "target_distribution": "normalized_candidate_set_f1",
+                "checkpoint_selection": [
+                    "set_f1@3",
+                    "precision@3",
+                    "exact_mrr",
+                ],
+                "encoder_lr": lr,
+                "head_lr": head_lr,
                 "score_mode": score_mode,
                 "size_penalty": size_penalty,
                 "best_dev_metrics": dev_metrics,
@@ -1806,6 +1804,12 @@ def parse_args():
         "--model-name", type=str, default="google/bert_uncased_L-2_H-128_A-2"
     )
     parser.add_argument("--lr", type=float, default=2e-5)
+    parser.add_argument(
+        "--head-lr",
+        type=float,
+        default=1e-3,
+        help="Learning rate for the randomly initialized GNN and classifier.",
+    )
     parser.add_argument("--epochs", type=int, default=5)
 
     parser.add_argument("--max-length", type=int, default=128)
@@ -1815,12 +1819,16 @@ def parse_args():
     parser.add_argument("--max-dev-examples", type=int, default=0)
 
     parser.add_argument("--freeze-encoder", action="store_true")
-
-    parser.add_argument("--ranking-margin", type=float, default=0.2)
-    parser.add_argument("--ranking-weight", type=float, default=1.0)
-    parser.add_argument("--bce-weight", type=float, default=0.2)
-    parser.add_argument("--listwise-weight", type=float, default=0.2)
-    parser.add_argument("--max-pairs", type=int, default=512)
+    parser.add_argument(
+        "--architecture-version",
+        type=int,
+        default=3,
+        choices=[1, 2, 3],
+        help=(
+            "Model architecture. Version 2 adds query-conditioned GNN pooling; "
+            "version 3 replaces the classifier ReLU with a non-dying LeakyReLU."
+        ),
+    )
 
     # For evaluation during training.
     # For GNN, neural is safer initially.
@@ -1856,18 +1864,15 @@ if __name__ == "__main__":
         save_dir=args.save_dir,
         model_name=args.model_name,
         lr=args.lr,
+        head_lr=args.head_lr,
         epochs=args.epochs,
         max_length=args.max_length,
         candidate_batch_size=args.candidate_batch_size,
         max_train_examples=args.max_train_examples,
         max_dev_examples=args.max_dev_examples,
         freeze_encoder=args.freeze_encoder,
-        ranking_margin=args.ranking_margin,
-        ranking_weight=args.ranking_weight,
-        bce_weight=args.bce_weight,
-        listwise_weight=args.listwise_weight,
-        max_pairs=args.max_pairs,
         score_mode=args.score_mode,
         size_penalty=args.size_penalty,
         source_name=args.source_name,
+        architecture_version=args.architecture_version,
     )

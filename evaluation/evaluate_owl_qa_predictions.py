@@ -269,7 +269,7 @@ def retrieval_at_k(item: Dict[str, Any], k: int) -> Optional[Dict[str, float]]:
         cur = support_scores(union_units, gold)
         if cur["f1"] > best_f1:
             best_f1 = cur["f1"]
-            best_precision = cur["precision"]
+            best_precision = cur["prec"]
             best_recall = cur["recall"]
 
     return {
@@ -328,6 +328,8 @@ def evaluate(
         "missing_answers": 0,
         "empty_predictions": 0,
         "errors": 0,
+        "source_graph_coverage": 0.0,
+        "source_graph_coverage_examples": 0,
     }
 
     per_example = []
@@ -340,6 +342,13 @@ def evaluate(
         gold_answer = str(item.get("answer", item.get("gold_answer", "")))
         gold_explanations = item.get("gold_explanations", []) or []
         has_gold_support = bool(gold_explanations)
+        if str(item.get("evidence_unit_type", "")).lower() == "kg_triple":
+            source_coverage = item.get("gold_kg_coverage")
+        else:
+            source_coverage = item.get("gold_context_coverage")
+        if source_coverage is not None:
+            metrics["source_graph_coverage"] += float(source_coverage)
+            metrics["source_graph_coverage_examples"] += 1
 
         ans_row = answers_by_id.get(example_id)
         if ans_row is None:
@@ -434,6 +443,7 @@ def evaluate(
                 "answer_f1": ans_f1,
                 "has_gold_support": has_gold_support,
                 "evaluation_scope": item.get("evaluation_scope", "support"),
+                "source_graph_coverage": source_coverage,
                 "support_em": sp_em,
                 "support_f1": sp_f1,
                 "support_precision": sp_prec,
@@ -474,6 +484,11 @@ def evaluate(
             metrics[key] /= support_n
 
     retrieval_n = metrics["retrieval_examples"]
+    coverage_n = metrics["source_graph_coverage_examples"]
+    if coverage_n > 0:
+        metrics["source_graph_coverage"] /= coverage_n
+    else:
+        metrics["source_graph_coverage"] = None
 
     if retrieval_n > 0:
         for key in [

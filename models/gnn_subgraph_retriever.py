@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.symbolic_composer import parse_axiom, extract_query_signature
+from models.symbolic_composer import extract_query_signature, local_name, parse_axiom
 from utils.model_loader import load_encoder
 
 
@@ -123,7 +123,8 @@ _ARTICLES = {"a", "an", "the"}
 
 
 def normalize_text_for_match(text: str) -> str:
-    text = str(text or "").lower()
+    text = str(text or "").replace("_", " ")
+    text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text).lower()
     text = text.translate(str.maketrans("", "", string.punctuation))
     return re.sub(r"\s+", " ", text).strip()
 
@@ -237,7 +238,10 @@ def edge_between_axioms(ax1: str, ax2: str) -> bool:
     if kg1 is not None and kg2 is not None:
         ents1, props1 = kg_unit_signature(ax1)
         ents2, props2 = kg_unit_signature(ax2)
-        return bool((ents1 & ents2) or (props1 & props2))
+        # A shared predicate alone is not a reasoning connection. Connecting
+        # every ``hasBrother`` fact to every other ``hasBrother`` fact creates
+        # large relation cliques and quickly washes out entity-specific signal.
+        return bool(ents1 & ents2)
 
     # Keep sentence-sentence edges conservative. KG bridge nodes carry the
     # structural signal for text benchmarks; capitalized phrase overlap tends
@@ -262,7 +266,10 @@ def edge_between_axioms(ax1: str, ax2: str) -> bool:
     if ents1 & ents2:
         return True
 
-    if props1 & props2:
+    # Property overlap is useful when at least one endpoint is a schema/rule
+    # node, but it should not turn all facts using a common predicate into a
+    # clique.
+    if props1 & props2 and (p1.axiom_type == "rule" or p2.axiom_type == "rule"):
         return True
 
     return False
@@ -499,6 +506,7 @@ class GNNSubgraphRetriever(nn.Module):
         classifier_hidden_dim: int = 128,
         dropout: float = 0.1,
         freeze_encoder: bool = False,
+        architecture_version: int = 1,
     ):
         super().__init__()
 
@@ -512,6 +520,7 @@ class GNNSubgraphRetriever(nn.Module):
         self.node_symbolic_dim = node_symbolic_dim
         self.subgraph_symbolic_dim = subgraph_symbolic_dim
         self.gnn_hidden_dim = gnn_hidden_dim
+        self.architecture_version = architecture_version
 
         self.node_input_projection = nn.Sequential(
             nn.Linear(encoder_hidden + node_symbolic_dim, gnn_hidden_dim),
@@ -536,12 +545,36 @@ class GNNSubgraphRetriever(nn.Module):
             nn.Dropout(dropout),
         )
 
+        if architecture_version >= 2:
+            # Make both graph propagation and candidate pooling explicitly
+            # question-conditioned. The v1 model only introduced the question
+            # after mean pooling, which makes similar relation paths hard to
+            # distinguish.
+            self.query_node_projection = nn.Linear(encoder_hidden, gnn_hidden_dim)
+            self.node_query_gate = nn.Linear(gnn_hidden_dim * 2, gnn_hidden_dim)
+            self.pool_query_projection = nn.Linear(encoder_hidden, gnn_hidden_dim)
+            self.pool_attention = nn.Linear(gnn_hidden_dim, 1, bias=False)
+            self.attentive_pool_projection = nn.Linear(
+                gnn_hidden_dim * 2, gnn_hidden_dim
+            )
+            self.query_classifier_projection = nn.Linear(
+                encoder_hidden, classifier_hidden_dim
+            )
+            self.subgraph_classifier_projection = nn.Linear(
+                gnn_hidden_dim, classifier_hidden_dim
+            )
+            classifier_input_dim = classifier_hidden_dim * 5
+        else:
+            classifier_input_dim = (
+                encoder_hidden + gnn_hidden_dim + classifier_hidden_dim
+            )
+
+        classifier_activation = (
+            nn.LeakyReLU(negative_slope=0.1) if architecture_version >= 3 else nn.ReLU()
+        )
         self.classifier = nn.Sequential(
-            nn.Linear(
-                encoder_hidden + gnn_hidden_dim + classifier_hidden_dim,
-                classifier_hidden_dim,
-            ),
-            nn.ReLU(),
+            nn.Linear(classifier_input_dim, classifier_hidden_dim),
+            classifier_activation,
             nn.Dropout(dropout),
             nn.Linear(classifier_hidden_dim, 1),
         )
@@ -564,12 +597,23 @@ class GNNSubgraphRetriever(nn.Module):
         node_text_embeddings: torch.Tensor,
         node_symbolic_features: torch.Tensor,
         edge_index: torch.Tensor,
+        query_embedding: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Returns contextualized node embeddings after GNN message passing.
         """
         x = torch.cat([node_text_embeddings, node_symbolic_features], dim=-1)
         x = self.node_input_projection(x)
+
+        if self.architecture_version >= 2:
+            if query_embedding is None:
+                raise ValueError("architecture_version=2 requires a query embedding")
+            query_node = torch.tanh(self.query_node_projection(query_embedding))
+            expanded_query = query_node.unsqueeze(0).expand(x.size(0), -1)
+            gate = torch.sigmoid(
+                self.node_query_gate(torch.cat([x, expanded_query], dim=-1))
+            )
+            x = x + gate * expanded_query
 
         for layer in self.gnn_layers:
             residual = x
@@ -582,12 +626,30 @@ class GNNSubgraphRetriever(nn.Module):
         self,
         node_embeddings: torch.Tensor,
         subgraph_node_ids: torch.Tensor,
+        query_embedding: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
-        Mean-pool the node embeddings belonging to the candidate subgraph.
+        Pool the node embeddings belonging to the candidate subgraph.
+
+        V2 combines a stable mean with query-conditioned attention. This keeps
+        all support units represented while emphasizing the units that answer
+        the current question.
         """
         selected = node_embeddings[subgraph_node_ids]
-        return selected.mean(dim=0)
+        mean_pooled = selected.mean(dim=0)
+        if self.architecture_version < 2:
+            return mean_pooled
+        if query_embedding is None:
+            raise ValueError("architecture_version=2 requires a query embedding")
+
+        query = torch.tanh(self.pool_query_projection(query_embedding))
+        attention_hidden = torch.tanh(selected + query.unsqueeze(0))
+        attention_logits = self.pool_attention(attention_hidden).squeeze(-1)
+        attention_weights = F.softmax(attention_logits, dim=0)
+        attended = torch.sum(selected * attention_weights.unsqueeze(-1), dim=0)
+        return torch.tanh(
+            self.attentive_pool_projection(torch.cat([mean_pooled, attended], dim=-1))
+        )
 
     def score_one_graph(
         self,
@@ -605,25 +667,58 @@ class GNNSubgraphRetriever(nn.Module):
             node_text_embeddings=node_text_embeddings,
             node_symbolic_features=node_symbolic_features,
             edge_index=edge_index,
+            query_embedding=query_embedding,
         )
 
+        return self.score_encoded_subgraph(
+            query_embedding=query_embedding,
+            node_embeddings=node_embeddings,
+            subgraph_node_ids=subgraph_node_ids,
+            subgraph_symbolic_features=subgraph_symbolic_features,
+        )
+
+    def score_encoded_subgraph(
+        self,
+        query_embedding: torch.Tensor,
+        node_embeddings: torch.Tensor,
+        subgraph_node_ids: torch.Tensor,
+        subgraph_symbolic_features: torch.Tensor,
+    ) -> Dict[str, torch.Tensor]:
+        """Score a candidate using node embeddings shared by its local graph."""
         pooled_subgraph = self.pool_subgraph(
             node_embeddings=node_embeddings,
             subgraph_node_ids=subgraph_node_ids,
+            query_embedding=query_embedding,
         )
 
         symbolic_repr = self.subgraph_feature_projection(
             subgraph_symbolic_features.unsqueeze(0)
         ).squeeze(0)
 
-        combined = torch.cat(
-            [
-                query_embedding,
-                pooled_subgraph,
-                symbolic_repr,
-            ],
-            dim=-1,
-        )
+        if self.architecture_version >= 2:
+            query_repr = torch.tanh(self.query_classifier_projection(query_embedding))
+            subgraph_repr = torch.tanh(
+                self.subgraph_classifier_projection(pooled_subgraph)
+            )
+            combined = torch.cat(
+                [
+                    query_repr,
+                    subgraph_repr,
+                    query_repr * subgraph_repr,
+                    torch.abs(query_repr - subgraph_repr),
+                    symbolic_repr,
+                ],
+                dim=-1,
+            )
+        else:
+            combined = torch.cat(
+                [
+                    query_embedding,
+                    pooled_subgraph,
+                    symbolic_repr,
+                ],
+                dim=-1,
+            )
 
         logit = self.classifier(combined).squeeze(-1)
         prob = torch.sigmoid(logit)
@@ -686,6 +781,159 @@ class GNNSubgraphRetriever(nn.Module):
 # =========================================================
 
 
+def infer_query_proof_features(
+    sparql_query: str,
+    subgraph_units: List[str],
+) -> Tuple[float, float]:
+    """
+    Return SPARQL-oracle entailment and proof compactness diagnostics.
+
+    A small provenance-preserving forward chainer covers the OWL rule forms
+    emitted by FamilyOWL. This helper must not feed the deployable retriever:
+    FamilyOWL SPARQL is reference annotation unavailable to datasets such as
+    2Wiki. The compactness value is the fraction of candidate units required
+    by the smallest derived proof of the reference query triple.
+    """
+    query_uris = re.findall(r"<([^>]+)>", str(sparql_query))
+    if len(query_uris) < 3 or not subgraph_units:
+        return 0.0, 0.0
+
+    goal = (
+        local_name(query_uris[0]),
+        normalize_prop(local_name(query_uris[1])),
+        local_name(query_uris[2]),
+    )
+    if not all(goal):
+        return 0.0, 0.0
+
+    facts: Dict[Tuple[str, str, str], frozenset[int]] = {}
+    domains: List[Tuple[str, str, int]] = []
+    ranges: List[Tuple[str, str, int]] = []
+    inverse_rules: List[Tuple[str, str, int]] = []
+    property_rules: List[Tuple[str, str, int]] = []
+    symmetric_rules: List[Tuple[str, int]] = []
+    transitive_rules: List[Tuple[str, int]] = []
+
+    for unit_index, unit in enumerate(subgraph_units):
+        parsed = parse_axiom(unit)
+        if parsed.axiom_type == "fact":
+            subject = str(parsed.subject or "")
+            predicate = normalize_prop(str(parsed.predicate or ""))
+            obj = str(parsed.object or "")
+            if predicate == "domain":
+                domains.append((subject, obj, unit_index))
+            elif predicate == "range":
+                ranges.append((subject, obj, unit_index))
+            elif subject and predicate and obj:
+                facts[(subject, predicate, obj)] = frozenset({unit_index})
+            continue
+
+        if parsed.rule_type == "InverseObjectProperties":
+            inverse_rules.append(
+                (
+                    normalize_prop(str(parsed.property1 or "")),
+                    normalize_prop(str(parsed.property2 or "")),
+                    unit_index,
+                )
+            )
+        elif parsed.rule_type == "SubObjectPropertyOf":
+            property_rules.append(
+                (
+                    normalize_prop(str(parsed.subproperty or "")),
+                    normalize_prop(str(parsed.superproperty or "")),
+                    unit_index,
+                )
+            )
+        elif parsed.rule_type == "EquivalentObjectProperties":
+            first = normalize_prop(str(parsed.property1 or ""))
+            second = normalize_prop(str(parsed.property2 or ""))
+            property_rules.extend(
+                [(first, second, unit_index), (second, first, unit_index)]
+            )
+        elif parsed.rule_type == "SymmetricObjectProperty":
+            symmetric_rules.append(
+                (normalize_prop(str(parsed.property or "")), unit_index)
+            )
+        elif parsed.rule_type == "TransitiveObjectProperty":
+            transitive_rules.append(
+                (normalize_prop(str(parsed.property or "")), unit_index)
+            )
+
+    def add_fact(
+        triple: Tuple[str, str, str],
+        support: frozenset[int],
+    ) -> bool:
+        previous = facts.get(triple)
+        if previous is None or len(support) < len(previous):
+            facts[triple] = support
+            return True
+        return False
+
+    for _ in range(max(2, len(subgraph_units) + 1)):
+        changed = False
+        current_facts = list(facts.items())
+
+        for (subject, predicate, obj), support in current_facts:
+            for source, target, rule_index in property_rules:
+                if predicate == source:
+                    changed |= add_fact(
+                        (subject, target, obj),
+                        support | frozenset({rule_index}),
+                    )
+            for first, second, rule_index in inverse_rules:
+                if predicate == first:
+                    changed |= add_fact(
+                        (obj, second, subject),
+                        support | frozenset({rule_index}),
+                    )
+                if predicate == second:
+                    changed |= add_fact(
+                        (obj, first, subject),
+                        support | frozenset({rule_index}),
+                    )
+            for symmetric_property, rule_index in symmetric_rules:
+                if predicate == symmetric_property:
+                    changed |= add_fact(
+                        (obj, predicate, subject),
+                        support | frozenset({rule_index}),
+                    )
+            for domain_property, domain_class, rule_index in domains:
+                if predicate == domain_property:
+                    changed |= add_fact(
+                        (subject, "type", domain_class),
+                        support | frozenset({rule_index}),
+                    )
+            for range_property, range_class, rule_index in ranges:
+                if predicate == range_property:
+                    changed |= add_fact(
+                        (obj, "type", range_class),
+                        support | frozenset({rule_index}),
+                    )
+
+        current_facts = list(facts.items())
+        for property_name, rule_index in transitive_rules:
+            matching = [
+                (triple, support)
+                for triple, support in current_facts
+                if triple[1] == property_name
+            ]
+            for (left, _, middle), left_support in matching:
+                for (middle2, _, right), right_support in matching:
+                    if middle == middle2:
+                        changed |= add_fact(
+                            (left, property_name, right),
+                            left_support | right_support | frozenset({rule_index}),
+                        )
+
+        if not changed:
+            break
+
+    proof_support = facts.get(goal)
+    if proof_support is None:
+        return 0.0, 0.0
+    return 1.0, len(proof_support) / len(subgraph_units)
+
+
 def compute_subgraph_symbolic_features(
     question: str,
     sparql_query: str,
@@ -715,6 +963,21 @@ def compute_subgraph_symbolic_features(
     has_rule = False
 
     for unit in subgraph_units:
+        kg = parse_kg_triple_unit(unit)
+        if kg is not None:
+            subject, predicate, obj = kg
+            unit_entities = token_set_for_match(f"{subject} {obj}")
+            unit_properties = token_set_for_match(predicate)
+            question_tokens = token_set_for_match(question)
+            entity_overlap_count += int(bool(unit_entities & question_tokens))
+            property_overlap_count += int(bool(unit_properties & question_tokens))
+            has_fact = True
+            any_fact_mentions_query_entity = max(
+                any_fact_mentions_query_entity,
+                float(bool(unit_entities & question_tokens)),
+            )
+            continue
+
         parsed = parse_axiom(unit)
 
         unit_entities = set(parsed.entities())
@@ -742,8 +1005,20 @@ def compute_subgraph_symbolic_features(
     fact_rule_mix = 1.0 if has_fact and has_rule else 0.0
     size_norm = min(len(subgraph_units), 5) / 5.0
 
-    exact = 1.0 if (use_gold_features and exact_match_any_gold) else 0.0
-    contains = 1.0 if (use_gold_features and contains_any_gold_explanation) else 0.0
+    query_entailed = 0.0
+    proof_compactness = 0.0
+    # Reference-only oracle mode. Training and inference always use
+    # ``use_gold_features=False``, so SPARQL cannot affect model features.
+    if use_gold_features:
+        query_entailed, proof_compactness = infer_query_proof_features(
+            sparql_query=sparql_query,
+            subgraph_units=subgraph_units,
+        )
+        query_entailed = max(query_entailed, float(exact_match_any_gold))
+        proof_compactness = max(
+            proof_compactness,
+            float(contains_any_gold_explanation),
+        )
 
     return [
         frac_entity_overlap,
@@ -752,8 +1027,8 @@ def compute_subgraph_symbolic_features(
         any_fact_mentions_query_entity,
         fact_rule_mix,
         size_norm,
-        exact,
-        contains,
+        query_entailed,
+        proof_compactness,
     ]
 
 

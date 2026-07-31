@@ -1,0 +1,39 @@
+{
+  "schema_version": "unified_kg_reasoning_v3",
+  "evidence_unit_type": "ontology_axiom",
+  "source_json": "data\\raw\\family\\FamilyOWL_1hop.json",
+  "candidate_composer": "beam_connected_subgraphs",
+  "row_materializer": "materialize_retrieval_rows",
+  "min_subgraph_size": 1,
+  "max_subgraph_size": 0,
+  "max_context_units": 40,
+  "max_negative_per_example": 200,
+  "candidate_beam_width": 96,
+  "max_candidate_subgraphs": 320,
+  "train_ratio": 0.65,
+  "dev_ratio": 0.1,
+  "train_rows": 112960,
+  "dev_rows": 17880,
+  "test_rows": 51560,
+  "train_examples": 374,
+  "dev_examples": 60,
+  "test_examples": 169,
+  "train_answer_only": 448,
+  "dev_answer_only": 73,
+  "test_answer_only": 148,
+  "development_sample": {
+    "schema_version": "gnn_dev_sample_v1",
+    "manifest": "sample_manifest.json",
+    "seed": 42,
+    "stratify_fields": [
+      "hop",
+      "answer_type",
+      "task_type"
+    ],
+    "example_counts": {
+      "train": 64,
+      "dev": 32,
+      "test": 32
+    }
+  }
+}

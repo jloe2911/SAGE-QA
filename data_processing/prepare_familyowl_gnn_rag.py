@@ -54,6 +54,9 @@ def unit_node(unit: str) -> str:
 
 def relation_for_unit(unit: str) -> str:
     unit = clean(unit)
+    kg_parts = unit.split("::", 3)
+    if len(kg_parts) == 4 and kg_parts[0] == "KG":
+        return kg_parts[2]
     if " " in unit:
         parts = unit.split()
         if len(parts) >= 3:
@@ -65,22 +68,9 @@ def relation_for_unit(unit: str) -> str:
 
 
 def extract_question_entities(row: Dict[str, Any]) -> List[str]:
-    entities = []
-    for token in TOKEN_RE.findall(str(row.get("sparql_query", ""))):
-        if "_" in token and not token.startswith("http"):
-            entities.append(token)
-    for unit in row.get("gold_units", []) or []:
-        for token in TOKEN_RE.findall(str(unit)):
-            if "_" in token:
-                entities.append(token)
-    seen = set()
-    out = []
-    for entity in entities:
-        entity = clean(entity)
-        if entity and entity not in seen:
-            seen.add(entity)
-            out.append(entity)
-    return out[:4]
+    # Gold SPARQL is reference annotation and must not seed inference graphs.
+    # Candidate-unit parsing below supplies graph entities without leakage.
+    return []
 
 
 def group_examples(path: Path) -> Dict[str, List[Dict[str, Any]]]:
@@ -121,9 +111,6 @@ def build_sample(
                 candidate_units.append(unit)
         for unit in row.get("gold_units", []) or []:
             unit = clean(unit)
-            if unit and unit not in seen_units:
-                seen_units.add(unit)
-                candidate_units.append(unit)
             if unit and unit not in seen_targets:
                 seen_targets.add(unit)
                 target_units.append(unit)
@@ -159,8 +146,6 @@ def build_sample(
             if entity != node:
                 tuples.append([entity, rel, node])
 
-    entities.update(target_nodes)
-
     sample = {
         "id": example_id,
         "question": clean(seed.get("question", "")),
@@ -185,6 +170,9 @@ def build_sample(
         "dataset": seed.get("source_name", seed.get("dataset", "")),
         "hop": seed.get("hop", ""),
         "answer_type": seed.get("answer_type", ""),
+        "evidence_unit_type": seed.get("evidence_unit_type", ""),
+        "gold_kg_coverage": seed.get("gold_kg_coverage", 0.0),
+        "gold_context_coverage": seed.get("gold_context_coverage", 0.0),
         "gold_explanations": seed.get("gold_explanations", []),
         "gold_units": seed.get("gold_units", []),
         "evaluation_scope": seed.get("evaluation_scope", "support"),

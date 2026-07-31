@@ -120,7 +120,13 @@ def is_boolean_question(question: str) -> bool:
     )
 
 
-def normalize_generated_answer(question: str, answer: str) -> str:
+def is_text_kg_item(item: Dict[str, Any]) -> bool:
+    unit_type = str(item.get("evidence_unit_type", "")).lower()
+    dataset = str(item.get("dataset", "")).lower()
+    return unit_type == "kg_triple" or "2wiki" in dataset
+
+
+def normalize_generated_answer(item: Dict[str, Any], question: str, answer: str) -> str:
     answer = str(answer or "").strip()
     if not answer:
         return answer
@@ -128,9 +134,9 @@ def normalize_generated_answer(question: str, answer: str) -> str:
     if is_boolean_question(question):
         normalized = answer.lower().strip()
         if normalized in {"true", "yes", "1"} or normalized.startswith("yes,"):
-            return "TRUE"
+            return "yes" if is_text_kg_item(item) else "TRUE"
         if normalized in {"false", "no", "0"} or normalized.startswith("no,"):
-            return "FALSE"
+            return "no" if is_text_kg_item(item) else "FALSE"
         if "unknown" in normalized or "insufficient" in normalized:
             return "Unknown"
 
@@ -158,10 +164,6 @@ def parse_ask_triple(item: Dict[str, Any]) -> Optional[Tuple[str, str, str]]:
     Extract the triple pattern from a simple ASK WHERE query.
     """
     query = str(item.get("sparql_query", "") or "")
-    if not query:
-        example_id = str(item.get("example_id", ""))
-        if "ASK WHERE" in example_id:
-            query = "ASK WHERE" + example_id.split("ASK WHERE", 1)[-1]
 
     uris = re.findall(r"<([^>]+)>", query)
     if len(uris) < 3:
@@ -431,11 +433,6 @@ def infer_owl_boolean_answer(
 
 def query_terms(item: Dict[str, Any], question: str) -> set[str]:
     terms = set()
-    triple = parse_ask_triple(item)
-    if triple:
-        for value in triple:
-            terms.add(local_name(value).lower())
-
     for token in re.findall(r"[A-Za-z0-9_]+", question):
         if len(token) > 2:
             terms.add(token.lower())
@@ -465,6 +462,10 @@ def owl_reasoning_line(unit: str) -> str:
     cleaned = clean_unit(unit)
     unit_type = classify_owl_unit(cleaned)
 
+    parts = cleaned.split("::", 3)
+    if len(parts) == 4 and parts[0] == "KG":
+        return f"Fact: {parts[1]} -> {parts[2]} -> {parts[3]}"
+
     # Many FamilyOWL units are readable triples already: subject relation object.
     parts = cleaned.split()
     if len(parts) >= 3 and "(" not in parts[0]:
@@ -476,7 +477,11 @@ def owl_reasoning_line(unit: str) -> str:
     return f"{unit_type}: {cleaned}"
 
 
-def build_prompt(question: str, support_units: List[str]) -> str:
+def build_prompt(
+    question: str,
+    support_units: List[str],
+    ontology_boolean_labels: bool = True,
+) -> str:
     reasoning_lines = []
 
     for i, unit in enumerate(support_units, start=1):
@@ -489,9 +494,10 @@ def build_prompt(question: str, support_units: List[str]) -> str:
     )
 
     if is_boolean_question(question):
+        labels = '"TRUE" or "FALSE"' if ontology_boolean_labels else '"yes" or "no"'
         answer_format = (
-            'This is a yes/no ontology question. The "answer" value must be exactly '
-            '"TRUE" or "FALSE". Do not return "Unknown".'
+            'This is a binary question. The "answer" value must be exactly '
+            f'{labels}. Do not return "Unknown".'
         )
         uncertainty_instruction = (
             "- If the reasoning paths do not fully settle the question, choose the "
@@ -506,7 +512,7 @@ def build_prompt(question: str, support_units: List[str]) -> str:
             '- If the reasoning paths are insufficient, answer "Unknown"; do not guess.'
         )
 
-    return f"""You are answering an ontology-grounded question using retrieved reasoning paths.
+    return f"""You are answering a graph-grounded question using retrieved reasoning paths.
 
 Reasoning Paths:
 {reasoning_context}
@@ -627,7 +633,11 @@ def generate_answers(
         support_units = get_top_support_units(item, top_k=top_k)
 
         if resume and example_id in done_ids:
-            proof = infer_owl_boolean_answer(item=item, support_units=support_units)
+            proof = (
+                None
+                if is_text_kg_item(item)
+                else infer_owl_boolean_answer(item=item, support_units=support_units)
+            )
             if proof is not None:
                 old_row = rows[done_index[example_id]]
                 if old_row.get("predicted_answer") != proof["answer"]:
@@ -660,7 +670,11 @@ def generate_answers(
         }
 
         try:
-            proof = infer_owl_boolean_answer(item=item, support_units=support_units)
+            proof = (
+                None
+                if is_text_kg_item(item)
+                else infer_owl_boolean_answer(item=item, support_units=support_units)
+            )
 
             if proof is not None:
                 row["predicted_answer"] = proof["answer"]
@@ -680,7 +694,11 @@ def generate_answers(
                 question=question,
             )
             row["support_units"] = reader_support_units
-            prompt = build_prompt(question=question, support_units=reader_support_units)
+            prompt = build_prompt(
+                question=question,
+                support_units=reader_support_units,
+                ontology_boolean_labels=not is_text_kg_item(item),
+            )
 
             if backend == "openai":
                 raw = call_openai(prompt=prompt, model=model)
@@ -690,7 +708,7 @@ def generate_answers(
             parsed = parse_json_response(raw)
 
             row["predicted_answer"] = normalize_generated_answer(
-                question, parsed["answer"]
+                item, question, parsed["answer"]
             )
             row["explanation"] = parsed["explanation"]
             row["raw_response"] = raw

@@ -7,6 +7,15 @@ from typing import Any, Dict, Iterable, List
 from utils.llm_client import load_local_env, openai_compatible_client, parse_model_ref
 
 
+SUPPORTED_KG_CONSTRUCTION_BACKENDS = frozenset(
+    {
+        "deterministic",
+        "llm",
+        "llm_with_title_bridges",
+    }
+)
+
+
 def clean_text(text: Any) -> str:
     text = str(text or "").replace("\n", " ").replace("\t", " ")
     return re.sub(r"\s+", " ", text).strip()
@@ -167,7 +176,7 @@ def construct_wiki_bridge_triples(
 
 @dataclass
 class KGConstructionConfig:
-    backend: str = "auto"
+    backend: str = "deterministic"
     model: str = "gpt-4.1-mini"
     max_triples: int = 64
     max_context_sentences: int = 20
@@ -175,6 +184,28 @@ class KGConstructionConfig:
     request_timeout: float = 90.0
     max_retries: int = 4
     retry_initial_sleep: float = 5.0
+    extraction_version: str = "context_kg_v2"
+
+    def __post_init__(self) -> None:
+        if self.backend not in SUPPORTED_KG_CONSTRUCTION_BACKENDS:
+            supported = ", ".join(sorted(SUPPORTED_KG_CONSTRUCTION_BACKENDS))
+            raise ValueError(
+                f"Unsupported KG construction backend {self.backend!r}. "
+                f"Choose one of: {supported}."
+            )
+
+    @property
+    def cache_signature(self) -> str:
+        """Identify cached output that is safe to reuse for this extractor."""
+        return "|".join(
+            [
+                self.extraction_version,
+                self.backend,
+                self.model,
+                str(self.max_triples),
+                str(self.max_context_sentences),
+            ]
+        )
 
 
 class LLMKGConstructor:
@@ -193,9 +224,14 @@ class LLMKGConstructor:
         question: str,
         sentence_records: List[Dict[str, Any]],
     ) -> List[List[str]]:
+        selected_records = select_context_sentences(
+            question=question,
+            sentence_records=sentence_records,
+            limit=self.config.max_context_sentences,
+        )
         prompt = build_llm_kg_prompt(
             question=question,
-            sentence_records=sentence_records[: self.config.max_context_sentences],
+            sentence_records=selected_records,
             max_triples=self.config.max_triples,
         )
         client = self._openai_client()
@@ -246,6 +282,71 @@ class LLMKGConstructor:
         return parse_llm_triples(response.choices[0].message.content)
 
 
+def select_context_sentences(
+    question: str,
+    sentence_records: List[Dict[str, Any]],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """
+    Select context without dropping whole pages needed by a multi-hop chain.
+
+    Pure question-overlap ranking tends to keep several sentences from the
+    first-hop page and discard the bridge/answer page. We first retain the
+    earliest sentence from every page (normally its defining sentence), then
+    fill the remaining budget with question-relevant and cross-page-linking
+    sentences. This remains gold- and answer-free.
+    """
+    if limit <= 0 or len(sentence_records) <= limit:
+        return list(sentence_records)
+
+    question_tokens = set(normalize_text(question).split())
+    titles = []
+    seen_titles = set()
+    for record in sentence_records:
+        title = clean_text(record.get("title", ""))
+        title_key = normalize_text(title)
+        if title_key and title_key not in seen_titles:
+            seen_titles.add(title_key)
+            titles.append((title_key, title))
+
+    scored = []
+    for index, record in enumerate(sentence_records):
+        title = clean_text(record.get("title", ""))
+        sentence = clean_text(record.get("sentence", ""))
+        title_tokens = set(normalize_text(title).split())
+        sentence_tokens = set(normalize_text(sentence).split())
+        overlap = len(question_tokens & (title_tokens | sentence_tokens))
+        title_overlap = len(question_tokens & title_tokens)
+        linked_pages = sum(
+            1
+            for target_key, target_title in titles
+            if target_key != normalize_text(title)
+            and phrase_in_text(target_title, sentence)
+        )
+        score = overlap + 0.5 * title_overlap + 1.5 * linked_pages
+        scored.append((score, linked_pages, -index, index, record))
+
+    selected_indices = set()
+    # Page-opening sentences preserve broad evidence coverage.
+    for index, record in enumerate(sentence_records):
+        title_key = normalize_text(record.get("title", ""))
+        if title_key and not any(
+            normalize_text(sentence_records[i].get("title", "")) == title_key
+            for i in selected_indices
+        ):
+            selected_indices.add(index)
+            if len(selected_indices) >= limit:
+                break
+
+    for _, _, _, index, _ in sorted(scored, reverse=True):
+        if len(selected_indices) >= limit:
+            break
+        selected_indices.add(index)
+
+    # Preserve source order so adjacent statements and pronouns remain legible.
+    return [sentence_records[index] for index in sorted(selected_indices)]
+
+
 def build_llm_kg_prompt(
     question: str,
     sentence_records: List[Dict[str, Any]],
@@ -268,6 +369,13 @@ Evidence:
 Rules:
 - Use only entities, facts, and relations stated in the evidence sentences.
 - Do not use or infer the gold answer.
+- Process every evidence line. Extract all explicit binary facts that could be
+  useful for answering the question, rather than returning only the most
+  obvious first-hop facts.
+- Treat each page title as the main entity of that page. Resolve pronouns and
+  descriptive openings back to the page title when the sentence supports it.
+- Preserve entity names and values exactly as written. Use the page title
+  instead of a shortened alias when both refer to the same subject.
 - Prefer triples that connect page titles, question entities, intermediate entities, and plausible answer candidates.
 - Prioritize triples that may form multi-hop paths from question entities to answer candidates.
 - Use short readable predicates such as "born_in", "located_in", "member_of", "created_by", "directed_by", "written_by", "founded_by", "country_of", "occupation", or concise natural-language relations.
@@ -327,7 +435,6 @@ def parse_llm_triples(text: str) -> List[List[str]]:
 
 def construct_text_kg(
     *,
-    provided_evidences: Any,
     sentence_records: List[Dict[str, Any]],
     question: str,
     config: KGConstructionConfig,
@@ -336,24 +443,14 @@ def construct_text_kg(
     """
     Construct graph-context triples for text QA examples.
 
-    The gold answer is deliberately not accepted here. KG construction for text
-    benchmarks must be context/question-only to avoid answer leakage.
+    KG construction for text benchmarks is strictly question/context-only.
+    Dataset-provided evidence triples are annotations of the gold reasoning path,
+    not inference-time inputs.
     """
-    context_only_backends = {"llm", "llm_with_title_bridges", "deterministic"}
-    provided = (
-        []
-        if config.backend in context_only_backends
-        else normalize_evidence_triples(provided_evidences)
-    )
-    if provided and config.backend in {"auto", "provided", "llm_with_provided"}:
-        if config.backend == "llm_with_provided" and llm_constructor is not None:
-            llm_triples = llm_constructor.construct(question, sentence_records)
-            return dedupe_triples([*provided, *llm_triples])[: config.max_triples], (
-                "provided_plus_llm"
-            )
-        return provided[: config.max_triples], "provided"
+    if config.backend in {"llm", "llm_with_title_bridges"} and llm_constructor is None:
+        raise ValueError(f"KG backend {config.backend!r} requires an LLMKGConstructor.")
 
-    if config.backend == "llm_with_title_bridges" and llm_constructor:
+    if config.backend == "llm_with_title_bridges":
         llm_triples = llm_constructor.construct(question, sentence_records)
         bridge_triples = construct_wiki_bridge_triples(
             sentence_records=sentence_records,
@@ -363,12 +460,12 @@ def construct_text_kg(
         if triples:
             return triples[: config.max_triples], "llm_plus_title_bridges"
 
-    if config.backend in {"llm", "auto", "llm_with_provided"} and llm_constructor:
+    if config.backend == "llm":
         triples = llm_constructor.construct(question, sentence_records)
         if triples:
             return triples[: config.max_triples], "llm"
 
-    if config.backend in {"auto", "deterministic"}:
+    if config.backend == "deterministic":
         triples = construct_wiki_bridge_triples(
             sentence_records=sentence_records,
             max_triples=config.max_triples,

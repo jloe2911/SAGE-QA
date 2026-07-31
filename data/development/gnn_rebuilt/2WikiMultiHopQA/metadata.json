@@ -1,0 +1,47 @@
+{
+  "dataset": "2WikiMultiHopQA",
+  "train_file": [
+    "data/raw/2WikiMultihopQA/data/train-00000-of-00002.parquet",
+    "data/raw/2WikiMultihopQA/data/train-00001-of-00002.parquet"
+  ],
+  "dev_file": "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet",
+  "test_file": null,
+  "effective_test_file": [
+    "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet"
+  ],
+  "output_dir": "data\\development\\gnn_rebuilt\\2WikiMultiHopQA",
+  "seed": 42,
+  "selection_manifest": "data\\development\\gnn_samples\\2wiki\\sample_manifest.json",
+  "max_train_examples": 1000,
+  "max_dev_examples": 200,
+  "max_test_examples": 300,
+  "max_kg_candidate_triples": 30,
+  "max_subgraph_size": 4,
+  "max_candidates_per_question": 256,
+  "candidate_beam_width": 96,
+  "max_kg_bridge_triples": 64,
+  "kg_construction_backend": "llm",
+  "kg_construction_model": "openai:gpt-4.1-mini",
+  "kg_max_context_sentences": 20,
+  "kg_construction_workers": 3,
+  "kg_request_timeout": 90.0,
+  "kg_max_retries": 6,
+  "kg_retry_initial_sleep": 10.0,
+  "kg_cache_dir": "data\\2WikiMultiHopQA_shared_v3\\kg_cache",
+  "schema_version": "unified_kg_reasoning_v3",
+  "evidence_unit_type": "kg_triple",
+  "gold_label_fields": [
+    "raw_gold_evidence_units",
+    "gold_explanations"
+  ],
+  "candidate_field": "subgraph_units",
+  "kg_source": "question_and_context_only",
+  "candidate_composer": "beam_connected_subgraphs",
+  "row_materializer": "materialize_retrieval_rows",
+  "train_rows": 10040,
+  "dev_rows": 5968,
+  "test_rows": 5067,
+  "train_examples": 64,
+  "dev_examples": 32,
+  "test_examples": 32
+}

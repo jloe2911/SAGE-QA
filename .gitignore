@@ -215,9 +215,12 @@ data/Pizza_*/
 data/raw/*
 !data/raw/family.zip
 !data/raw/owl2bench.zip
+data/development/gnn_samples/*/*_subgraph_retrieval.jsonl
+data/development/gnn_rebuilt/**/*.jsonl
 outputs/
 checkpoints/
 results/
+tests/
 
 # Vendored GNN-RAG generated results
 third_party/GNN-RAG/llm/results/

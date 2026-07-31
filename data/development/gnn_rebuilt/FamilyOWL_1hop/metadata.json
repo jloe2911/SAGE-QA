@@ -1,0 +1,35 @@
+{
+  "schema_version": "unified_kg_reasoning_v3",
+  "evidence_unit_type": "ontology_axiom",
+  "retrieval_inference_inputs": [
+    "question",
+    "ontology_context"
+  ],
+  "reference_only_fields": [
+    "reference_sparql_query",
+    "gold_explanations"
+  ],
+  "source_json": "data\\raw\\family\\FamilyOWL_1hop.json",
+  "candidate_composer": "beam_connected_subgraphs",
+  "row_materializer": "materialize_retrieval_rows",
+  "min_subgraph_size": 1,
+  "max_subgraph_size": 7,
+  "max_context_units": 40,
+  "max_negative_per_example": 200,
+  "candidate_beam_width": 96,
+  "max_candidate_subgraphs": 320,
+  "train_ratio": 0.65,
+  "dev_ratio": 0.1,
+  "max_groups": 0,
+  "group_indices": null,
+  "selection_manifest": "data\\development\\gnn_samples\\familyowl_1hop\\sample_manifest.json",
+  "train_rows": 17310,
+  "dev_rows": 8805,
+  "test_rows": 8854,
+  "train_examples": 64,
+  "dev_examples": 32,
+  "test_examples": 32,
+  "train_answer_only": 0,
+  "dev_answer_only": 0,
+  "test_answer_only": 0
+}

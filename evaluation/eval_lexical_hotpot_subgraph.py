@@ -111,7 +111,6 @@ def best_against_gold(
 
 def lexical_score(row: Dict[str, Any]) -> float:
     question = row.get("question", "")
-    answer = row.get("answer", "")
     units = row.get("subgraph_units", [])
 
     candidate_text = " ".join(str(u) for u in units)
@@ -124,16 +123,19 @@ def lexical_score(row: Dict[str, Any]) -> float:
     else:
         q_overlap = len(q & c) / len(q)
 
-    # Small answer bonus if answer string appears in candidate.
-    answer_norm = normalize_text(answer)
-    cand_norm = normalize_text(candidate_text)
-    answer_bonus = 1.0 if answer_norm and answer_norm in cand_norm else 0.0
-
     # Prefer compact candidates slightly.
     size = int(row.get("subgraph_size", len(units)))
     compact_bonus = 1.0 / max(size, 1)
 
-    return q_overlap + 0.25 * answer_bonus + 0.02 * compact_bonus
+    return q_overlap + 0.02 * compact_bonus
+
+
+def gold_explanations(row: Dict[str, Any]) -> List[List[str]]:
+    explicit = row.get("gold_explanations", []) or []
+    if explicit:
+        return explicit
+    units = row.get("gold_units", []) or row.get("gold_support_units", []) or []
+    return [units] if units else []
 
 
 def group_by_example(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -165,10 +167,7 @@ def evaluate_group(
 
         for item in details:
             top = item["top5"][:k]
-            gold_reference_sets = []
-            gold_support_units = item.get("gold_support_units", []) or []
-            if gold_support_units:
-                gold_reference_sets = [gold_support_units]
+            gold_reference_sets = item.get("gold_explanations", []) or []
 
             union_units = []
             seen = set()
@@ -258,8 +257,8 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ranked = sorted(candidates, key=lexical_score, reverse=True)
 
         first = ranked[0]
+        gold_reference_sets = gold_explanations(first)
         gold_support_units = first.get("gold_support_units", []) or []
-        gold_reference_sets = [gold_support_units] if gold_support_units else []
 
         top5 = []
         for rank, row in enumerate(ranked[:5], start=1):
@@ -291,6 +290,10 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "answer_type": first.get("answer_type", "OPEN"),
                 "question": first.get("question", ""),
                 "answer": first.get("answer", ""),
+                "evidence_unit_type": first.get("evidence_unit_type", ""),
+                "gold_kg_coverage": first.get("gold_kg_coverage", 0.0),
+                "gold_context_coverage": first.get("gold_context_coverage", 0.0),
+                "gold_explanations": gold_reference_sets,
                 "gold_support_units": gold_support_units,
                 "top1_subgraph_units": top1_units,
                 "top1_score": top1["score"],

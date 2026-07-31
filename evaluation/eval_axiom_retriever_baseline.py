@@ -60,7 +60,8 @@ def get_question_text(row: Dict, input_format: str = "hybrid") -> str:
         row.get("question") or row.get("NL Question") or row.get("nl_question") or ""
     )
     abs_question = row.get("abs_question") or row.get("ABS Question") or ""
-    sparql = row.get("sparql_query") or row.get("SPARQL Query") or ""
+    # SPARQL is reference annotation, not an inference-time input.
+    sparql = ""
 
     if input_format == "nl":
         return question

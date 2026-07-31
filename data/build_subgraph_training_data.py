@@ -4,7 +4,6 @@ import json
 import random
 import re
 import sys
-import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
@@ -73,8 +72,17 @@ def normalize_explanation_unit(unit: str) -> str:
         return f"{m.group(1).strip()} range {m.group(2).strip()}"
 
     parts = unit.split()
-    if len(parts) == 3 and parts[1] == "SubPropertyOf":
+    if len(parts) == 3 and parts[1] in {"SubPropertyOf", "rdfs:subPropertyOf"}:
         return f"SubObjectPropertyOf({parts[0]},{parts[2]})"
+    if len(parts) == 3 and parts[1] in {"inverseOf", "owl:inverseOf"}:
+        first, second = sorted((parts[0], parts[2]))
+        return f"InverseObjectProperties({first},{second})"
+    if len(parts) == 3 and parts[1] in {
+        "equivalentProperty",
+        "owl:equivalentProperty",
+    }:
+        first, second = sorted((parts[0], parts[2]))
+        return f"EquivalentObjectProperties({first},{second})"
     if len(parts) == 3 and parts[1] == "Domain":
         return f"{parts[0]} domain {parts[2]}"
     if len(parts) == 3 and parts[1] == "Range":
@@ -171,9 +179,11 @@ def parse_owl_context(owl_context: str) -> List[str]:
         elif predicate == RDFS_NS.subPropertyOf:
             add(f"SubObjectPropertyOf({subject},{obj})")
         elif predicate == OWL_NS.inverseOf:
-            add(f"InverseObjectProperties({subject},{obj})")
+            first, second = sorted((subject, obj))
+            add(f"InverseObjectProperties({first},{second})")
         elif predicate == OWL_NS.equivalentProperty:
-            add(f"EquivalentObjectProperties({subject},{obj})")
+            first, second = sorted((subject, obj))
+            add(f"EquivalentObjectProperties({first},{second})")
         elif predicate == RDFS_NS.domain:
             add(f"{subject} domain {obj}")
         elif predicate == RDFS_NS.range:
@@ -186,7 +196,57 @@ def parse_owl_context(owl_context: str) -> List[str]:
     return axioms
 
 
+_QUERY_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "did",
+    "do",
+    "does",
+    "from",
+    "in",
+    "is",
+    "of",
+    "the",
+    "to",
+    "was",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+}
+
+
+def lexical_tokens(text: str) -> Set[str]:
+    normalized = str(text or "").replace("_", " ").replace("::", " ")
+    normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", normalized)
+    return {
+        token.casefold()
+        for token in re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]+", normalized)
+        if token.casefold() not in _QUERY_STOPWORDS and token.casefold() != "kg"
+    }
+
+
+def parse_kg_unit(unit: str) -> Tuple[str, str, str] | None:
+    parts = str(unit).split("::", 3)
+    if len(parts) == 4 and parts[0] == "KG":
+        return parts[1].strip(), parts[2].strip(), parts[3].strip()
+    return None
+
+
 def unit_signature(unit: str) -> Tuple[Set[str], Set[str]]:
+    kg_triple = parse_kg_unit(unit)
+    if kg_triple is not None:
+        subject, predicate, obj = kg_triple
+        return {subject.casefold(), obj.casefold()}, {predicate.casefold()}
+
+    schema_match = re.match(r"^(\S+)\s+(domain|range)\s+(\S+)$", unit)
+    if schema_match:
+        return {schema_match.group(3)}, {schema_match.group(1)}
+
     parsed = parse_axiom(unit)
     entities = set(parsed.entities())
     properties = set(parsed.properties())
@@ -199,11 +259,29 @@ def unit_signature(unit: str) -> Tuple[Set[str], Set[str]]:
     return entities, properties
 
 
+def signature_values_overlap(left: Set[str], right: Set[str]) -> bool:
+    normalized_left = {value.casefold() for value in left}
+    normalized_right = {value.casefold() for value in right}
+    return bool(normalized_left & normalized_right)
+
+
+def unit_question_overlap(unit: str, question: str) -> float:
+    question_tokens = lexical_tokens(question)
+    if not question_tokens:
+        return 0.0
+    return len(question_tokens & lexical_tokens(unit)) / len(question_tokens)
+
+
 def edge_between_units(left: str, right: str) -> bool:
     left_entities, left_properties = unit_signature(left)
     right_entities, right_properties = unit_signature(right)
+    if parse_kg_unit(left) is None and parse_kg_unit(right) is None:
+        return bool(
+            (left_entities & right_entities) or (left_properties & right_properties)
+        )
     return bool(
-        (left_entities & right_entities) or (left_properties & right_properties)
+        signature_values_overlap(left_entities, right_entities)
+        or signature_values_overlap(left_properties, right_properties)
     )
 
 
@@ -240,14 +318,24 @@ def score_unit_for_query(
     query_entities: Set[str],
     query_properties: Set[str],
     degree: int = 0,
+    question: str = "",
 ) -> float:
     entities, properties = unit_signature(unit)
     parsed = parse_axiom(unit)
+    kg_triple = parse_kg_unit(unit)
 
     score = 0.0
-    score += 2.0 * len(entities & query_entities)
-    score += 1.5 * len(properties & query_properties)
-    score += 0.15 if parsed.axiom_type == "fact" else 0.0
+    if kg_triple is not None:
+        score += 2.0 if signature_values_overlap(entities, query_entities) else 0.0
+        score += 1.5 if signature_values_overlap(properties, query_properties) else 0.0
+        score += 3.0 * unit_question_overlap(unit, question)
+    else:
+        # Natural-language overlap is shared by FamilyOWL and text benchmarks;
+        # SPARQL-derived signatures are intentionally empty in NL-only runs.
+        score += 2.0 * len(entities & query_entities)
+        score += 1.5 * len(properties & query_properties)
+        score += 3.0 * unit_question_overlap(unit, question)
+    score += 0.15 if parsed.axiom_type == "fact" or kg_triple is not None else 0.0
     score += 0.10 if parsed.axiom_type == "rule" else 0.0
     score += min(degree, 8) * 0.01
     return score
@@ -261,22 +349,15 @@ def score_subgraph_indices(
 ) -> float:
     units = [candidate_units[i] for i in indices]
     parsed = [parse_axiom(unit) for unit in units]
-    kinds = {p.axiom_type for p in parsed}
-
-    internal_edges = 0
-    for pos, i in enumerate(indices):
-        for j in indices[pos + 1 :]:
-            internal_edges += int(j in adjacency[i])
+    kinds = {
+        "fact" if parse_kg_unit(unit) is not None else parsed_unit.axiom_type
+        for unit, parsed_unit in zip(units, parsed)
+    }
 
     fact_rule_mix = 1.0 if ("fact" in kinds and "rule" in kinds) else 0.0
     avg_relevance = sum(unit_scores[i] for i in indices) / max(len(indices), 1)
 
-    return (
-        avg_relevance
-        + 0.05 * internal_edges
-        + 0.20 * fact_rule_mix
-        - 0.015 * max(0, len(indices) - 3)
-    )
+    return avg_relevance + 0.20 * fact_rule_mix - 0.04 * max(0, len(indices) - 3)
 
 
 def beam_connected_subgraphs(
@@ -309,6 +390,7 @@ def beam_connected_subgraphs(
             query_entities=query_entities,
             query_properties=query_properties,
             degree=len(adjacency[i]),
+            question=question,
         )
         for i, unit in enumerate(candidate_units)
     ]
@@ -321,6 +403,38 @@ def beam_connected_subgraphs(
         range(len(candidate_units)),
         key=lambda i: (-unit_scores[i], candidate_units[i]),
     )
+
+    # Reserve shortest reasoning chains between the most query-aligned units.
+    # This is inference-safe (question/SPARQL + graph structure only) and
+    # prevents beam pruning from losing a low-scoring bridge rule.
+    path_candidate_indices = set()
+    # NL-only class/rule units often share just one informative token with the
+    # question (for example, ``Man``). Keep them eligible as path endpoints so
+    # a low-scoring inverse/subproperty rule between a fact and the queried
+    # class is not pruned from the beam.
+    path_endpoints = [index for index in seed_indices if unit_scores[index] >= 0.5][:16]
+    for start, goal in itertools.combinations(path_endpoints, 2):
+        queue = [start]
+        parents = {start: None}
+        for current in queue:
+            if current == goal:
+                break
+            for neighbor in sorted(adjacency[current]):
+                if neighbor in parents:
+                    continue
+                parents[neighbor] = current
+                queue.append(neighbor)
+
+        if goal not in parents:
+            continue
+        path = []
+        current = goal
+        while current is not None:
+            path.append(current)
+            current = parents[current]
+        combo = tuple(sorted(path))
+        if min_subgraph_size <= len(combo) <= max_size:
+            path_candidate_indices.add(combo)
 
     frontier = [(i,) for i in seed_indices[: max(beam_width, max_candidate_subgraphs)]]
     scored_candidates = []
@@ -366,19 +480,103 @@ def beam_connected_subgraphs(
         if not expansions:
             break
 
-        frontier = [
-            combo
-            for combo, _ in sorted(
-                expansions.items(),
-                key=lambda item: (-item[1], item[0]),
-            )[:beam_width]
-        ]
+        ranked_expansions = sorted(
+            expansions.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
 
-    scored_candidates.sort(key=lambda item: (-item[0], item[1]))
-    return {
+        # Keep the frontier diverse enough to retain low-scoring bridge rules.
+        # Pure global top-k pruning favors immediately relevant facts and can
+        # discard the inverse/subproperty rule needed to reach an exact proof.
+        next_frontier = []
+        next_seen = set()
+
+        expansion_patterns = defaultdict(list)
+        for combo, score in ranked_expansions:
+            fact_count = sum(
+                parse_axiom(candidate_units[index]).axiom_type == "fact"
+                for index in combo
+            )
+            expansion_patterns[fact_count].append((combo, score))
+        pattern_quota = max(1, (beam_width // 2) // max(len(expansion_patterns), 1))
+        for fact_count in sorted(expansion_patterns):
+            for combo, _ in expansion_patterns[fact_count][:pattern_quota]:
+                if combo not in next_seen:
+                    next_frontier.append(combo)
+                    next_seen.add(combo)
+
+        for anchor in seed_indices:
+            anchored = next(
+                (combo for combo, _ in ranked_expansions if anchor in combo),
+                None,
+            )
+            if anchored is not None and anchored not in next_seen:
+                next_frontier.append(anchored)
+                next_seen.add(anchored)
+                if len(next_frontier) >= beam_width:
+                    break
+
+        if len(next_frontier) < beam_width:
+            for combo, _ in ranked_expansions:
+                if combo in next_seen:
+                    continue
+                next_frontier.append(combo)
+                next_seen.add(combo)
+                if len(next_frontier) >= beam_width:
+                    break
+
+        frontier = next_frontier
+
+    # Preserve candidates across proof sizes. A single global top-k allows
+    # dense large subgraphs to crowd every compact proof out of the candidate
+    # set, even when the compact proof is exact.
+    by_pattern = defaultdict(list)
+    for scored_candidate in scored_candidates:
+        combo = scored_candidate[1]
+        fact_count = sum(
+            parse_axiom(candidate_units[index]).axiom_type == "fact" for index in combo
+        )
+        by_pattern[(len(combo), fact_count)].append(scored_candidate)
+
+    selected = sorted(
+        (
+            score_subgraph_indices(
+                combo,
+                candidate_units=candidate_units,
+                adjacency=adjacency,
+                unit_scores=unit_scores,
+            ),
+            combo,
+        )
+        for combo in path_candidate_indices
+    )
+    selected.sort(key=lambda item: (-item[0], item[1]))
+    selected = selected[:max_candidate_subgraphs]
+    selected_combos = {combo for _, combo in selected}
+    pattern_quota = max(1, max_candidate_subgraphs // max(len(by_pattern), 1))
+    for pattern in sorted(by_pattern):
+        for scored_candidate in sorted(
+            by_pattern[pattern], key=lambda item: (-item[0], item[1])
+        )[:pattern_quota]:
+            selected.append(scored_candidate)
+            selected_combos.add(scored_candidate[1])
+
+    if len(selected) < max_candidate_subgraphs:
+        for scored_candidate in sorted(
+            scored_candidates, key=lambda item: (-item[0], item[1])
+        ):
+            if scored_candidate[1] in selected_combos:
+                continue
+            selected.append(scored_candidate)
+            selected_combos.add(scored_candidate[1])
+            if len(selected) >= max_candidate_subgraphs:
+                break
+
+    beam_candidates = {
         tuple(candidate_units[i] for i in combo)
-        for _, combo in scored_candidates[:max_candidate_subgraphs]
+        for _, combo in selected[:max_candidate_subgraphs]
     }
+    return beam_candidates
 
 
 def set_scores(pred: List[str], gold_explanations: List[List[str]]) -> Dict:
@@ -436,6 +634,51 @@ def set_scores(pred: List[str], gold_explanations: List[List[str]]) -> Dict:
     return best
 
 
+def materialize_retrieval_rows(
+    candidate_units: List[str],
+    candidate_subgraphs: Iterable[Iterable[str]],
+    gold_explanations: List[List[str]],
+    base_row: Dict,
+    max_negative_per_example: int = -1,
+    shuffle_rows: bool = False,
+) -> List[Dict]:
+    """Create the common GNN retrieval rows from candidate KG subgraphs."""
+    unit_to_index = {unit: index for index, unit in enumerate(candidate_units)}
+    positives = []
+    negatives = []
+
+    for candidate in sorted(
+        (tuple(subgraph) for subgraph in candidate_subgraphs),
+        key=lambda subgraph: (len(subgraph), subgraph),
+    ):
+        subgraph_units = list(candidate)
+        scores = set_scores(subgraph_units, gold_explanations)
+        label = int(
+            scores["exact_match_any_gold"] or scores["contains_any_gold_explanation"]
+        )
+        row = {
+            **base_row,
+            "subgraph_node_ids": [
+                unit_to_index[unit] for unit in subgraph_units if unit in unit_to_index
+            ],
+            "subgraph_units": subgraph_units,
+            "subgraph_size": len(subgraph_units),
+            **scores,
+            "label": label,
+            "rank_target": float(scores["best_set_f1_to_gold"]),
+        }
+        (positives if label else negatives).append(row)
+
+    negatives.sort(key=lambda row: row["best_set_f1_to_gold"], reverse=True)
+    if max_negative_per_example >= 0:
+        negatives = negatives[:max_negative_per_example]
+
+    rows = positives + negatives
+    if shuffle_rows:
+        random.shuffle(rows)
+    return rows
+
+
 def relevant_context_axioms(
     axioms: List[str],
     question: str,
@@ -449,12 +692,51 @@ def relevant_context_axioms(
     scored = []
     for axiom in axioms:
         entities, properties = unit_signature(axiom)
-        score = 2 * len(entities & query_entities) + len(properties & query_properties)
+        score = (
+            2 * len(entities & query_entities)
+            + len(properties & query_properties)
+            + 3.0 * unit_question_overlap(axiom, question)
+        )
         if score > 0:
             scored.append((score, axiom))
 
     scored.sort(key=lambda item: (-item[0], item[1]))
-    return [axiom for _, axiom in scored[:max_context_units]]
+    seed_budget = max(1, max_context_units // 2)
+    selected = [axiom for _, axiom in scored[:seed_budget]]
+    seen = set(selected)
+
+    bridge_rules = sorted(
+        axiom
+        for axiom in axioms
+        if axiom not in seen
+        and parse_axiom(axiom).axiom_type == "rule"
+        and any(edge_between_units(axiom, seed) for seed in selected)
+    )
+    for axiom in bridge_rules:
+        if len(selected) >= max_context_units:
+            break
+        selected.append(axiom)
+        seen.add(axiom)
+
+    # Add graph neighbors of query-aligned seeds. This recovers intermediate
+    # rules/facts without consulting a gold explanation.
+    while len(selected) < max_context_units:
+        neighbors = []
+        for axiom in axioms:
+            if axiom in seen:
+                continue
+            links = sum(edge_between_units(axiom, chosen) for chosen in selected)
+            if links:
+                is_rule = int(parse_axiom(axiom).axiom_type == "rule")
+                neighbors.append((links, is_rule, axiom))
+        if not neighbors:
+            break
+        neighbors.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        _, _, chosen = neighbors[0]
+        selected.append(chosen)
+        seen.add(chosen)
+
+    return selected
 
 
 def answer_type_for(item: Dict, qa: Dict | None = None) -> str:
@@ -520,12 +802,12 @@ def build_rows_for_qa(
     candidate_beam_width: int,
     max_candidate_subgraphs: int,
 ) -> List[Dict]:
-    sparql_query = str(qa.get("SPARQL Query") or "")
+    reference_sparql_query = str(qa.get("SPARQL Query") or "")
     question = (
         qa.get("NL Question")
         or qa.get("ABS Question")
         or qa.get("Task ID")
-        or sparql_query
+        or reference_sparql_query
     )
     question = str(question)
 
@@ -535,98 +817,68 @@ def build_rows_for_qa(
         return []
 
     context_axioms = parse_owl_context(item["OWL Context"])
-    candidate_units = []
-    seen = set()
-
-    for explanation in gold_explanations:
-        for unit in explanation:
-            if unit not in seen:
-                candidate_units.append(unit)
-                seen.add(unit)
-
-    for unit in relevant_context_axioms(
+    # The ontology is already a KG. Candidate units must come only from that
+    # inference-time context; gold explanations remain supervision.
+    candidate_units = relevant_context_axioms(
         context_axioms,
         question=question,
-        sparql_query=sparql_query,
+        sparql_query="",
         max_context_units=max_context_units,
-    ):
-        if unit not in seen:
-            candidate_units.append(unit)
-            seen.add(unit)
-
-    candidate_subgraphs = set()
-
-    for gold in gold_explanations:
-        if min_subgraph_size <= len(gold) and (
-            max_subgraph_size <= 0 or len(gold) <= max_subgraph_size
-        ):
-            candidate_subgraphs.add(tuple(gold))
+    )
+    if not candidate_units:
+        return []
 
     effective_max_subgraph_size = (
         len(candidate_units) if max_subgraph_size <= 0 else max_subgraph_size
     )
 
-    candidate_subgraphs.update(
-        beam_connected_subgraphs(
-            candidate_units=candidate_units,
-            question=question,
-            sparql_query=sparql_query,
-            min_subgraph_size=min_subgraph_size,
-            max_subgraph_size=effective_max_subgraph_size,
-            beam_width=candidate_beam_width,
-            max_candidate_subgraphs=max_candidate_subgraphs,
-        )
+    candidate_subgraphs = beam_connected_subgraphs(
+        candidate_units=candidate_units,
+        question=question,
+        sparql_query="",
+        min_subgraph_size=min_subgraph_size,
+        max_subgraph_size=effective_max_subgraph_size,
+        beam_width=candidate_beam_width,
+        max_candidate_subgraphs=max_candidate_subgraphs,
+    )
+    candidate_set = set(candidate_units)
+    gold_context_coverage = max(
+        (
+            len(set(explanation) & candidate_set) / max(len(set(explanation)), 1)
+            for explanation in gold_explanations
+        ),
+        default=0.0,
     )
 
-    positives = []
-    negatives = []
-
-    for combo in candidate_subgraphs:
-        subgraph_units = list(combo)
-        scores = set_scores(subgraph_units, gold_explanations)
-        label = int(
-            scores["exact_match_any_gold"] or scores["contains_any_gold_explanation"]
-        )
-
-        row = {
+    return materialize_retrieval_rows(
+        candidate_units=candidate_units,
+        candidate_subgraphs=candidate_subgraphs,
+        gold_explanations=gold_explanations,
+        base_row={
             "example_id": (
                 f"{source_name}__g{group_index}__q{qa_index}__"
-                f"{qa.get('Task ID', '')}__{question}__{sparql_query}"
+                f"{qa.get('Task ID', '')}__{question}"
             ),
             "split": split,
             "question": question,
-            "sparql_query": sparql_query,
+            # Keep the annotation for traceability, but never expose it to
+            # retrieval/model features.
+            "sparql_query": "",
+            "reference_sparql_query": reference_sparql_query,
             "task_type": item.get("Task Type", ""),
             "answer_type": answer_type_for(item, qa),
             "answer": qa.get("Answer"),
+            "evidence_unit_type": "ontology_axiom",
             "source_name": source_name,
             "group_index": group_index,
             "qa_index": qa_index,
-            "subgraph_node_ids": [
-                candidate_units.index(unit)
-                for unit in subgraph_units
-                if unit in candidate_units
-            ],
-            "subgraph_units": subgraph_units,
-            "subgraph_size": len(subgraph_units),
             "gold_explanations": gold_explanations,
             "gold_units": gold_explanations[0],
-            **scores,
-            "label": label,
-        }
-
-        if label:
-            positives.append(row)
-        else:
-            negatives.append(row)
-
-    negatives.sort(key=lambda r: r["best_set_f1_to_gold"], reverse=True)
-    if max_negative_per_example >= 0:
-        negatives = negatives[:max_negative_per_example]
-
-    rows = positives + negatives
-    random.shuffle(rows)
-    return rows
+            "gold_context_coverage": gold_context_coverage,
+        },
+        max_negative_per_example=max_negative_per_example,
+        shuffle_rows=True,
+    )
 
 
 def build_answer_only_row(
@@ -638,12 +890,12 @@ def build_answer_only_row(
     split: str,
     max_context_units: int,
 ) -> Dict:
-    sparql_query = str(qa.get("SPARQL Query") or "")
+    reference_sparql_query = str(qa.get("SPARQL Query") or "")
     question = (
         qa.get("NL Question")
         or qa.get("ABS Question")
         or qa.get("Task ID")
-        or sparql_query
+        or reference_sparql_query
     )
     question = str(question)
 
@@ -651,18 +903,19 @@ def build_answer_only_row(
     answer_context_units = relevant_context_axioms(
         context_axioms,
         question=question,
-        sparql_query=sparql_query,
+        sparql_query="",
         max_context_units=max_context_units,
     )
 
     return {
         "example_id": (
             f"{source_name}__g{group_index}__q{qa_index}__"
-            f"{qa.get('Task ID', '')}__{question}__{sparql_query}"
+            f"{qa.get('Task ID', '')}__{question}"
         ),
         "split": split,
         "question": question,
-        "sparql_query": sparql_query,
+        "sparql_query": "",
+        "reference_sparql_query": reference_sparql_query,
         "task_type": item.get("Task Type", ""),
         "answer_type": answer_type_for(item, qa),
         "answer": qa.get("Answer"),
@@ -681,28 +934,109 @@ def empty_splits() -> Dict[str, List[Dict]]:
     return {"train": [], "dev": [], "test": []}
 
 
+def load_selection_manifest(path: Path | None) -> Dict[str, Set[str]] | None:
+    if path is None:
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    selected = {}
+    for split in ("train", "dev", "test"):
+        ids = manifest.get("splits", {}).get(split, {}).get("selected_example_ids")
+        if not isinstance(ids, list):
+            raise ValueError(
+                f"Selection manifest {path} has no selected IDs for {split}"
+            )
+        selected[split] = {str(example_id) for example_id in ids}
+    return selected
+
+
 def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
     output = {}
     answer_only = {}
+    manifest_selection = load_selection_manifest(args.selection_manifest)
 
     for input_path in args.input_json:
         source_name = Path(input_path).stem
         print(f"[LOAD] {source_name}: {input_path}")
         data = json.loads(Path(input_path).read_text(encoding="utf-8"))
-        if args.max_groups:
-            data = data[: args.max_groups]
         split_by_group = build_split_map(
             groups=data,
             train_ratio=args.train_ratio,
             dev_ratio=args.dev_ratio,
         )
+        source_selection = None
+        selected_pairs = None
+        if manifest_selection is not None:
+            source_selection = {
+                split: {
+                    example_id
+                    for example_id in ids
+                    if example_id.startswith(f"{source_name}__")
+                }
+                for split, ids in manifest_selection.items()
+            }
+            selected_ids = set().union(*source_selection.values())
+            selected_pairs = {}
+            for selected_split, ids in source_selection.items():
+                for example_id in ids:
+                    match = re.search(r"__g(\d+)__q(\d+)__", example_id)
+                    if match is None:
+                        raise ValueError(
+                            f"Could not parse group/QA indices from {example_id!r}"
+                        )
+                    pair = (int(match.group(1)), int(match.group(2)))
+                    previous = selected_pairs.setdefault(pair, selected_split)
+                    if previous != selected_split:
+                        raise ValueError(
+                            f"Group/QA pair {pair} is assigned to both "
+                            f"{previous} and {selected_split}"
+                        )
+            group_indices = sorted({group_index for group_index, _ in selected_pairs})
+            if len(group_indices) == 0 and selected_ids:
+                raise ValueError(
+                    f"Could not parse group indices from selection manifest for "
+                    f"{source_name}"
+                )
+        elif args.group_indices:
+            group_indices = list(dict.fromkeys(args.group_indices))
+            invalid = [index for index in group_indices if not 0 <= index < len(data)]
+            if invalid:
+                raise ValueError(
+                    f"Group indices out of range for {source_name}: {invalid}"
+                )
+        else:
+            group_indices = list(range(len(data)))
+        if args.max_groups:
+            group_indices = group_indices[: args.max_groups]
+
         source_output = empty_splits()
         source_answer_only = empty_splits()
 
-        for group_index, item in enumerate(data):
+        for processed_count, group_index in enumerate(group_indices, start=1):
+            item = data[group_index]
             split = split_by_group[group_index]
 
             for qa_index, qa in enumerate(item.get("QAs", [])):
+                question = str(
+                    qa.get("NL Question")
+                    or qa.get("ABS Question")
+                    or qa.get("Task ID")
+                    or qa.get("SPARQL Query")
+                    or ""
+                )
+                example_id = (
+                    f"{source_name}__g{group_index}__q{qa_index}__"
+                    f"{qa.get('Task ID', '')}__{question}"
+                )
+                if selected_pairs is not None:
+                    expected_split = selected_pairs.get((group_index, qa_index))
+                    if expected_split is None:
+                        continue
+                    if expected_split != split:
+                        raise ValueError(
+                            f"Manifest assigns {example_id!r} to {expected_split}, "
+                            f"but the raw-data split map assigns it to {split}"
+                        )
                 has_gold_support = bool(get_gold_explanations(qa))
 
                 if not has_gold_support:
@@ -733,11 +1067,23 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
                 )
                 source_output[split].extend(rows)
 
-            if (group_index + 1) % 100 == 0:
-                print(f"  processed {group_index + 1}/{len(data)} groups")
+            if processed_count % 100 == 0:
+                print(f"  processed {processed_count}/{len(group_indices)} groups")
 
         output[source_name] = source_output
         answer_only[source_name] = source_answer_only
+        if selected_pairs is not None:
+            built_pairs = {
+                (int(row["group_index"]), int(row["qa_index"]))
+                for split_rows in source_output.values()
+                for row in split_rows
+            }
+            missing = set(selected_pairs) - built_pairs
+            if missing:
+                raise ValueError(
+                    f"Failed to rebuild {len(missing)} selected examples for "
+                    f"{source_name}, including group/QA pairs: {sorted(missing)[:3]}"
+                )
 
     return {"support": output, "answer_only": answer_only}
 
@@ -764,11 +1110,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-subgraph-size",
         type=int,
-        default=0,
+        default=7,
         help=(
-            "Maximum support size to search. Use 0 for no fixed size cap; "
-            "runtime is then controlled by --candidate-beam-width and "
-            "--max-candidate-subgraphs."
+            "Maximum support size to search. FamilyOWL gold explanations have "
+            "at most 7 units. Use 0 only for an intentional unbounded search."
         ),
     )
     parser.add_argument("--max-context-units", type=int, default=40)
@@ -810,6 +1155,25 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Optional smoke-test limit per input JSON. Use 0 for all groups.",
     )
+    parser.add_argument(
+        "--group-indices",
+        nargs="+",
+        type=int,
+        default=None,
+        help=(
+            "Optional fixed raw group indices for reproducible diagnostics. "
+            "Splits are still computed from the full dataset."
+        ),
+    )
+    parser.add_argument(
+        "--selection-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "A gnn_dev_sample_v1 manifest whose exact example IDs override "
+            "--group-indices/--max-groups."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -840,6 +1204,45 @@ def main() -> None:
                 rows,
             )
             combined_answer_only[split_name].extend(rows)
+
+    input_by_source = {Path(path).stem: str(Path(path)) for path in args.input_json}
+    for source_name, splits in by_source.items():
+        answer_splits = answer_only_by_source[source_name]
+        metadata = {
+            "schema_version": "unified_kg_reasoning_v3",
+            "evidence_unit_type": "ontology_axiom",
+            "retrieval_inference_inputs": ["question", "ontology_context"],
+            "reference_only_fields": ["reference_sparql_query", "gold_explanations"],
+            "source_json": input_by_source.get(source_name, ""),
+            "candidate_composer": "beam_connected_subgraphs",
+            "row_materializer": "materialize_retrieval_rows",
+            "min_subgraph_size": args.min_subgraph_size,
+            "max_subgraph_size": args.max_subgraph_size,
+            "max_context_units": args.max_context_units,
+            "max_negative_per_example": args.max_negative_per_example,
+            "candidate_beam_width": args.candidate_beam_width,
+            "max_candidate_subgraphs": args.max_candidate_subgraphs,
+            "train_ratio": args.train_ratio,
+            "dev_ratio": args.dev_ratio,
+            "max_groups": args.max_groups,
+            "group_indices": args.group_indices,
+            "selection_manifest": (
+                str(args.selection_manifest) if args.selection_manifest else None
+            ),
+            "train_rows": len(splits["train"]),
+            "dev_rows": len(splits["dev"]),
+            "test_rows": len(splits["test"]),
+            "train_examples": len({row["example_id"] for row in splits["train"]}),
+            "dev_examples": len({row["example_id"] for row in splits["dev"]}),
+            "test_examples": len({row["example_id"] for row in splits["test"]}),
+            "train_answer_only": len(answer_splits["train"]),
+            "dev_answer_only": len(answer_splits["dev"]),
+            "test_answer_only": len(answer_splits["test"]),
+        }
+        metadata_path = output_dir / source_name / "metadata.json"
+        with metadata_path.open("w", encoding="utf-8") as handle:
+            json.dump(metadata, handle, indent=2, ensure_ascii=False)
+        print(f"[WRITE] {metadata_path}")
 
     if args.combined:
         for split_name, rows in combined.items():
