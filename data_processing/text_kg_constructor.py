@@ -165,6 +165,224 @@ def construct_wiki_bridge_triples(
     return triples
 
 
+# Demonyms observed on 2Wiki's opening-sentence "is a/was a NATIONALITY ..."
+# convention, restricted to the countries that actually appear in the closed
+# ~33-relation Wikidata-derived vocabulary used by this dataset's supporting
+# facts (country / country of citizenship / country of origin).
+_DEMONYM_TO_COUNTRY: Dict[str, str] = {
+    "American": "United States", "British": "United Kingdom", "English": "United Kingdom",
+    "Scottish": "United Kingdom", "Welsh": "United Kingdom", "Irish": "Ireland",
+    "Indian": "India", "French": "France", "German": "Germany", "Italian": "Italy",
+    "Spanish": "Spain", "Portuguese": "Portugal", "Russian": "Russia", "Japanese": "Japan",
+    "Chinese": "China", "Canadian": "Canada", "Australian": "Australia", "Dutch": "Netherlands",
+    "Swedish": "Sweden", "Norwegian": "Norway", "Danish": "Denmark", "Polish": "Poland",
+    "Brazilian": "Brazil", "Mexican": "Mexico", "Egyptian": "Egypt", "Turkish": "Turkey",
+    "Greek": "Greece", "Swiss": "Switzerland", "Austrian": "Austria", "Belgian": "Belgium",
+    "Finnish": "Finland", "Israeli": "Israel", "Malaysian": "Malaysia",
+    "Filipino": "Philippines", "Vietnamese": "Vietnam", "Thai": "Thailand",
+    "Indonesian": "Indonesia", "Pakistani": "Pakistan", "Bangladeshi": "Bangladesh",
+    "Nigerian": "Nigeria", "Kenyan": "Kenya", "Argentine": "Argentina",
+    "Argentinian": "Argentina", "Chilean": "Chile", "Colombian": "Colombia",
+    "Peruvian": "Peru", "Cuban": "Cuba", "Venezuelan": "Venezuela", "Ukrainian": "Ukraine",
+    "Czech": "Czech Republic", "Hungarian": "Hungary", "Romanian": "Romania",
+    "Bulgarian": "Bulgaria", "Croatian": "Croatia", "Serbian": "Serbia",
+    "Icelandic": "Iceland", "Maltese": "Malta", "Lithuanian": "Lithuania",
+}
+
+# Occupation cues that mark a nearby demonym as the subject's own
+# nationality (country of citizenship) rather than a work's production
+# country (country of origin) -- e.g. "is an American film director" vs
+# "is a 1987 American ... film".
+_PERSON_OCCUPATION_TERMS = (
+    "director", "composer", "producer", "actor", "actress", "singer", "painter",
+    "writer", "novelist", "politician", "footballer", "architect", "photographer",
+    "poet", "musician", "scientist", "scholar", "humanist", "diplomat", "editor",
+    "publisher", "presenter", "performer", "playwright", "sculptor",
+)
+_WORK_TYPE_TERMS = ("film", "song", "novel", "series", "album", "drama", "documentary")
+
+_NAME_RE = r"[A-Z][\w.\-]*(?:\s[A-Z][\w.\-]*)*"
+
+# The dataset mixes American ("October 14, 2016") and British ("14 October
+# 2016") date order -- both conventions appear in real 2Wiki source text,
+# confirmed on Metamathics/Candyland (publication dates) and Tongzhi
+# Emperor (date of death: "12 January 1875"). The bare-year fallback (with
+# optional "c." for uncertain years, e.g. "born Leon Blank, c. 1927") lets
+# an uncertain BIRTH date not block extracting a well-formed DEATH date in
+# the same parenthetical -- without it the whole regex fails to match at
+# all when the birth portion doesn't parse, losing a recoverable death
+# date too (confirmed on Lee Madden: "(born Leon Blank, c. 1927 - April 9,
+# 2009)").
+_DATE_RE = r"(?:c\.\s*)?(?:[A-Za-z]+ \d{1,2},?\s?\d{4}|\d{1,2} [A-Za-z]+ \d{4}|\d{4})"
+
+# One canonical pattern per Wikidata-style relation, restricted to the
+# closed relation vocabulary found in 2Wiki's supporting facts (see
+# KG_CONSTRUCTION_FINDINGS.md relation-frequency analysis). Deliberately
+# excludes family relations (father/mother/child/sibling): "son/daughter of
+# NAME" can't be safely assigned to father vs. mother without gender
+# information the regex doesn't have, and a wrong assignment is worse than
+# no triple.
+_RELATION_PATTERNS: Dict[str, List["re.Pattern[str]"]] = {
+    "director": [re.compile(rf"(?i:directed by) ({_NAME_RE})")],
+    "composer": [
+        re.compile(rf"(?i:musical score|music) by ({_NAME_RE})"),
+        re.compile(rf"(?i:composed by) ({_NAME_RE})"),
+    ],
+    "performer": [re.compile(rf"(?i:performed|sung|recorded) by ({_NAME_RE})")],
+    "producer": [re.compile(rf"(?i:produced by) ({_NAME_RE})")],
+    "publisher": [re.compile(rf"(?i:published by) ({_NAME_RE})")],
+    "editor": [re.compile(rf"(?i:edited by) ({_NAME_RE})")],
+    "creator": [re.compile(rf"(?i:created by) ({_NAME_RE})")],
+    "founded_by": [re.compile(rf"(?i:founded by) ({_NAME_RE})")],
+    "presenter": [re.compile(rf"(?i:presented|hosted) by ({_NAME_RE})")],
+    "spouse": [re.compile(rf"(?i:wife|husband) of ({_NAME_RE})")],
+    "born_in": [
+        re.compile(rf"(?i:born)(?:\s+as\s+{_NAME_RE})?\s+(?i:in) ({_NAME_RE}(?:,\s?{_NAME_RE})?)")
+    ],
+    "died_in": [re.compile(rf"(?i:died in) ({_NAME_RE}(?:,\s?{_NAME_RE})?)")],
+    "cause_of_death": [re.compile(r"(?i:died of|died from) ([a-z][a-z \-]*?)(?=[.,;]|$)")],
+    "inception": [re.compile(r"(?i:founded|established) in (?:[A-Za-z]+ )?(\d{4})")],
+    "publication_date": [
+        # A short lazy gap absorbs an inserted location/publisher clause:
+        # "released in New Zealand on April 14, 2008", "released through
+        # Scarlet Records on 14 October 2016" -- bounded to 40 chars so it
+        # can't jump to an unrelated later "on" in the same sentence.
+        re.compile(rf"(?i:released|published)\b.{{0,40}}?\bon\b ({_DATE_RE})")
+    ],
+}
+
+_BIRTH_DEATH_SPAN_RE = re.compile(
+    # Handles all three real Wikipedia opening-parenthetical conventions:
+    # "(born Month Day, Year)", "(Month Day, Year - Month Day, Year)", and
+    # "(born Full Birth Name, Month Day, Year - Month Day, Year)" -- the
+    # optional name-token run absorbs a birth name inserted before the date.
+    # Also tolerates no space before "(" (clean_text can't fix that; it's
+    # the source text itself, e.g. "Oswald( June 9, 1919 - May 22, 1989)").
+    rf"\(\s*(?:born\s+(?:[A-Z][\w.\-]*,?\s+)*)?"
+    rf"({_DATE_RE})"
+    rf"(?:\s*[-–—]\s*({_DATE_RE}))?"
+    r"\s*\)"
+)
+
+_INCEPTION_YEAR_RE = re.compile(r"(?i:is an?) (\d{4})\b")
+
+
+def _clean_entity_value(raw: str) -> str:
+    value = clean_text(raw).rstrip(",;:")
+    if value.endswith("."):
+        # Strip a sentence-final period, but keep it if the last token is a
+        # single-letter abbreviation (e.g. the "K." in "T. K. Ramchand").
+        tokens = value.split()
+        if tokens and len(tokens[-1]) > 2:
+            value = value[:-1]
+    return value.strip()
+
+
+def _extract_birth_death_dates(sentence: str) -> tuple[str | None, str | None]:
+    match = _BIRTH_DEATH_SPAN_RE.search(sentence)
+    if not match:
+        return None, None
+    return match.group(1), match.group(2)
+
+
+def _extract_demonym_relation(sentence: str) -> tuple[str | None, str | None]:
+    for word in re.findall(r"\b([A-Z][a-z]+)\b", sentence):
+        country = _DEMONYM_TO_COUNTRY.get(word)
+        if not country:
+            continue
+        idx = sentence.find(word)
+        window = sentence[idx : idx + 80].lower()
+        if any(term in window for term in _PERSON_OCCUPATION_TERMS):
+            return "country_of_citizenship", country
+        if any(term in window for term in _WORK_TYPE_TERMS):
+            return "country_of_origin", country
+    return None, None
+
+
+def extract_pattern_relation_triples(
+    sentence_records: List[Dict[str, Any]],
+    max_triples: int,
+) -> List[List[str]]:
+    """Deterministic-first typed-relation extraction restricted to the closed
+    Wikidata-style relation vocabulary observed in this dataset's supporting
+    facts. Cheap, stable, and zero-hallucination, but only covers sentences
+    that follow Wikipedia's templated opening-sentence conventions -- callers
+    should backfill remaining connectivity with construct_wiki_bridge_triples.
+    """
+    if max_triples <= 0:
+        return []
+
+    triples: List[List[str]] = []
+    for rec in sentence_records:
+        if len(triples) >= max_triples:
+            break
+
+        subject = clean_text(rec.get("title", ""))
+        sentence = clean_text(rec.get("sentence", ""))
+        if not subject or not sentence:
+            continue
+
+        for relation, patterns in _RELATION_PATTERNS.items():
+            for pattern in patterns:
+                match = pattern.search(sentence)
+                if not match:
+                    continue
+                value = _clean_entity_value(match.group(1))
+                if value and value.lower() != subject.lower():
+                    triples.append([subject, relation, value])
+                break
+
+        birth, death = _extract_birth_death_dates(sentence)
+        if birth:
+            triples.append([subject, "date_of_birth", _clean_entity_value(birth)])
+        if death:
+            triples.append([subject, "date_of_death", _clean_entity_value(death)])
+
+        # The demonym heuristic only holds for a page's own opening
+        # self-description ("X is a NATIONALITY OCCUPATION/work..."); later
+        # sentences often describe plot details or other mentioned entities
+        # (e.g. a fictional character's nationality), which the heuristic
+        # would otherwise misattribute to the page's own subject.
+        if rec.get("sent_idx") in (0, "0"):
+            demonym_relation, country = _extract_demonym_relation(sentence)
+            if demonym_relation:
+                triples.append([subject, demonym_relation, country])
+
+            # The single most common way a film/song/album page states its
+            # own release year: "X is a 1976 Italian-Brazilian ... film" --
+            # far more common in this dataset than an explicit "released
+            # on"/"published on" date. Restricted to the opening sentence
+            # for the same reason as the demonym check above.
+            year_match = _INCEPTION_YEAR_RE.search(sentence)
+            if year_match:
+                triples.append([subject, "publication_date", year_match.group(1)])
+
+    normalized = [[s, normalize_relation(r), o] for s, r, o in triples]
+    return dedupe_triples(normalized)[:max_triples]
+
+
+def construct_deterministic_kg_triples(
+    sentence_records: List[Dict[str, Any]],
+    max_triples: int,
+) -> List[List[str]]:
+    """Deterministic-first pass: typed relation patterns fire first (cheap,
+    stable, restricted to the closed relation vocabulary), then generic
+    title co-mention bridges backfill whatever connectivity the patterns
+    didn't cover, up to the same triple budget.
+    """
+    pattern_triples = extract_pattern_relation_triples(sentence_records, max_triples)
+    remaining_budget = max_triples - len(pattern_triples)
+    bridge_triples = (
+        construct_wiki_bridge_triples(
+            sentence_records=sentence_records,
+            max_triples=remaining_budget,
+        )
+        if remaining_budget > 0
+        else []
+    )
+    return dedupe_triples([*pattern_triples, *bridge_triples])[:max_triples]
+
+
 @dataclass
 class KGConstructionConfig:
     backend: str = "auto"
@@ -369,11 +587,26 @@ def construct_text_kg(
             return triples[: config.max_triples], "llm"
 
     if config.backend in {"auto", "deterministic"}:
-        triples = construct_wiki_bridge_triples(
+        pattern_triples = extract_pattern_relation_triples(
             sentence_records=sentence_records,
             max_triples=config.max_triples,
         )
+        remaining_budget = config.max_triples - len(pattern_triples)
+        bridge_triples = (
+            construct_wiki_bridge_triples(
+                sentence_records=sentence_records,
+                max_triples=remaining_budget,
+            )
+            if remaining_budget > 0
+            else []
+        )
+        triples = dedupe_triples([*pattern_triples, *bridge_triples])[: config.max_triples]
         if triples:
-            return triples, "title_bridge_fallback"
+            method = (
+                "deterministic_pattern_plus_title_bridge"
+                if pattern_triples
+                else "title_bridge_fallback"
+            )
+            return triples, method
 
     return [], "none"
