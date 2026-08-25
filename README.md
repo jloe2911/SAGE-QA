@@ -3,7 +3,7 @@
 SAGE-QA is a retrieval-augmented question answering pipeline for multi-hop
 reasoning over text benchmarks and OWL-style datasets. The
 repository contains the code used for the manuscript experiments on HotpotQA,
-2WikiMultiHopQA, FamilyOWL, and OWL2Bench.
+2WikiMultiHopQA, Family, Pizza, and OWL2Bench.
 
 The pipeline converts each question into candidate evidence subgraphs, trains a
 GNN subgraph retriever, compares lexical/GNN/SAGE-QA/GNN-RAG retrieval
@@ -82,6 +82,8 @@ Expected committed assets:
 
 - Source code
 - `data/raw/family.zip`
+- `data/raw/pizza_100.zip`
+- `data/raw/pizza_250.zip`
 - `data/raw/owl2bench.zip`
 - Adapted GNN-RAG files under `third_party/GNN-RAG/`
 - Local GNN-RAG change notes under `patches/`
@@ -95,6 +97,10 @@ Generated locally:
 
 - `data/FamilyOWL_1hop/`
 - `data/FamilyOWL_2hop/`
+- `data/pizza_100_1hop/`
+- `data/pizza_100_2hop/`
+- `data/pizza_250_1hop/`
+- `data/pizza_250_2hop/`
 - `data/OWL2Bench_1hop/`
 - `data/OWL2Bench_2hop/`
 - `data/HotpotQA/`
@@ -108,6 +114,8 @@ Extract the bundled ontology benchmark archives:
 
 ```powershell
 Expand-Archive -Path data/raw/family.zip -DestinationPath data/raw -Force
+Expand-Archive -Path data/raw/pizza_100.zip -DestinationPath data/raw -Force
+Expand-Archive -Path data/raw/pizza_250.zip -DestinationPath data/raw -Force
 Expand-Archive -Path data/raw/owl2bench.zip -DestinationPath data/raw -Force
 ```
 
@@ -130,7 +138,7 @@ supervised evaluation.
 
 ## Build Retrieval Datasets
 
-Build FamilyOWL:
+Build Family:
 
 ```powershell
 python data/build_subgraph_training_data.py `
@@ -139,6 +147,26 @@ python data/build_subgraph_training_data.py `
 
 python data/build_subgraph_training_data.py `
   --input-json data/raw/family/FamilyOWL_2hop.json `
+  --output-dir data
+```
+
+Build Pizza:
+
+```powershell
+python data/build_subgraph_training_data.py `
+  --input-json data/raw/pizza_100/pizza_100_1hop.json `
+  --output-dir data
+
+python data/build_subgraph_training_data.py `
+  --input-json data/raw/pizza_100/pizza_100_2hop.json `
+  --output-dir data
+
+python data/build_subgraph_training_data.py `
+  --input-json data/raw/pizza_250/pizza_250_1hop.json `
+  --output-dir data
+
+python data/build_subgraph_training_data.py `
+  --input-json data/raw/pizza_250/pizza_250_2hop.json `
   --output-dir data
 ```
 
@@ -216,7 +244,7 @@ After building all six retrieval datasets, run the main manuscript command:
 
 ```powershell
 python experiments/run_experiments.py `
-  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop,owl2bench_1hop,owl2bench_2hop `
   --methods auto `
   --top-k 3 `
   --reader-model openai:gpt-4.1-mini `
@@ -229,7 +257,7 @@ answers:
 
 ```powershell
 python experiments/run_experiments.py `
-  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop,owl2bench_1hop,owl2bench_2hop `
   --methods auto `
   --top-k 3 `
   --reader-model openai:gpt-4.1-mini `
@@ -280,7 +308,7 @@ Ontology-only:
 
 ```powershell
 python experiments/run_experiments.py `
-  --datasets familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
+  --datasets familyowl_1hop,familyowl_2hop,pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop,owl2bench_1hop,owl2bench_2hop `
   --methods auto `
   --top-k 3 `
   --reader-model openai:gpt-4.1-mini `
@@ -294,7 +322,7 @@ GNN-RAG baseline only:
 
 ```powershell
 python experiments/run_experiments.py `
-  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,pizza_100_1hop,pizza_100_2hop,pizza_250_1hop,pizza_250_2hop,owl2bench_1hop,owl2bench_2hop `
   --methods gnn_rag `
   --top-k 3 `
   --reader-model openai:gpt-4.1-mini `
@@ -397,7 +425,7 @@ patches/GNN-RAG-local-changes.patch
 
 ## Error Analysis
 
-FamilyOWL example:
+Family example:
 
 ```powershell
 python evaluation/error_analysis_support_qa.py `
@@ -435,9 +463,6 @@ Adjust the answer/prediction filenames if the reader model tag differs.
 - Full reproduction can take several hours. Runtime depends on GPU speed,
   Hugging Face cache state, LLM API latency, and whether checkpoints/outputs
   are reused.
-- The experiment runner also contains auxiliary Pizza dataset keys. The
-  manuscript commands above use explicit dataset lists so auxiliary rows are not
-  included by accident.
 - `--skip-llm` is useful for retrieval-only checks but does not produce final
   answer metrics.
 

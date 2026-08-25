@@ -215,6 +215,8 @@ data/Pizza_*/
 data/raw/*
 !data/raw/family.zip
 !data/raw/owl2bench.zip
+!data/raw/pizza_100.zip
+!data/raw/pizza_250.zip
 outputs/
 checkpoints/
 results/
