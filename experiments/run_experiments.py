@@ -14,6 +14,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from utils.llm_client import load_local_env, parse_model_ref
+from data_processing.retrieval_contracts import validate_clean_kg_backend
 
 
 DATASETS = {
@@ -358,6 +359,41 @@ def default_methods_for_dataset(dataset_type: str) -> List[str]:
             "gnn_rag",
         ]
     raise ValueError(f"Unknown dataset type: {dataset_type}")
+
+
+def validate_retrieval_artifact(dataset_key: str, cfg: Dict) -> None:
+    """Reject legacy/gold-assisted candidate datasets before any experiment."""
+    data_dir = Path(cfg["data_dir"])
+    metadata_path = data_dir / "metadata.json"
+    if not metadata_path.exists():
+        raise ValueError(
+            f"Retrieval metadata is required for {dataset_key}: {metadata_path}"
+        )
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    expected_schema = (
+        "gold_free_text_retrieval_v1"
+        if cfg["type"] == "text"
+        else "gold_free_ontology_retrieval_v1"
+    )
+    if metadata.get("schema_version") != expected_schema:
+        raise ValueError(
+            f"Stale retrieval schema for {dataset_key}: "
+            f"{metadata.get('schema_version')!r}; expected {expected_schema!r}."
+        )
+    if metadata.get("gold_available_during_candidate_generation") is not False:
+        raise ValueError(f"{dataset_key} metadata does not certify gold-free generation.")
+    if dataset_key.startswith("2wiki"):
+        validate_clean_kg_backend(str(metadata.get("kg_construction_backend") or ""))
+    if cfg["type"] == "text":
+        manifest_path = data_dir / str(metadata.get("split_manifest") or "split_manifest.json")
+        if not manifest_path.exists():
+            raise ValueError(f"Text split manifest is missing: {manifest_path}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        dev_ids = set(manifest.get("splits", {}).get("dev", {}).get("example_ids", []))
+        test_ids = set(manifest.get("splits", {}).get("test", {}).get("example_ids", []))
+        overlap = dev_ids & test_ids
+        if overlap:
+            raise ValueError(f"Text dev/test IDs overlap: {sorted(overlap)[:5]}")
 
 
 def train_gnn_if_needed(
@@ -1196,6 +1232,7 @@ def run_experiment(args) -> None:
     for dataset_key in selected_datasets:
         cfg = DATASETS[dataset_key]
         selected_methods = methods_by_dataset[dataset_key]
+        validate_retrieval_artifact(dataset_key, cfg)
 
         print("\n" + "#" * 100, flush=True)
         log(f"DATASET: {cfg['display']} ({cfg['type']})")

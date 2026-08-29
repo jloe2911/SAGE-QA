@@ -69,10 +69,6 @@ def extract_question_entities(row: Dict[str, Any]) -> List[str]:
     for token in TOKEN_RE.findall(str(row.get("sparql_query", ""))):
         if "_" in token and not token.startswith("http"):
             entities.append(token)
-    for unit in row.get("gold_units", []) or []:
-        for token in TOKEN_RE.findall(str(unit)):
-            if "_" in token:
-                entities.append(token)
     seen = set()
     out = []
     for entity in entities:
@@ -121,9 +117,6 @@ def build_sample(
                 candidate_units.append(unit)
         for unit in row.get("gold_units", []) or []:
             unit = clean(unit)
-            if unit and unit not in seen_units:
-                seen_units.add(unit)
-                candidate_units.append(unit)
             if unit and unit not in seen_targets:
                 seen_targets.add(unit)
                 target_units.append(unit)
@@ -158,8 +151,6 @@ def build_sample(
         for entity in q_entities:
             if entity != node:
                 tuples.append([entity, rel, node])
-
-    entities.update(target_nodes)
 
     sample = {
         "id": example_id,

@@ -4,4 +4,5 @@ transformers==4.49.0
 pandas==3.0.2
 matplotlib==3.10.9
 rdflib==7.6.0
+scikit-learn==1.8.0
 openai>=1.0.0

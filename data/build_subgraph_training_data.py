@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
 from rdflib import Graph, URIRef
+from rdflib.collection import Collection
 from rdflib.namespace import OWL as OWL_NS
 from rdflib.namespace import RDF as RDF_NS
 from rdflib.namespace import RDFS as RDFS_NS
@@ -18,6 +19,12 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from models.symbolic_composer import extract_query_signature, parse_axiom
+from data_processing.retrieval_contracts import (
+    BUILDER_VERSION,
+    git_provenance,
+    sha256_file,
+    write_json,
+)
 
 
 RANDOM_SEED = 42
@@ -49,8 +56,39 @@ def split_tag(tag: str) -> Tuple[str, str]:
 def normalize_explanation_unit(unit: str) -> str:
     unit = " ".join(str(unit).strip().split())
 
+    # Some OWL2Bench JSON rows contain UTF-8 text decoded once as cp1252
+    # (for example ``âˆ˜``/``âŠ‘`` instead of ``∘``/``⊑``).
+    if "â" in unit:
+        try:
+            unit = unit.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+
     if not unit or unit.startswith("TAG:"):
         return ""
+
+    m = re.match(r"^(\S+)\s+owl:inverseOf\s+(\S+)$", unit)
+    if m:
+        left, right = sorted((m.group(1), m.group(2)))
+        return f"InverseObjectProperties({left},{right})"
+
+    m = re.match(r"^(\S+)\s+rdfs:subPropertyOf\s+(\S+)$", unit)
+    if m:
+        return f"SubObjectPropertyOf({m.group(1)},{m.group(2)})"
+
+    m = re.match(r"^PropertyChain\((\S+)\s+∘\s+(\S+)\)\s+⊑\s+(\S+)$", unit)
+    if m:
+        return f"ObjectPropertyChain({m.group(1)},{m.group(2)}->{m.group(3)})"
+
+    m = re.match(
+        r"^SubObjectPropertyOf\(ObjectPropertyChain\((.+)\)\s+(<[^>]+>|\S+)\)$",
+        unit,
+    )
+    if m:
+        chain = [local_name(token) for token in re.findall(r"<[^>]+>|\S+", m.group(1))]
+        super_property = local_name(m.group(2))
+        if chain:
+            return f"ObjectPropertyChain({','.join(chain)}->{super_property})"
 
     m = re.match(r"^Symmetric:\s*(.+)$", unit)
     if m:
@@ -170,6 +208,8 @@ def parse_owl_context(owl_context: str) -> List[str]:
                 add(f"{subject} rdf:type {obj}")
         elif predicate == RDFS_NS.subPropertyOf:
             add(f"SubObjectPropertyOf({subject},{obj})")
+        elif predicate == RDFS_NS.subClassOf:
+            add(f"{subject} SubClassOf {obj}")
         elif predicate == OWL_NS.inverseOf:
             add(f"InverseObjectProperties({subject},{obj})")
         elif predicate == OWL_NS.equivalentProperty:
@@ -183,10 +223,28 @@ def parse_owl_context(owl_context: str) -> List[str]:
             if pred not in {"comment", "first", "rest", "propertyChainAxiom"}:
                 add(f"{subject} {pred} {obj}")
 
+    for super_property, chain_head in graph.subject_objects(OWL_NS.propertyChainAxiom):
+        if not isinstance(super_property, URIRef):
+            continue
+        chain = [
+            local_name(str(member))
+            for member in Collection(graph, chain_head)
+            if isinstance(member, URIRef)
+        ]
+        if chain:
+            add(
+                f"ObjectPropertyChain({','.join(chain)}->"
+                f"{local_name(str(super_property))})"
+            )
+
     return axioms
 
 
 def unit_signature(unit: str) -> Tuple[Set[str], Set[str]]:
+    if str(unit).startswith("KG::"):
+        parts = str(unit).split("::", 3)
+        if len(parts) == 4:
+            return {parts[1], parts[3]}, {parts[2]}
     parsed = parse_axiom(unit)
     entities = set(parsed.entities())
     properties = set(parsed.properties())
@@ -203,7 +261,10 @@ def edge_between_units(left: str, right: str) -> bool:
     left_entities, left_properties = unit_signature(left)
     right_entities, right_properties = unit_signature(right)
     return bool(
-        (left_entities & right_entities) or (left_properties & right_properties)
+        (left_entities & right_entities)
+        or (left_properties & right_properties)
+        or (left_entities & right_properties)
+        or (left_properties & right_entities)
     )
 
 
@@ -446,15 +507,59 @@ def relevant_context_axioms(
     query_entities = set(signature.get("query_entities", []))
     query_properties = set(signature.get("query_properties", []))
 
-    scored = []
-    for axiom in axioms:
-        entities, properties = unit_signature(axiom)
+    if max_context_units <= 0:
+        return []
+
+    signatures = [unit_signature(axiom) for axiom in axioms]
+    tokens_by_index = [entities | properties for entities, properties in signatures]
+    token_index: Dict[str, Set[int]] = defaultdict(set)
+    direct_scores = []
+    for index, (entities, properties) in enumerate(signatures):
+        for token in tokens_by_index[index]:
+            token_index[token].add(index)
         score = 2 * len(entities & query_entities) + len(properties & query_properties)
         if score > 0:
-            scored.append((score, axiom))
+            direct_scores.append((score, index))
 
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    return [axiom for _, axiom in scored[:max_context_units]]
+    direct_scores.sort(key=lambda item: (-item[0], axioms[item[1]]))
+    selected: List[int] = []
+    selected_set: Set[int] = set()
+    frontier = []
+    for _, index in direct_scores:
+        if index not in selected_set and len(selected) < max_context_units:
+            selected.append(index)
+            selected_set.add(index)
+            frontier.append(index)
+
+    # Deterministic query-guided local expansion. This uses only formal-query
+    # seeds and context connectivity, and admits bridge/schema axioms that do
+    # not themselves mention the query entity or queried property.
+    while frontier and len(selected) < max_context_units:
+        neighbor_overlap: Dict[int, int] = defaultdict(int)
+        for index in frontier:
+            for token in tokens_by_index[index]:
+                for neighbor in token_index[token]:
+                    if neighbor not in selected_set:
+                        neighbor_overlap[neighbor] += 1
+        if not neighbor_overlap:
+            break
+        ranked = sorted(
+            neighbor_overlap,
+            key=lambda index: (
+                -neighbor_overlap[index],
+                -len(tokens_by_index[index] & (query_entities | query_properties)),
+                axioms[index],
+            ),
+        )
+        frontier = []
+        for index in ranked:
+            if len(selected) >= max_context_units:
+                break
+            selected.append(index)
+            selected_set.add(index)
+            frontier.append(index)
+
+    return [axioms[index] for index in selected]
 
 
 def answer_type_for(item: Dict, qa: Dict | None = None) -> str:
@@ -506,6 +611,68 @@ def build_split_map(
     return split_by_group
 
 
+def generate_ontology_candidates(
+    *,
+    question: str,
+    sparql_query: str,
+    owl_context: str,
+    max_subgraph_size: int,
+    min_subgraph_size: int,
+    max_context_units: int,
+    candidate_beam_width: int,
+    max_candidate_subgraphs: int,
+) -> Dict:
+    """Freeze ontology candidates without accepting answer or explanation fields."""
+    context_axioms = parse_owl_context(owl_context)
+    # Gold-free generation stage: only the formal/natural query and supplied
+    # ontology context can determine candidate units or subgraphs.
+    candidate_units = relevant_context_axioms(
+        context_axioms,
+        question=question,
+        sparql_query=sparql_query,
+        max_context_units=max_context_units,
+    )
+    if not candidate_units:
+        return {"candidate_units": [], "candidate_subgraphs": []}
+
+    effective_max_subgraph_size = (
+        len(candidate_units) if max_subgraph_size <= 0 else max_subgraph_size
+    )
+
+    candidate_subgraphs = beam_connected_subgraphs(
+        candidate_units=candidate_units,
+        question=question,
+        sparql_query=sparql_query,
+        min_subgraph_size=min_subgraph_size,
+        max_subgraph_size=effective_max_subgraph_size,
+        beam_width=candidate_beam_width,
+        max_candidate_subgraphs=max_candidate_subgraphs,
+    )
+
+    frozen_candidate_subgraphs = sorted(candidate_subgraphs, key=lambda c: (len(c), c))
+    signature = extract_query_signature(question=question, sparql_query=sparql_query)
+    query_entities = set(signature.get("query_entities", []))
+    query_properties = set(signature.get("query_properties", []))
+    adjacency = build_unit_adjacency(candidate_units)
+    unit_scores = [
+        score_unit_for_query(
+            unit,
+            query_entities=query_entities,
+            query_properties=query_properties,
+            degree=len(adjacency[index]),
+        )
+        for index, unit in enumerate(candidate_units)
+    ]
+
+    return {
+        "candidate_units": candidate_units,
+        "candidate_subgraphs": frozen_candidate_subgraphs,
+        "adjacency": adjacency,
+        "unit_scores": unit_scores,
+        "gold_available_during_candidate_generation": False,
+    }
+
+
 def build_rows_for_qa(
     source_name: str,
     group_index: int,
@@ -521,67 +688,45 @@ def build_rows_for_qa(
     max_candidate_subgraphs: int,
 ) -> List[Dict]:
     sparql_query = str(qa.get("SPARQL Query") or "")
-    question = (
+    question = str(
         qa.get("NL Question")
         or qa.get("ABS Question")
         or qa.get("Task ID")
         or sparql_query
     )
-    question = str(question)
-
-    gold_explanations = get_gold_explanations(qa)
-
-    if not gold_explanations:
-        return []
-
-    context_axioms = parse_owl_context(item["OWL Context"])
-    candidate_units = []
-    seen = set()
-
-    for explanation in gold_explanations:
-        for unit in explanation:
-            if unit not in seen:
-                candidate_units.append(unit)
-                seen.add(unit)
-
-    for unit in relevant_context_axioms(
-        context_axioms,
+    generated = generate_ontology_candidates(
         question=question,
         sparql_query=sparql_query,
+        owl_context=item["OWL Context"],
+        max_subgraph_size=max_subgraph_size,
+        min_subgraph_size=min_subgraph_size,
         max_context_units=max_context_units,
-    ):
-        if unit not in seen:
-            candidate_units.append(unit)
-            seen.add(unit)
+        candidate_beam_width=candidate_beam_width,
+        max_candidate_subgraphs=max_candidate_subgraphs,
+    )
+    candidate_units = generated["candidate_units"]
+    frozen_candidate_subgraphs = generated["candidate_subgraphs"]
+    adjacency = generated.get("adjacency", [])
+    unit_scores = generated.get("unit_scores", [])
+    if not candidate_units:
+        return []
 
-    candidate_subgraphs = set()
-
-    for gold in gold_explanations:
-        if min_subgraph_size <= len(gold) and (
-            max_subgraph_size <= 0 or len(gold) <= max_subgraph_size
-        ):
-            candidate_subgraphs.add(tuple(gold))
-
-    effective_max_subgraph_size = (
-        len(candidate_units) if max_subgraph_size <= 0 else max_subgraph_size
+    # Labeling stage starts only after frozen_candidate_subgraphs is finalized.
+    gold_explanations = get_gold_explanations(qa)
+    if not gold_explanations:
+        return []
+    candidate_set = set(candidate_units)
+    gold_context_coverage = max(
+        (
+            len(set(explanation) & candidate_set) / max(len(set(explanation)), 1)
+            for explanation in gold_explanations
+        ),
+        default=0.0,
     )
 
-    candidate_subgraphs.update(
-        beam_connected_subgraphs(
-            candidate_units=candidate_units,
-            question=question,
-            sparql_query=sparql_query,
-            min_subgraph_size=min_subgraph_size,
-            max_subgraph_size=effective_max_subgraph_size,
-            beam_width=candidate_beam_width,
-            max_candidate_subgraphs=max_candidate_subgraphs,
-        )
-    )
+    rows = []
 
-    positives = []
-    negatives = []
-
-    for combo in candidate_subgraphs:
+    for generation_rank, combo in enumerate(frozen_candidate_subgraphs):
         subgraph_units = list(combo)
         scores = set_scores(subgraph_units, gold_explanations)
         label = int(
@@ -598,7 +743,6 @@ def build_rows_for_qa(
             "sparql_query": sparql_query,
             "task_type": item.get("Task Type", ""),
             "answer_type": answer_type_for(item, qa),
-            "answer": qa.get("Answer"),
             "source_name": source_name,
             "group_index": group_index,
             "qa_index": qa_index,
@@ -611,21 +755,25 @@ def build_rows_for_qa(
             "subgraph_size": len(subgraph_units),
             "gold_explanations": gold_explanations,
             "gold_units": gold_explanations[0],
+            "gold_context_coverage": gold_context_coverage,
+            "generation_rank": generation_rank,
+            "candidate_pre_rank_score": score_subgraph_indices(
+                tuple(candidate_units.index(unit) for unit in subgraph_units),
+                candidate_units=candidate_units,
+                adjacency=adjacency,
+                unit_scores=unit_scores,
+            ),
+            "gold_available_during_candidate_generation": False,
+            "gold_used_during_labeling": True,
+            "builder_version": BUILDER_VERSION,
             **scores,
             "label": label,
         }
 
-        if label:
-            positives.append(row)
-        else:
-            negatives.append(row)
+        rows.append(row)
 
-    negatives.sort(key=lambda r: r["best_set_f1_to_gold"], reverse=True)
-    if max_negative_per_example >= 0:
-        negatives = negatives[:max_negative_per_example]
-
-    rows = positives + negatives
-    random.shuffle(rows)
+    # Candidate budgets are enforced by the gold-free beam above. The legacy
+    # max_negative_per_example option is not used to prune by labels/F1.
     return rows
 
 
@@ -830,6 +978,35 @@ def main() -> None:
                 rows,
             )
             combined[split_name].extend(rows)
+        source_path = next(
+            Path(path) for path in args.input_json if Path(path).stem == source_name
+        )
+        split_ids = {
+            split_name: list(dict.fromkeys(row["example_id"] for row in rows))
+            for split_name, rows in splits.items()
+        }
+        write_json(
+            output_dir / source_name / "metadata.json",
+            {
+                "schema_version": "gold_free_ontology_retrieval_v1",
+                "builder_version": BUILDER_VERSION,
+                "dataset": source_name,
+                "source_file": str(source_path),
+                "raw_source_sha256": sha256_file(source_path),
+                "git": git_provenance(Path(__file__).resolve().parents[1]),
+                "seed": RANDOM_SEED,
+                "example_ids": split_ids,
+                "candidate_generation_config": {
+                    "max_context_units": args.max_context_units,
+                    "max_subgraph_size": args.max_subgraph_size,
+                    "candidate_beam_width": args.candidate_beam_width,
+                    "max_candidate_subgraphs": args.max_candidate_subgraphs,
+                },
+                "gold_available_during_candidate_generation": False,
+                "gold_used_during_labeling": True,
+                "candidate_composer": "beam_connected_subgraphs",
+            },
+        )
 
     for source_name, splits in answer_only_by_source.items():
         for split_name, rows in splits.items():

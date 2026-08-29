@@ -26,6 +26,10 @@ from models.gnn_subgraph_retriever import (
 )
 from utils.tokenizer import load_tokenizer
 from utils.eval_splits import infer_dataset_name, infer_hop, infer_answer_type
+from data_processing.retrieval_contracts import (
+    cap_inference_candidate_rows,
+    validate_clean_kg_backend,
+)
 
 
 # =========================================================
@@ -96,7 +100,6 @@ def reconstruct_candidate_axioms(example_rows: List[Dict]) -> List[str]:
         graph_units.extend(row.get("graph_context_units", []) or [])
         if not _is_text_dataset(row):
             graph_units.extend(row.get("kg_evidence_units", []) or [])
-            graph_units.extend(kg_units_from_evidences(row.get("evidences", []) or []))
 
         for unit in graph_units:
             if unit not in seen:
@@ -104,28 +107,6 @@ def reconstruct_candidate_axioms(example_rows: List[Dict]) -> List[str]:
                 seen.add(unit)
 
     return axioms
-
-
-def clean_kg_part(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "").replace("\n", " ")).strip()
-
-
-def kg_units_from_evidences(evidences: Any) -> List[str]:
-    units = []
-    seen = set()
-    if not isinstance(evidences, list):
-        return units
-    for ev in evidences:
-        if not isinstance(ev, list) or len(ev) < 3:
-            continue
-        unit = (
-            f"KG::{clean_kg_part(ev[0])}::"
-            f"{clean_kg_part(ev[1])}::{clean_kg_part(ev[2])}"
-        )
-        if unit not in seen:
-            seen.add(unit)
-            units.append(unit)
-    return units
 
 
 def gold_support_units_from_row(row: Dict) -> List[str]:
@@ -199,7 +180,13 @@ def binary_label_from_target(target: float) -> int:
 # =========================================================
 
 
-def prepare_examples(rows: List[Dict]) -> List[Dict]:
+def prepare_examples(
+    rows: List[Dict],
+    *,
+    candidate_selection: str = "inference",
+    max_inference_candidates: int = 320,
+    subsample_candidates: bool | None = None,
+) -> List[Dict]:
     """
     Converts flat candidate-subgraph rows into example-level graph objects.
 
@@ -209,6 +196,10 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
     """
     by_example = group_rows_by_example(rows)
     examples = []
+    if subsample_candidates is not None:
+        candidate_selection = "training" if subsample_candidates else "none"
+    if candidate_selection not in {"training", "inference", "none"}:
+        raise ValueError(f"Unknown candidate_selection mode: {candidate_selection!r}")
 
     for example_id, ex_rows in by_example.items():
         first = ex_rows[0]
@@ -224,14 +215,31 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
         dataset = infer_dataset_name(example_id, first)
         hop = infer_hop(example_id, first)
         answer_type = infer_answer_type(example_id, first)
-        answer = first.get("answer", first.get("Answer", ""))
+        answer = ""
+        if first.get("gold_available_during_candidate_generation") is True:
+            raise ValueError(
+                f"Candidate artifact {example_id!r} reports gold access during generation."
+            )
+        if dataset.lower() in {"2wikimultihopqa", "2wiki"}:
+            validate_clean_kg_backend(
+                str(first.get("kg_construction_method") or "context_only")
+            )
 
-        candidate_axioms = reconstruct_candidate_axioms(ex_rows)
+        # Freeze the inference cohort before any target/label/diagnostic field
+        # is read below. Training keeps its supervised sampler after target
+        # materialization; inference uses only the builder's gold-free ranks.
+        rows_to_materialize = ex_rows
+        if candidate_selection == "inference":
+            rows_to_materialize = cap_inference_candidate_rows(
+                ex_rows, max_candidates=max_inference_candidates
+            )
+
+        candidate_axioms = reconstruct_candidate_axioms(rows_to_materialize)
         axiom_to_idx = {ax: i for i, ax in enumerate(candidate_axioms)}
 
         candidate_rows = []
 
-        for row in ex_rows:
+        for row in rows_to_materialize:
             subgraph_units = row.get("subgraph_units", [])
             node_ids = subgraph_units_to_node_ids(subgraph_units, axiom_to_idx)
 
@@ -246,7 +254,6 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                 kg_bridge_units = (
                     row.get("graph_context_units", [])
                     or row.get("kg_evidence_units", [])
-                    or kg_units_from_evidences(row.get("evidences", []) or [])
                 )
 
             if _is_text_dataset(row):
@@ -308,19 +315,19 @@ def prepare_examples(rows: List[Dict]) -> List[Dict]:
                     ),
                     "dataset": dataset,
                     "hop": hop,
-                    "answer": row.get("answer", row.get("Answer", answer)),
+                    "answer": "",
                     "answer_type": answer_type,
                     "task_type": row.get("task_type", row.get("Task Type", "")),
                 }
             )
 
-        candidate_rows = subsample_candidate_rows(
-            candidate_rows,
-            max_pos=64,
-            max_hard_neg=128,
-            max_easy_neg=128,
-        )
-
+        if candidate_selection == "training":
+            candidate_rows = subsample_candidate_rows(
+                candidate_rows,
+                max_pos=64,
+                max_hard_neg=128,
+                max_easy_neg=128,
+            )
         if not candidate_rows:
             continue
 
@@ -1568,8 +1575,8 @@ def train(
     train_rows = load_jsonl(train_path, source_name=source_name)
     dev_rows = load_jsonl(dev_path, source_name=source_name)
 
-    train_examples = prepare_examples(train_rows)
-    dev_examples = prepare_examples(dev_rows)
+    train_examples = prepare_examples(train_rows, candidate_selection="training")
+    dev_examples = prepare_examples(dev_rows, candidate_selection="inference")
 
     # Only rankable examples can contribute ranking loss.
     # Keep all examples for BCE/listwise, but report rankable count.

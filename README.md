@@ -218,7 +218,7 @@ python data_processing/build_2wiki_subgraph_dataset.py `
   --max-sentences-per-example 30 `
   --max-subgraph-size 4 `
   --max-kg-bridge-triples 64 `
-  --kg-construction-backend llm_with_provided `
+  --kg-construction-backend context_only `
   --kg-construction-model openai:gpt-4.1-mini `
   --kg-construction-workers 3 `
   --kg-request-timeout 90 `

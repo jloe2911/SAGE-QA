@@ -36,23 +36,21 @@ def extract_query_signature(question: str, sparql_query: str) -> Dict:
 
     q = normalize_ws(sparql_query)
 
-    # Extract <uri> tokens
-    uris = re.findall(r"<([^>]+)>", q)
-    locals_ = [local_name(u) for u in uris]
+    # Retain variables while grouping triple-pattern terms. The previous
+    # URI-only grouping returned an empty signature for ordinary SELECT forms
+    # such as ``<entity> <property> ?x`` and ``?x <property> <entity>``.
+    body_match = re.search(r"\{(.*)\}", q)
+    body = body_match.group(1) if body_match else q
+    terms = re.findall(r"<[^>]+>|\?[A-Za-z_][A-Za-z0-9_]*", body)
 
-    # Heuristic: in triple patterns, 1st and 3rd are entities/classes, 2nd is property
-    # This is generic enough for the current benchmark formats.
-    if len(locals_) >= 3:
-        for i in range(0, len(locals_) - 2, 3):
-            s = locals_[i]
-            p = locals_[i + 1]
-            o = locals_[i + 2]
-            if s and not s.startswith("?"):
-                entities.add(s)
-            if p and not p.startswith("?"):
-                properties.add(p)
-            if o and not o.startswith("?"):
-                entities.add(o)
+    for i in range(0, len(terms) - 2, 3):
+        subject, predicate, obj = terms[i : i + 3]
+        if subject.startswith("<"):
+            entities.add(local_name(subject))
+        if predicate.startswith("<"):
+            properties.add(local_name(predicate))
+        if obj.startswith("<"):
+            entities.add(local_name(obj))
 
     return {
         "question": question,

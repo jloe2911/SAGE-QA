@@ -220,6 +220,7 @@ data/raw/*
 outputs/
 checkpoints/
 results/
+tests/
 
 # Vendored GNN-RAG generated results
 third_party/GNN-RAG/llm/results/

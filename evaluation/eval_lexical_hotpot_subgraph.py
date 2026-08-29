@@ -111,7 +111,6 @@ def best_against_gold(
 
 def lexical_score(row: Dict[str, Any]) -> float:
     question = row.get("question", "")
-    answer = row.get("answer", "")
     units = row.get("subgraph_units", [])
 
     candidate_text = " ".join(str(u) for u in units)
@@ -124,16 +123,11 @@ def lexical_score(row: Dict[str, Any]) -> float:
     else:
         q_overlap = len(q & c) / len(q)
 
-    # Small answer bonus if answer string appears in candidate.
-    answer_norm = normalize_text(answer)
-    cand_norm = normalize_text(candidate_text)
-    answer_bonus = 1.0 if answer_norm and answer_norm in cand_norm else 0.0
-
     # Prefer compact candidates slightly.
     size = int(row.get("subgraph_size", len(units)))
     compact_bonus = 1.0 / max(size, 1)
 
-    return q_overlap + 0.25 * answer_bonus + 0.02 * compact_bonus
+    return q_overlap + 0.02 * compact_bonus
 
 
 def group_by_example(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -259,7 +253,10 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         first = ranked[0]
         gold_support_units = first.get("gold_support_units", []) or []
-        gold_reference_sets = [gold_support_units] if gold_support_units else []
+        explicit_gold = first.get("gold_explanations", []) or []
+        gold_reference_sets = explicit_gold or (
+            [gold_support_units] if gold_support_units else []
+        )
 
         top5 = []
         for rank, row in enumerate(ranked[:5], start=1):
@@ -292,6 +289,7 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "question": first.get("question", ""),
                 "answer": first.get("answer", ""),
                 "gold_support_units": gold_support_units,
+                "gold_explanations": gold_reference_sets,
                 "top1_subgraph_units": top1_units,
                 "top1_score": top1["score"],
                 "top1_adjusted_score": top1["adjusted_score"],

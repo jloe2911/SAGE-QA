@@ -10,6 +10,12 @@ if __package__ is None or __package__ == "":
 
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from evaluation.adaptive_support_aggregation import adaptive_support_aggregate
+from evaluation.adaptive_support_aggregation_v2 import (
+    AdaptiveV2Policy,
+    adaptive_v2_support_aggregate,
+    load_domain_policy,
+)
 from utils.llm_client import openai_compatible_client, parse_model_ref
 
 
@@ -79,7 +85,15 @@ def classify_owl_unit(unit: str) -> str:
     return "Fact"
 
 
-def get_top_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
+def get_top_support_units(
+    item: Dict[str, Any],
+    top_k: int,
+    *,
+    aggregation_mode: str = "fixed",
+    adaptive_tau: float | None = None,
+    adaptive_k_max: int = 5,
+    adaptive_v2_policy: AdaptiveV2Policy | None = None,
+) -> List[str]:
     """
     Uses top5 list if available, otherwise top1_subgraph_units.
     Returns union of support units from top-k candidates, preserving order.
@@ -94,6 +108,27 @@ def get_top_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
 
     if isinstance(top_list, list) and top_list:
         top_list = sorted(top_list, key=lambda x: int(x.get("rank", 999)))
+
+        if aggregation_mode == "adaptive":
+            if adaptive_tau is None:
+                raise ValueError("adaptive_tau is required in adaptive aggregation mode")
+            return adaptive_support_aggregate(
+                top_list,
+                tau=adaptive_tau,
+                k_max=adaptive_k_max,
+            )["support_units"]
+        if aggregation_mode == "adaptive_v2":
+            if adaptive_v2_policy is None:
+                raise ValueError(
+                    "adaptive_v2_policy is required in adaptive_v2 aggregation mode"
+                )
+            return adaptive_v2_support_aggregate(
+                top_list,
+                policy=adaptive_v2_policy,
+                k_max=adaptive_k_max,
+            )["support_units"]
+        if aggregation_mode != "fixed":
+            raise ValueError(f"Unknown aggregation mode: {aggregation_mode}")
 
         for cand in top_list[:top_k]:
             for u in cand.get("subgraph_units", []):
@@ -594,6 +629,10 @@ def generate_answers(
     answer_only_paths: Optional[List[str]] = None,
     max_examples: int = 0,
     resume: bool = False,
+    aggregation_mode: str = "fixed",
+    adaptive_tau: float | None = None,
+    adaptive_k_max: int = 5,
+    adaptive_v2_policy: AdaptiveV2Policy | None = None,
 ):
     details = load_json(details_path)
     answer_only_paths = answer_only_paths or []
@@ -624,7 +663,14 @@ def generate_answers(
 
         question = str(item.get("question", ""))
         gold_answer = str(item.get("answer", item.get("gold_answer", "")))
-        support_units = get_top_support_units(item, top_k=top_k)
+        support_units = get_top_support_units(
+            item,
+            top_k=top_k,
+            aggregation_mode=aggregation_mode,
+            adaptive_tau=adaptive_tau,
+            adaptive_k_max=adaptive_k_max,
+            adaptive_v2_policy=adaptive_v2_policy,
+        )
 
         if resume and example_id in done_ids:
             proof = infer_owl_boolean_answer(item=item, support_units=support_units)
@@ -657,6 +703,16 @@ def generate_answers(
             "explanation": "",
             "support_units": support_units,
             "top_k": top_k,
+            "aggregation_mode": aggregation_mode,
+            "adaptive_tau": adaptive_tau,
+            "adaptive_k_max": (
+                adaptive_k_max
+                if aggregation_mode in {"adaptive", "adaptive_v2"}
+                else None
+            ),
+            "adaptive_v2_domain": (
+                adaptive_v2_policy.domain if adaptive_v2_policy is not None else None
+            ),
         }
 
         try:
@@ -716,6 +772,13 @@ def main():
     parser.add_argument("--details", type=str, required=True)
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument(
+        "--aggregation-mode", choices=("fixed", "adaptive", "adaptive_v2"), default="fixed"
+    )
+    parser.add_argument("--adaptive-tau", type=float, default=None)
+    parser.add_argument("--adaptive-k-max", type=int, default=5)
+    parser.add_argument("--adaptive-v2-policy-dir", type=Path, default=None)
+    parser.add_argument("--adaptive-v2-domain", choices=("text", "ontology"), default=None)
     parser.add_argument("--backend", type=str, default="openai", choices=["openai"])
     parser.add_argument("--model", type=str, default="gpt-4.1-mini")
     parser.add_argument("--answer-only", type=str, nargs="*", default=[])
@@ -723,6 +786,21 @@ def main():
     parser.add_argument("--resume", action="store_true")
 
     args = parser.parse_args()
+
+    if args.aggregation_mode == "adaptive" and args.adaptive_tau is None:
+        parser.error("--adaptive-tau is required with --aggregation-mode adaptive")
+    if args.aggregation_mode == "adaptive_v2" and (
+        args.adaptive_v2_policy_dir is None or args.adaptive_v2_domain is None
+    ):
+        parser.error(
+            "--adaptive-v2-policy-dir and --adaptive-v2-domain are required "
+            "with --aggregation-mode adaptive_v2"
+        )
+    adaptive_v2_policy = (
+        load_domain_policy(args.adaptive_v2_policy_dir, domain=args.adaptive_v2_domain)
+        if args.aggregation_mode == "adaptive_v2"
+        else None
+    )
 
     if args.backend == "openai":
         ref = parse_model_ref(args.model)
@@ -751,6 +829,10 @@ def main():
         answer_only_paths=args.answer_only,
         max_examples=args.max_examples,
         resume=args.resume,
+        aggregation_mode=args.aggregation_mode,
+        adaptive_tau=args.adaptive_tau,
+        adaptive_k_max=args.adaptive_k_max,
+        adaptive_v2_policy=adaptive_v2_policy,
     )
 
 

@@ -20,7 +20,17 @@ from data_processing.text_kg_constructor import (
     KGConstructionConfig,
     LLMKGConstructor,
     construct_text_kg,
-    normalize_evidence_triples,
+)
+from data_processing.retrieval_contracts import (
+    BUILDER_VERSION,
+    assert_gold_free_mapping,
+    clean_text_retrieval_input,
+    git_provenance,
+    select_disjoint_cohorts,
+    split_manifest,
+    validate_clean_cache_row,
+    validate_clean_kg_backend,
+    write_json,
 )
 
 
@@ -374,8 +384,9 @@ def normalize_2wiki_record(row: Dict[str, Any]) -> Dict[str, Any]:
     else:
         out["supporting_facts"] = []
 
-    # Normalize evidences into readable triples, if present.
-    out["evidences"] = normalize_evidence_triples(out.get("evidences", []))
+    # Benchmark evidences are gold reasoning-chain supervision. They are
+    # deliberately absent from every materialized retrieval input.
+    out.pop("evidences", None)
 
     return out
 
@@ -514,18 +525,12 @@ def title_overlap_score(question: str, units: List[str]) -> float:
 def select_sentence_pool(
     example: Dict[str, Any],
     sentence_records: List[Dict[str, Any]],
-    gold_units: List[str],
     max_sentences_per_example: int,
 ) -> List[str]:
     """
     Select a sentence pool for candidate construction.
 
-    Always keeps gold sentences, then adds:
-      - top lexical-overlap sentences
-      - sentences from pages whose titles overlap with the question
-
-    The gold answer is intentionally not used here. Gold support is used only
-    to create supervised positive candidates and labels.
+    Selection uses only question/context-visible lexical and title signals.
     """
     question = example.get("question", "")
 
@@ -546,13 +551,7 @@ def select_sentence_pool(
     pool: List[str] = []
     seen = set()
 
-    # Always include gold units so positives are possible.
-    for u in gold_units:
-        if u not in seen:
-            seen.add(u)
-            pool.append(u)
-
-    # Include top lexical/title overlap sentences.
+    # Include top lexical/title overlap sentences using stable source order for ties.
     for _, u in scored:
         if len(pool) >= max_sentences_per_example:
             break
@@ -614,7 +613,6 @@ def label_candidate(
 
 def generate_candidate_subgraphs(
     sentence_pool: List[str],
-    gold_units: List[str],
     max_subgraph_size: int,
     max_candidates_per_question: int,
     seed: int,
@@ -624,8 +622,7 @@ def generate_candidate_subgraphs(
 
     Candidate = set/list of sentence units.
 
-    For 2Wiki, gold support may have size 4, so max_subgraph_size should
-    usually be 4.
+    Generation is gold-free; the signature cannot accept annotations.
     """
     rng = random.Random(seed)
 
@@ -641,21 +638,6 @@ def generate_candidate_subgraphs(
         if cand not in seen:
             seen.add(cand)
             candidates.append(cand)
-
-    # Exact gold support candidate.
-    if gold_units and len(set(gold_units)) <= max_subgraph_size:
-        add_candidate(gold_units)
-
-    # Gold supersets with one distractor if possible.
-    if gold_units and len(set(gold_units)) < max_subgraph_size:
-        for u in sentence_pool:
-            if u not in gold_units:
-                add_candidate(list(gold_units) + [u])
-
-    # Gold partials: useful ranking targets for multi-hop chains.
-    for size in range(1, min(len(gold_units), max_subgraph_size) + 1):
-        for combo in itertools.combinations(gold_units, size):
-            add_candidate(combo)
 
     # Singletons.
     for u in sentence_pool:
@@ -678,16 +660,8 @@ def generate_candidate_subgraphs(
         if len(candidates) >= max_candidates_per_question:
             break
 
-    # If too many, prefer candidates with more gold overlap and smaller size.
+    # Deterministic gold-free cap. Earlier candidates follow stable generation order.
     if len(candidates) > max_candidates_per_question:
-        gold_set = set(gold_units)
-
-        def priority(c: Tuple[str, ...]):
-            cset = set(c)
-            overlap = len(cset & gold_set)
-            return (overlap, -len(cset))
-
-        candidates.sort(key=priority, reverse=True)
         candidates = candidates[:max_candidates_per_question]
 
     return [list(c) for c in candidates]
@@ -774,8 +748,19 @@ def infer_answer_type(answer: str) -> str:
 # ============================================================
 
 
-def build_rows_for_example(
-    example: Dict[str, Any],
+def candidate_pre_rank_score(question: str, candidate_units: List[str]) -> float:
+    text = " ".join(candidate_units)
+    cross_page = len({parse_sentence_unit(unit)[0] for unit in candidate_units}) > 1
+    return (
+        lexical_overlap_score(question, text)
+        + 0.2 * title_overlap_score(question, candidate_units)
+        + 0.05 * float(cross_page)
+        - 0.005 * len(candidate_units)
+    )
+
+
+def generate_candidates(
+    retrieval_example: Dict[str, Any],
     split_name: str,
     max_sentences_per_example: int,
     max_subgraph_size: int,
@@ -786,24 +771,27 @@ def build_rows_for_example(
     kg_cache_path: Path | None,
     kg_cache_lock: Any,
     seed: int,
-) -> List[Dict[str, Any]]:
-    raw_id = str(get_first_present(example, ["_id", "id"], f"no_id_{seed}"))
+) -> Dict[str, Any]:
+    """Freeze a candidate pool from ID, question, and context only."""
+    assert_gold_free_mapping(retrieval_example, stage="2Wiki candidate generation")
+    validate_clean_kg_backend(kg_config.backend)
+    raw_id = str(get_first_present(retrieval_example, ["_id", "id"], f"no_id_{seed}"))
     example_id = f"2WikiMultiHopQA__{split_name}__{raw_id}"
-    question = str(example.get("question", ""))
-    answer = str(example.get("answer", ""))
-    raw_evidences = example.get("evidences", [])
+    question = str(retrieval_example.get("question", ""))
 
-    sentence_records = flatten_context(example)
+    sentence_records = flatten_context(retrieval_example)
     sent_lookup = {
         (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
     }
     cached_kg = kg_cache.get(example_id) if kg_cache is not None else None
     if cached_kg:
+        validate_clean_cache_row(
+            cached_kg, expected_signature=kg_config.cache_signature
+        )
         kg_triples = cached_kg.get("kg_triples", [])
         kg_construction_method = str(cached_kg.get("construction_method", "cache"))
     else:
         kg_triples, kg_construction_method = construct_text_kg(
-            provided_evidences=raw_evidences,
             sentence_records=sentence_records,
             question=question,
             config=kg_config,
@@ -814,6 +802,9 @@ def build_rows_for_example(
                 "example_id": example_id,
                 "kg_triples": kg_triples,
                 "construction_method": kg_construction_method,
+                "cache_signature": kg_config.cache_signature,
+                "gold_available_during_candidate_generation": False,
+                "input_fields": ["id", "question", "context"],
             }
             if kg_cache_lock is not None:
                 with kg_cache_lock:
@@ -824,35 +815,50 @@ def build_rows_for_example(
                 append_kg_cache_row(kg_cache_path, cache_row)
     graph_context_units = evidence_triple_units(kg_triples)
 
-    gold_units = get_gold_support_units(example, sent_lookup)
-    raw_supporting_facts = get_raw_supporting_facts(example)
-
-    if not gold_units:
-        return []
-
-    gold_reference_sets = [gold_units]
-
     sentence_pool = select_sentence_pool(
-        example=example,
+        example=retrieval_example,
         sentence_records=sentence_records,
-        gold_units=gold_units,
         max_sentences_per_example=max_sentences_per_example,
     )
 
-    if not sentence_pool:
-        return []
-
     candidates = generate_candidate_subgraphs(
         sentence_pool=sentence_pool,
-        gold_units=gold_units,
         max_subgraph_size=max_subgraph_size,
         max_candidates_per_question=max_candidates_per_question,
         seed=seed,
     )
 
-    rows: List[Dict[str, Any]] = []
+    return {
+        "example_id": example_id,
+        "question": question,
+        "sentence_records": sentence_records,
+        "sent_lookup": sent_lookup,
+        "sentence_pool": sentence_pool,
+        "candidates": candidates,
+        "graph_context_units": graph_context_units,
+        "kg_construction_method": kg_construction_method,
+        "kg_cache_signature": kg_config.cache_signature,
+        "gold_available_during_candidate_generation": False,
+    }
 
-    answer_type = infer_answer_type(answer)
+
+def label_candidates(
+    generated: Dict[str, Any],
+    *,
+    supporting_facts: Any,
+    max_subgraph_size: int,
+) -> List[Dict[str, Any]]:
+    """Attach supervision only after the candidate list has been frozen."""
+    annotation = {"supporting_facts": supporting_facts or []}
+    gold_units = get_gold_support_units(annotation, generated["sent_lookup"])
+    raw_supporting_facts = get_raw_supporting_facts(annotation)
+    gold_reference_sets = [gold_units] if gold_units else []
+    example_id = generated["example_id"]
+    question = generated["question"]
+    candidates = generated["candidates"]
+
+    rows: List[Dict[str, Any]] = []
+    answer_type = "UNSPECIFIED"
 
     for cand_idx, candidate_units in enumerate(candidates):
         label, best_f1, best_jaccard, exact, contains = label_candidate(
@@ -875,13 +881,12 @@ def build_rows_for_example(
             "hop": "2hop",
             "answer_type": answer_type,
             "question": question,
-            "answer": answer,
             # Candidate support.
             "subgraph_units": candidate_units,
             "subgraph_size": len(candidate_units),
             # Graph context nodes are available to the GNN message-passing
             # graph, but are not scored as predicted support sentences.
-            "graph_context_units": graph_context_units,
+            "graph_context_units": generated["graph_context_units"],
             # Gold support.
             "raw_supporting_facts": raw_supporting_facts,
             "gold_support_units": gold_units,
@@ -895,11 +900,55 @@ def build_rows_for_example(
             "contains_any_gold_explanation": bool(contains),
             # Model features.
             "symbolic_features": symbolic_features,
+            "candidate_pre_rank_score": candidate_pre_rank_score(
+                question, candidate_units
+            ),
+            "generation_rank": cand_idx,
+            "sentence_pool_size": len(generated["sentence_pool"]),
+            "kg_construction_method": generated["kg_construction_method"],
+            "kg_cache_signature": generated["kg_cache_signature"],
+            "gold_available_during_candidate_generation": False,
+            "gold_used_during_labeling": bool(gold_reference_sets),
+            "builder_version": BUILDER_VERSION,
         }
 
         rows.append(row)
 
     return rows
+
+
+def build_rows_for_example(
+    example: Dict[str, Any],
+    split_name: str,
+    max_sentences_per_example: int,
+    max_subgraph_size: int,
+    max_candidates_per_question: int,
+    kg_config: KGConstructionConfig,
+    llm_kg_constructor: LLMKGConstructor | None,
+    kg_cache: Dict[str, Dict[str, Any]] | None,
+    kg_cache_path: Path | None,
+    kg_cache_lock: Any,
+    seed: int,
+) -> List[Dict[str, Any]]:
+    retrieval_input = clean_text_retrieval_input(example)
+    generated = generate_candidates(
+        retrieval_example=retrieval_input,
+        split_name=split_name,
+        max_sentences_per_example=max_sentences_per_example,
+        max_subgraph_size=max_subgraph_size,
+        max_candidates_per_question=max_candidates_per_question,
+        kg_config=kg_config,
+        llm_kg_constructor=llm_kg_constructor,
+        kg_cache=kg_cache,
+        kg_cache_path=kg_cache_path,
+        kg_cache_lock=kg_cache_lock,
+        seed=seed,
+    )
+    return label_candidates(
+        generated,
+        supporting_facts=example.get("supporting_facts", []),
+        max_subgraph_size=max_subgraph_size,
+    )
 
 
 # ============================================================
@@ -1161,26 +1210,22 @@ def main():
         type=int,
         default=64,
         help=(
-            "Maximum KG triples to attach per example. Applies to provided, "
-            "deterministic, and LLM-constructed triples."
+            "Maximum context-derived KG triples to attach per example."
         ),
     )
     parser.add_argument(
         "--kg-construction-backend",
         choices=[
-            "auto",
-            "provided",
+            "context_only",
             "deterministic",
             "llm",
             "llm_with_title_bridges",
-            "llm_with_provided",
             "none",
         ],
-        default="auto",
+        default="context_only",
         help=(
-            "How to build text benchmark KG triples. auto uses provided triples "
-            "when available, otherwise falls back to deterministic title bridges. "
-            "llm extracts triples from the example context. "
+            "How to build KG triples strictly from question/context. context_only "
+            "uses deterministic title bridges; llm extracts from context text. "
             "llm_with_title_bridges combines context-only LLM triples with "
             "deterministic title co-mention bridges."
         ),
@@ -1216,10 +1261,11 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     kg_cache_dir = args.kg_cache_dir or (out_dir / "kg_cache")
     kg_backend = (
-        "deterministic"
+        "context_only"
         if args.kg_construction_backend == "none"
         else args.kg_construction_backend
     )
+    validate_clean_kg_backend(kg_backend)
     kg_config = KGConstructionConfig(
         backend=kg_backend,
         model=args.kg_construction_model,
@@ -1235,7 +1281,7 @@ def main():
     llm_kg_constructor = (
         LLMKGConstructor(kg_config)
         if args.kg_construction_backend
-        in {"llm", "llm_with_provided", "llm_with_title_bridges"}
+        in {"llm", "llm_with_title_bridges"}
         else None
     )
 
@@ -1253,22 +1299,18 @@ def main():
     print(f"Raw dev examples:   {len(dev_raw_all)}")
     print(f"Raw test examples:  {len(test_raw_all)}")
 
-    # Train, dev, and test are sampled from their respective source files. If
-    # --test-file is omitted, the provided dev/validation file is used as test.
+    # Dev/test are selected jointly so reused validation sources cannot overlap.
     train_examples = limit_examples(
         examples=train_raw_all,
         max_examples=args.max_train_examples,
         seed=args.seed,
     )
-    dev_examples = limit_examples(
-        examples=dev_raw_all,
-        max_examples=args.max_dev_examples,
-        seed=args.seed + 100000,
-    )
-    test_examples = limit_examples(
-        examples=test_raw_all,
-        max_examples=args.max_test_examples,
-        seed=args.seed + 200000,
+    dev_examples, test_examples = select_disjoint_cohorts(
+        dev_raw_all,
+        test_raw_all,
+        max_dev_examples=args.max_dev_examples,
+        max_test_examples=args.max_test_examples,
+        seed=args.seed,
     )
 
     print(f"Selected train examples: {len(train_examples)}")
@@ -1335,6 +1377,23 @@ def main():
     write_jsonl(out_dir / "dev_subgraph_retrieval.jsonl", dev_rows)
     write_jsonl(out_dir / "test_subgraph_retrieval.jsonl", test_rows)
 
+    source_paths = {
+        "train": [Path(path) for path in args.train_file],
+        "dev": [Path(args.dev_file)],
+        "test": [Path(path) for path in test_files],
+    }
+    manifest = split_manifest(
+        dataset="2WikiMultiHopQA",
+        source_paths=source_paths,
+        split_examples={
+            "train": train_examples,
+            "dev": dev_examples,
+            "test": test_examples,
+        },
+        seed=args.seed,
+    )
+    write_json(out_dir / "split_manifest.json", manifest)
+
     metadata = {
         "dataset": "2WikiMultiHopQA",
         "train_file": args.train_file,
@@ -1350,7 +1409,7 @@ def main():
         "max_subgraph_size": args.max_subgraph_size,
         "max_candidates_per_question": args.max_candidates_per_question,
         "max_kg_bridge_triples": args.max_kg_bridge_triples,
-        "kg_construction_backend": args.kg_construction_backend,
+        "kg_construction_backend": kg_backend,
         "kg_construction_model": args.kg_construction_model,
         "kg_max_context_sentences": args.kg_max_context_sentences,
         "kg_construction_workers": args.kg_construction_workers,
@@ -1358,7 +1417,35 @@ def main():
         "kg_max_retries": args.kg_max_retries,
         "kg_retry_initial_sleep": args.kg_retry_initial_sleep,
         "kg_cache_dir": str(kg_cache_dir) if llm_kg_constructor is not None else None,
-        "schema_version": "text_retrieval_slim_v1",
+        "schema_version": "gold_free_text_retrieval_v1",
+        "builder_version": BUILDER_VERSION,
+        "git": git_provenance(Path(__file__).resolve().parents[1]),
+        "input_contract": {
+            "candidate_generation_fields": ["id", "question", "context"],
+            "forbidden_candidate_generation_fields": [
+                "answer",
+                "supporting_facts",
+                "evidences",
+            ],
+        },
+        "candidate_generation_config": {
+            "sentence_pool_budget": args.max_sentences_per_example,
+            "candidate_budget": args.max_candidates_per_question,
+            "max_subgraph_size": args.max_subgraph_size,
+        },
+        "kg_cache_provenance": {
+            "signature": kg_config.cache_signature,
+            "contaminated_methods_rejected": [
+                "provided",
+                "provided_plus_llm",
+                "llm_with_provided",
+            ],
+        },
+        "gold_available_during_candidate_generation": False,
+        "gold_used_during_labeling": any(
+            bool(row.get("gold_used_during_labeling")) for row in train_rows + dev_rows + test_rows
+        ),
+        "split_manifest": "split_manifest.json",
         "support_label_fields": ["raw_supporting_facts", "gold_support_units"],
         "candidate_field": "subgraph_units",
         "graph_context_field": "graph_context_units",
@@ -1370,8 +1457,7 @@ def main():
         "test_examples": len({r["example_id"] for r in test_rows}),
     }
 
-    with (out_dir / "metadata.json").open("w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2, ensure_ascii=False)
+    write_json(out_dir / "metadata.json", metadata)
 
     print(f"\nSaved 2WikiMultiHopQA subgraph retrieval data to: {out_dir}")
 

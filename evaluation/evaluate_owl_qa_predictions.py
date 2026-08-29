@@ -6,6 +6,18 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+if __package__ is None or __package__ == "":
+    import sys
+
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from evaluation.adaptive_support_aggregation import adaptive_support_aggregate
+from evaluation.adaptive_support_aggregation_v2 import (
+    AdaptiveV2Policy,
+    adaptive_v2_support_aggregate,
+    load_domain_policy,
+)
+
 
 def load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
@@ -203,7 +215,15 @@ def best_support_scores(
     return best
 
 
-def get_top_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
+def get_top_support_units(
+    item: Dict[str, Any],
+    top_k: int,
+    *,
+    aggregation_mode: str = "fixed",
+    adaptive_tau: float | None = None,
+    adaptive_k_max: int = 5,
+    adaptive_v2_policy: AdaptiveV2Policy | None = None,
+) -> List[str]:
     units = []
     seen = set()
 
@@ -211,6 +231,27 @@ def get_top_support_units(item: Dict[str, Any], top_k: int) -> List[str]:
 
     if isinstance(top_list, list) and top_list:
         top_list = sorted(top_list, key=lambda x: int(x.get("rank", 999)))
+
+        if aggregation_mode == "adaptive":
+            if adaptive_tau is None:
+                raise ValueError("adaptive_tau is required in adaptive aggregation mode")
+            return adaptive_support_aggregate(
+                top_list,
+                tau=adaptive_tau,
+                k_max=adaptive_k_max,
+            )["support_units"]
+        if aggregation_mode == "adaptive_v2":
+            if adaptive_v2_policy is None:
+                raise ValueError(
+                    "adaptive_v2_policy is required in adaptive_v2 aggregation mode"
+                )
+            return adaptive_v2_support_aggregate(
+                top_list,
+                policy=adaptive_v2_policy,
+                k_max=adaptive_k_max,
+            )["support_units"]
+        if aggregation_mode != "fixed":
+            raise ValueError(f"Unknown aggregation mode: {aggregation_mode}")
 
         for cand in top_list[:top_k]:
             for u in cand.get("subgraph_units", []):
@@ -269,7 +310,7 @@ def retrieval_at_k(item: Dict[str, Any], k: int) -> Optional[Dict[str, float]]:
         cur = support_scores(union_units, gold)
         if cur["f1"] > best_f1:
             best_f1 = cur["f1"]
-            best_precision = cur["precision"]
+            best_precision = cur["prec"]
             best_recall = cur["recall"]
 
     return {
@@ -288,6 +329,10 @@ def evaluate(
     top_k: int,
     output_path: str = None,
     answer_only_paths: List[str] = None,
+    aggregation_mode: str = "fixed",
+    adaptive_tau: float | None = None,
+    adaptive_k_max: int = 5,
+    adaptive_v2_policy: AdaptiveV2Policy | None = None,
 ) -> Dict[str, Any]:
     details = load_json(details_path)
     answer_only_paths = answer_only_paths or []
@@ -370,7 +415,14 @@ def evaluate(
 
         if has_gold_support:
             # Support metrics using top-k union from details.
-            pred_support = get_top_support_units(item, top_k=top_k)
+            pred_support = get_top_support_units(
+                item,
+                top_k=top_k,
+                aggregation_mode=aggregation_mode,
+                adaptive_tau=adaptive_tau,
+                adaptive_k_max=adaptive_k_max,
+                adaptive_v2_policy=adaptive_v2_policy,
+            )
             if not pred_support and ans_row is not None:
                 pred_support = ans_row.get("support_units", []) or []
             sp = best_support_scores(pred_support, gold_explanations)
@@ -389,7 +441,8 @@ def evaluate(
                 joint_f1 = 0.0
             joint_em = ans_em * sp_em
 
-            ret = retrieval_at_k(item, k=top_k)
+            if aggregation_mode == "fixed":
+                ret = retrieval_at_k(item, k=top_k)
 
         metrics["em"] += ans_em
         metrics["f1"] += ans_f1
@@ -498,6 +551,14 @@ def evaluate(
         "details_path": details_path,
         "llm_answers_path": llm_answers_path,
         "top_k": top_k,
+        "aggregation_mode": aggregation_mode,
+        "adaptive_tau": adaptive_tau,
+        "adaptive_k_max": (
+            adaptive_k_max if aggregation_mode in {"adaptive", "adaptive_v2"} else None
+        ),
+        "adaptive_v2_domain": (
+            adaptive_v2_policy.domain if adaptive_v2_policy is not None else None
+        ),
         "per_example": per_example,
     }
 
@@ -517,10 +578,32 @@ def main():
     parser.add_argument("--details", type=str, required=True)
     parser.add_argument("--llm-answers", type=str, required=True)
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument(
+        "--aggregation-mode", choices=("fixed", "adaptive", "adaptive_v2"), default="fixed"
+    )
+    parser.add_argument("--adaptive-tau", type=float, default=None)
+    parser.add_argument("--adaptive-k-max", type=int, default=5)
+    parser.add_argument("--adaptive-v2-policy-dir", type=Path, default=None)
+    parser.add_argument("--adaptive-v2-domain", choices=("text", "ontology"), default=None)
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--answer-only", type=str, nargs="*", default=[])
 
     args = parser.parse_args()
+
+    if args.aggregation_mode == "adaptive" and args.adaptive_tau is None:
+        parser.error("--adaptive-tau is required with --aggregation-mode adaptive")
+    if args.aggregation_mode == "adaptive_v2" and (
+        args.adaptive_v2_policy_dir is None or args.adaptive_v2_domain is None
+    ):
+        parser.error(
+            "--adaptive-v2-policy-dir and --adaptive-v2-domain are required "
+            "with --aggregation-mode adaptive_v2"
+        )
+    adaptive_v2_policy = (
+        load_domain_policy(args.adaptive_v2_policy_dir, domain=args.adaptive_v2_domain)
+        if args.aggregation_mode == "adaptive_v2"
+        else None
+    )
 
     evaluate(
         details_path=args.details,
@@ -528,6 +611,10 @@ def main():
         top_k=args.top_k,
         output_path=args.output,
         answer_only_paths=args.answer_only,
+        aggregation_mode=args.aggregation_mode,
+        adaptive_tau=args.adaptive_tau,
+        adaptive_k_max=args.adaptive_k_max,
+        adaptive_v2_policy=adaptive_v2_policy,
     )
 
 
