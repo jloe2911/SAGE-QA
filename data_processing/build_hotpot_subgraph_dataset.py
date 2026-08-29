@@ -21,6 +21,7 @@ from data_processing.text_kg_constructor import (
 )
 from data_processing.retrieval_contracts import (
     BUILDER_VERSION,
+    assert_disjoint_split_ids,
     assert_gold_free_mapping,
     clean_text_retrieval_input,
     git_provenance,
@@ -29,6 +30,14 @@ from data_processing.retrieval_contracts import (
     validate_clean_cache_row,
     validate_clean_kg_backend,
     write_json,
+)
+from data_processing.evidence_graph_candidates import (
+    GENERATOR_D_CONFIG,
+    GENERATOR_D_VERSION,
+    build_text_evidence_graph,
+    frozen_generator_d_config,
+    frozen_generator_d_lineage,
+    generate_generator_d_candidates,
 )
 
 
@@ -803,22 +812,12 @@ def generate_candidates(
                 append_kg_cache_row(kg_cache_path, cache_row)
     graph_context_units = evidence_triple_units(kg_triples)
 
-    sentence_pool = select_sentence_pool(
-        example=retrieval_example,
-        sentence_records=sentence_records,
-        max_sentences_per_example=max_sentences_per_example,
-    )
-
-    if not sentence_pool:
-        return []
-
-    candidates = generate_candidate_subgraphs(
-        example=retrieval_example,
-        sentence_pool=sentence_pool,
-        max_subgraph_size=max_subgraph_size,
-        max_candidates_per_question=max_candidates_per_question,
-        seed=seed,
-    )
+    # Legacy size/budget arguments remain in the public function signature for
+    # compatibility; Generator D always uses its immutable production config.
+    evidence_graph = build_text_evidence_graph(sentence_records, question)
+    generator_result = generate_generator_d_candidates(evidence_graph)
+    sentence_pool = [unit.unit_id for unit in evidence_graph.units]
+    candidates = [list(candidate) for candidate in generator_result.candidates]
 
     return {
         "example_id": example_id,
@@ -831,6 +830,9 @@ def generate_candidates(
         "graph_context_units": graph_context_units,
         "kg_construction_method": kg_construction_method,
         "kg_cache_signature": kg_config.cache_signature,
+        "candidate_generator": GENERATOR_D_VERSION,
+        "candidate_generation_config": frozen_generator_d_config(),
+        "query_anchor_unit_ids": list(generator_result.query_anchor_unit_ids),
         "gold_available_during_candidate_generation": False,
     }
 
@@ -838,12 +840,13 @@ def generate_candidates(
 def label_candidates(
     generated: Dict[str, Any],
     *,
-    supporting_facts: Any,
+    supporting_facts: Any | None,
     max_subgraph_size: int,
 ) -> List[Dict[str, Any]]:
+    attach_gold = supporting_facts is not None
     annotation = {"supporting_facts": supporting_facts or []}
-    gold_units = get_gold_support_units(annotation, generated["sent_lookup"])
-    raw_supporting_facts = get_raw_supporting_facts(annotation)
+    gold_units = get_gold_support_units(annotation, generated["sent_lookup"]) if attach_gold else []
+    raw_supporting_facts = get_raw_supporting_facts(annotation) if attach_gold else []
     gold_reference_sets = [gold_units] if gold_units else []
     example_id = generated["example_id"]
     ex_id = generated["raw_id"]
@@ -880,17 +883,6 @@ def label_candidates(
             # Graph context nodes are available to the GNN message-passing
             # graph, but are not scored as predicted support sentences.
             "graph_context_units": generated["graph_context_units"],
-            # Gold support.
-            "raw_supporting_facts": raw_supporting_facts,
-            "gold_support_units": gold_units,
-            # Supervision.
-            "label": int(label),
-            "rank_target": float(best_f1),
-            # Diagnostics.
-            "best_set_f1_to_gold": float(best_f1),
-            "best_jaccard_to_gold": float(best_jaccard),
-            "exact_match_any_gold": bool(exact),
-            "contains_any_gold_explanation": bool(contains),
             # Model features.
             "symbolic_features": symbolic_features,
             "candidate_pre_rank_score": candidate_pre_rank_score(
@@ -900,10 +892,23 @@ def label_candidates(
             "sentence_pool_size": len(generated["sentence_pool"]),
             "kg_construction_method": generated["kg_construction_method"],
             "kg_cache_signature": generated["kg_cache_signature"],
+            "candidate_generator": generated["candidate_generator"],
+            "candidate_generation_config": generated["candidate_generation_config"],
             "gold_available_during_candidate_generation": False,
-            "gold_used_during_labeling": bool(gold_reference_sets),
+            "gold_used_during_labeling": bool(attach_gold and gold_reference_sets),
             "builder_version": BUILDER_VERSION,
         }
+        if attach_gold:
+            row.update({
+                "raw_supporting_facts": raw_supporting_facts,
+                "gold_support_units": gold_units,
+                "label": int(label),
+                "rank_target": float(best_f1),
+                "best_set_f1_to_gold": float(best_f1),
+                "best_jaccard_to_gold": float(best_jaccard),
+                "exact_match_any_gold": bool(exact),
+                "contains_any_gold_explanation": bool(contains),
+            })
 
         rows.append(row)
 
@@ -938,8 +943,8 @@ def build_rows_for_example(
     )
     return label_candidates(
         generated,
-        supporting_facts=example.get("supporting_facts", []),
-        max_subgraph_size=max_subgraph_size,
+        supporting_facts=(None if split_name == "test" else example.get("supporting_facts", [])),
+        max_subgraph_size=GENERATOR_D_CONFIG.max_support_size,
     )
 
 
@@ -1148,9 +1153,18 @@ def main():
     parser.add_argument("--max-dev-examples", type=int, default=200)
     parser.add_argument("--max-test-examples", type=int, default=300)
 
-    parser.add_argument("--max-sentences-per-example", type=int, default=30)
-    parser.add_argument("--max-subgraph-size", type=int, default=3)
-    parser.add_argument("--max-candidates-per-question", type=int, default=512)
+    parser.add_argument(
+        "--max-sentences-per-example", type=int, default=30,
+        help="Legacy compatibility option; Generator D adapts the full context.",
+    )
+    parser.add_argument(
+        "--max-subgraph-size", type=int, default=6,
+        help="Legacy compatibility option; frozen Generator D always uses size 6.",
+    )
+    parser.add_argument(
+        "--max-candidates-per-question", type=int, default=512,
+        help="Legacy compatibility option; frozen Generator D always caps at 512.",
+    )
     parser.add_argument(
         "--max-kg-bridge-triples",
         type=int,
@@ -1334,6 +1348,9 @@ def main():
         },
         seed=args.seed,
     )
+    assert_disjoint_split_ids(
+        {"train": train_examples, "dev": dev_examples, "test": test_examples}
+    )
     write_json(out_dir / "split_manifest.json", manifest)
 
     metadata = {
@@ -1371,10 +1388,10 @@ def main():
             ],
         },
         "candidate_generation_config": {
-            "sentence_pool_budget": args.max_sentences_per_example,
-            "candidate_budget": args.max_candidates_per_question,
-            "max_subgraph_size": args.max_subgraph_size,
+            **frozen_generator_d_config(),
+            "candidate_generator": GENERATOR_D_VERSION,
         },
+        "candidate_generation_lineage": frozen_generator_d_lineage(),
         "kg_cache_provenance": {
             "signature": kg_config.cache_signature,
             "contaminated_methods_rejected": [
@@ -1385,8 +1402,9 @@ def main():
         },
         "gold_available_during_candidate_generation": False,
         "gold_used_during_labeling": any(
-            bool(row.get("gold_used_during_labeling")) for row in train_rows + dev_rows + test_rows
+            bool(row.get("gold_used_during_labeling")) for row in train_rows + dev_rows
         ),
+        "test_gold_attached": False,
         "split_manifest": "split_manifest.json",
         "support_label_fields": ["raw_supporting_facts", "gold_support_units"],
         "candidate_field": "subgraph_units",

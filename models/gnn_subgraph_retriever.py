@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.symbolic_composer import parse_axiom, extract_query_signature
-from utils.model_loader import load_encoder
 
 
 # =========================================================
@@ -501,6 +500,8 @@ class GNNSubgraphRetriever(nn.Module):
         freeze_encoder: bool = False,
     ):
         super().__init__()
+
+        from utils.model_loader import load_encoder
 
         self.encoder = load_encoder(model_name)
         encoder_hidden = self.encoder.config.hidden_size

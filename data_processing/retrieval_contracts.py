@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 
-BUILDER_VERSION = "gold_free_retrieval_v1"
+BUILDER_VERSION = "generator_d_production_v1"
 CONTAMINATED_KG_MARKERS = ("provided", "provided_plus_llm", "llm_with_provided")
 GOLD_DERIVED_FIELDS = frozenset(
     {
@@ -127,6 +127,24 @@ def stable_example_id(example: Mapping[str, Any]) -> str:
     return str(example.get("_id") or example.get("id") or "")
 
 
+def assert_disjoint_split_ids(
+    split_examples: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    id_fn: Callable[[Mapping[str, Any]], str] = stable_example_id,
+) -> None:
+    """Assert pairwise-disjoint train/dev/test IDs before generation starts."""
+    ids = {
+        split: {id_fn(example) for example in examples}
+        for split, examples in split_examples.items()
+    }
+    if any("" in split_ids for split_ids in ids.values()):
+        raise ValueError("Every split example must have a non-empty ID.")
+    for left, right in (("train", "dev"), ("train", "test"), ("dev", "test")):
+        overlap = sorted(ids.get(left, set()).intersection(ids.get(right, set())))
+        if overlap:
+            raise AssertionError(f"{left}/{right} ID overlap: {overlap[:5]}")
+
+
 def select_disjoint_cohorts(
     dev_examples: Sequence[Dict[str, Any]],
     test_examples: Sequence[Dict[str, Any]],
@@ -175,9 +193,8 @@ def split_manifest(
         split: [id_fn(example) for example in examples]
         for split, examples in split_examples.items()
     }
-    dev_test_overlap = sorted(set(ids.get("dev", [])).intersection(ids.get("test", [])))
-    if dev_test_overlap:
-        raise AssertionError(f"dev/test ID overlap: {dev_test_overlap[:5]}")
+    assert_disjoint_split_ids(split_examples, id_fn=id_fn)
+    overlaps = {"train_dev": [], "train_test": [], "dev_test": []}
     return {
         "builder_version": BUILDER_VERSION,
         "dataset": dataset,
@@ -192,7 +209,8 @@ def split_manifest(
             split: {"example_count": len(split_ids), "example_ids": split_ids}
             for split, split_ids in ids.items()
         },
-        "dev_test_overlap": dev_test_overlap,
+        "split_overlaps": overlaps,
+        "dev_test_overlap": overlaps["dev_test"],
     }
 
 

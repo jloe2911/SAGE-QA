@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
-from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 from tqdm import tqdm
 
 import re
@@ -24,7 +23,6 @@ from models.gnn_subgraph_retriever import (
     build_graph_inputs_for_example,
     compute_subgraph_symbolic_features,
 )
-from utils.tokenizer import load_tokenizer
 from utils.eval_splits import infer_dataset_name, infer_hop, infer_answer_type
 from data_processing.retrieval_contracts import (
     cap_inference_candidate_rows,
@@ -1600,6 +1598,10 @@ def train(
         raise ValueError("No train examples available.")
     if not dev_examples:
         raise ValueError("No dev examples available.")
+
+    # Keep dataset preparation/import usable without loading the optional
+    # Transformers stack. Training behavior and objective are unchanged.
+    from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 

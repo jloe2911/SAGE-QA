@@ -25,6 +25,14 @@ from data_processing.retrieval_contracts import (
     sha256_file,
     write_json,
 )
+from data_processing.evidence_graph_candidates import (
+    GENERATOR_D_CONFIG,
+    GENERATOR_D_VERSION,
+    build_ontology_evidence_graph,
+    frozen_generator_d_config,
+    frozen_generator_d_lineage,
+    generate_generator_d_candidates,
+)
 
 
 RANDOM_SEED = 42
@@ -623,52 +631,38 @@ def generate_ontology_candidates(
     max_candidate_subgraphs: int,
 ) -> Dict:
     """Freeze ontology candidates without accepting answer or explanation fields."""
+    # Legacy beam/size/budget arguments remain in the public signature for row
+    # schema compatibility; Generator D always uses its frozen configuration.
     context_axioms = parse_owl_context(owl_context)
-    # Gold-free generation stage: only the formal/natural query and supplied
-    # ontology context can determine candidate units or subgraphs.
-    candidate_units = relevant_context_axioms(
-        context_axioms,
-        question=question,
-        sparql_query=sparql_query,
-        max_context_units=max_context_units,
-    )
-    if not candidate_units:
-        return {"candidate_units": [], "candidate_subgraphs": []}
-
-    effective_max_subgraph_size = (
-        len(candidate_units) if max_subgraph_size <= 0 else max_subgraph_size
-    )
-
-    candidate_subgraphs = beam_connected_subgraphs(
-        candidate_units=candidate_units,
-        question=question,
-        sparql_query=sparql_query,
-        min_subgraph_size=min_subgraph_size,
-        max_subgraph_size=effective_max_subgraph_size,
-        beam_width=candidate_beam_width,
-        max_candidate_subgraphs=max_candidate_subgraphs,
-    )
-
-    frozen_candidate_subgraphs = sorted(candidate_subgraphs, key=lambda c: (len(c), c))
     signature = extract_query_signature(question=question, sparql_query=sparql_query)
     query_entities = set(signature.get("query_entities", []))
     query_properties = set(signature.get("query_properties", []))
-    adjacency = build_unit_adjacency(candidate_units)
-    unit_scores = [
-        score_unit_for_query(
+    evidence_graph = build_ontology_evidence_graph(
+        context_axioms,
+        unit_signature=unit_signature,
+        query_entities=query_entities,
+        query_properties=query_properties,
+        score_unit=lambda unit, entities, properties, degree: score_unit_for_query(
             unit,
-            query_entities=query_entities,
-            query_properties=query_properties,
-            degree=len(adjacency[index]),
-        )
-        for index, unit in enumerate(candidate_units)
-    ]
+            query_entities=entities,
+            query_properties=properties,
+            degree=degree,
+        ),
+    )
+    result = generate_generator_d_candidates(evidence_graph)
+    candidate_units = [unit.unit_id for unit in evidence_graph.units]
+    adjacency = [set(neighbors) for neighbors in evidence_graph.adjacency]
+    unit_scores = list(evidence_graph.query_scores)
+    frozen_candidate_subgraphs = [tuple(candidate) for candidate in result.candidates]
 
     return {
         "candidate_units": candidate_units,
         "candidate_subgraphs": frozen_candidate_subgraphs,
         "adjacency": adjacency,
         "unit_scores": unit_scores,
+        "candidate_generator": GENERATOR_D_VERSION,
+        "candidate_generation_config": frozen_generator_d_config(),
+        "query_anchor_unit_ids": list(result.query_anchor_unit_ids),
         "gold_available_during_candidate_generation": False,
     }
 
@@ -711,9 +705,11 @@ def build_rows_for_qa(
     if not candidate_units:
         return []
 
-    # Labeling stage starts only after frozen_candidate_subgraphs is finalized.
-    gold_explanations = get_gold_explanations(qa)
-    if not gold_explanations:
+    # Labeling starts only after candidates freeze. Test rows remain gold-free
+    # until final evaluation of frozen predictions.
+    attach_gold = split != "test"
+    gold_explanations = get_gold_explanations(qa) if attach_gold else []
+    if attach_gold and not gold_explanations:
         return []
     candidate_set = set(candidate_units)
     gold_context_coverage = max(
@@ -753,9 +749,6 @@ def build_rows_for_qa(
             ],
             "subgraph_units": subgraph_units,
             "subgraph_size": len(subgraph_units),
-            "gold_explanations": gold_explanations,
-            "gold_units": gold_explanations[0],
-            "gold_context_coverage": gold_context_coverage,
             "generation_rank": generation_rank,
             "candidate_pre_rank_score": score_subgraph_indices(
                 tuple(candidate_units.index(unit) for unit in subgraph_units),
@@ -764,11 +757,20 @@ def build_rows_for_qa(
                 unit_scores=unit_scores,
             ),
             "gold_available_during_candidate_generation": False,
-            "gold_used_during_labeling": True,
+            "gold_used_during_labeling": attach_gold,
+            "candidate_generator": generated["candidate_generator"],
+            "candidate_generation_config": generated["candidate_generation_config"],
             "builder_version": BUILDER_VERSION,
-            **scores,
-            "label": label,
         }
+        if attach_gold:
+            row.update({
+                "gold_explanations": gold_explanations,
+                "gold_units": gold_explanations[0],
+                "gold_context_coverage": gold_context_coverage,
+                **scores,
+                "label": label,
+                "rank_target": float(scores["best_set_f1_to_gold"]),
+            })
 
         rows.append(row)
 
@@ -829,6 +831,22 @@ def empty_splits() -> Dict[str, List[Dict]]:
     return {"train": [], "dev": [], "test": []}
 
 
+def assert_disjoint_output_ids(splits: Dict[str, List[Dict]]) -> Dict[str, List[str]]:
+    ids = {
+        split: {str(row["example_id"]) for row in rows}
+        for split, rows in splits.items()
+    }
+    overlaps = {
+        "train_dev": sorted(ids["train"] & ids["dev"]),
+        "train_test": sorted(ids["train"] & ids["test"]),
+        "dev_test": sorted(ids["dev"] & ids["test"]),
+    }
+    for pair, overlap in overlaps.items():
+        if overlap:
+            raise AssertionError(f"{pair.replace('_', '/')} ID overlap: {overlap[:5]}")
+    return overlaps
+
+
 def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
     output = {}
     answer_only = {}
@@ -851,20 +869,6 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
             split = split_by_group[group_index]
 
             for qa_index, qa in enumerate(item.get("QAs", [])):
-                has_gold_support = bool(get_gold_explanations(qa))
-
-                if not has_gold_support:
-                    row = build_answer_only_row(
-                        source_name=source_name,
-                        group_index=group_index,
-                        qa_index=qa_index,
-                        item=item,
-                        qa=qa,
-                        split=split,
-                        max_context_units=args.max_context_units,
-                    )
-                    source_answer_only[split].append(row)
-
                 rows = build_rows_for_qa(
                     source_name=source_name,
                     group_index=group_index,
@@ -881,11 +885,26 @@ def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, List[Dict]]]:
                 )
                 source_output[split].extend(rows)
 
+                # This classification is post-generation and does not affect
+                # the frozen candidate set.
+                if split != "test" and not get_gold_explanations(qa):
+                    row = build_answer_only_row(
+                        source_name=source_name,
+                        group_index=group_index,
+                        qa_index=qa_index,
+                        item=item,
+                        qa=qa,
+                        split=split,
+                        max_context_units=args.max_context_units,
+                    )
+                    source_answer_only[split].append(row)
+
             if (group_index + 1) % 100 == 0:
                 print(f"  processed {group_index + 1}/{len(data)} groups")
 
         output[source_name] = source_output
         answer_only[source_name] = source_answer_only
+        assert_disjoint_output_ids(source_output)
 
     return {"support": output, "answer_only": answer_only}
 
@@ -908,33 +927,32 @@ def parse_args() -> argparse.Namespace:
         default=["FamilyOWL_1hop.json", "FamilyOWL_2hop.json"],
     )
     parser.add_argument("--output-dir", default="data")
-    parser.add_argument("--min-subgraph-size", type=int, default=1)
+    parser.add_argument(
+        "--min-subgraph-size", type=int, default=1,
+        help="Legacy compatibility option; frozen Generator D always starts at size 1.",
+    )
     parser.add_argument(
         "--max-subgraph-size",
         type=int,
-        default=0,
-        help=(
-            "Maximum support size to search. Use 0 for no fixed size cap; "
-            "runtime is then controlled by --candidate-beam-width and "
-            "--max-candidate-subgraphs."
-        ),
+        default=6,
+        help="Legacy compatibility option; frozen Generator D always uses size 6.",
     )
-    parser.add_argument("--max-context-units", type=int, default=40)
+    parser.add_argument(
+        "--max-context-units", type=int, default=40,
+        help="Legacy compatibility option; Generator D adapts the full OWL context.",
+    )
     parser.add_argument("--max-negative-per-example", type=int, default=200)
     parser.add_argument(
         "--candidate-beam-width",
         type=int,
         default=96,
-        help=(
-            "Beam width for connected support generation. Larger values explore "
-            "more 4+ axiom chains but keep enumeration bounded."
-        ),
+        help="Legacy compatibility option; Generator D does not use the old beam.",
     )
     parser.add_argument(
         "--max-candidate-subgraphs",
         type=int,
-        default=320,
-        help="Maximum non-gold candidate subgraphs generated per QA example.",
+        default=512,
+        help="Legacy compatibility option; frozen Generator D always caps at 512.",
     )
     parser.add_argument(
         "--train-ratio",
@@ -985,6 +1003,7 @@ def main() -> None:
             split_name: list(dict.fromkeys(row["example_id"] for row in rows))
             for split_name, rows in splits.items()
         }
+        split_overlaps = assert_disjoint_output_ids(splits)
         write_json(
             output_dir / source_name / "metadata.json",
             {
@@ -996,15 +1015,12 @@ def main() -> None:
                 "git": git_provenance(Path(__file__).resolve().parents[1]),
                 "seed": RANDOM_SEED,
                 "example_ids": split_ids,
-                "candidate_generation_config": {
-                    "max_context_units": args.max_context_units,
-                    "max_subgraph_size": args.max_subgraph_size,
-                    "candidate_beam_width": args.candidate_beam_width,
-                    "max_candidate_subgraphs": args.max_candidate_subgraphs,
-                },
+                "split_overlaps": split_overlaps,
+                "candidate_generation_config": frozen_generator_d_config(),
+                "candidate_generation_lineage": frozen_generator_d_lineage(),
                 "gold_available_during_candidate_generation": False,
-                "gold_used_during_labeling": True,
-                "candidate_composer": "beam_connected_subgraphs",
+                "gold_used_during_labeling": {"train": True, "dev": True, "test": False},
+                "candidate_composer": GENERATOR_D_VERSION,
             },
         )
 
