@@ -1,6 +1,5 @@
 import re
 import numpy as np
-from transformers import BertTokenizer
 
 
 class LSTMTokenizer:
@@ -41,6 +40,8 @@ class LSTMTokenizer:
 class BERTTokenizer:
     def __init__(self, max_query_word):
         super(BERTTokenizer, self).__init__()
+        from transformers import BertTokenizer
+
         self.q_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         self.max_query_word = max_query_word
         self.num_word = self.q_tokenizer.encode("[UNK]")[

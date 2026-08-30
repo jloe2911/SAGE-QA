@@ -10,7 +10,6 @@ import pickle
 
 warnings.filterwarnings("ignore")
 from modules.question_encoding.tokenizers import LSTMTokenizer  # , BERTTokenizer
-from transformers import AutoTokenizer
 import time
 
 import os
@@ -95,6 +94,7 @@ class BasicDataLoader(object):
             (self.num_data, self.max_local_entity), dtype=float
         )
         self.answer_lists = np.empty(self.num_data, dtype=object)
+        self.local_entity_labels = np.empty(self.num_data, dtype=object)
 
         self._prepare_data()
 
@@ -126,6 +126,11 @@ class BasicDataLoader(object):
         self.relation2id = relation2id
         self.entity2id = entity2id
         self.id2entity = {i: entity for entity, i in entity2id.items()}
+        self.frozen_entity_dictionary = bool(
+            config.get("frozen_entity_dictionary", False)
+        )
+        if self.frozen_entity_dictionary and not config.get("is_eval", False):
+            raise ValueError("--frozen_entity_dictionary is inference-only")
         self.q_type = config["q_type"]
 
         if self.use_inverse_relation:
@@ -231,6 +236,12 @@ class BasicDataLoader(object):
             self.question_id.append(sample["id"])
             # get a list of local entities
             g2l = self.global2local_entity_maps[next_id]
+            local_labels = [None] * len(g2l)
+            for global_entity, local_entity in g2l.items():
+                local_labels[local_entity] = self.id2entity.get(
+                    global_entity, str(global_entity)
+                )
+            self.local_entity_labels[next_id] = local_labels
             # print(g2l)
             if len(g2l) == 0:
                 # print(next_id)
@@ -260,13 +271,19 @@ class BasicDataLoader(object):
             self.seed_list[next_id] = seed_list
             num_query_entity[next_id] = len(tp_set)
             for global_entity, local_entity in g2l.items():
+                stored_entity = global_entity
+                if self.frozen_entity_dictionary and global_entity not in self.id2entity:
+                    # ReaRev's type-based initialization uses this array only as
+                    # a valid-vs-padding mask. Keep the persisted entity dictionary
+                    # frozen and retain the real label in local_entity_labels.
+                    stored_entity = 0
                 if self.data_name != "cwq":
                     if local_entity not in tp_set:  # skip entities in question
                         # print(global_entity)
                         # print(local_entity)
-                        self.candidate_entities[next_id, local_entity] = global_entity
+                        self.candidate_entities[next_id, local_entity] = stored_entity
                 elif self.data_name == "cwq":
-                    self.candidate_entities[next_id, local_entity] = global_entity
+                    self.candidate_entities[next_id, local_entity] = stored_entity
                 # if local_entity != 0:  # skip question node
                 #     self.candidate_entities[next_id, local_entity] = global_entity
 
@@ -276,22 +293,15 @@ class BasicDataLoader(object):
             tail_list = []
             for i, tpl in enumerate(sample["subgraph"]["tuples"]):
                 sbj, rel, obj = tpl
+                sbj_key = sbj["text"] if isinstance(sbj, dict) and "text" in sbj else sbj
+                obj_key = obj["text"] if isinstance(obj, dict) and "text" in obj else obj
+                rel_key = rel["text"] if isinstance(rel, dict) and "text" in rel else rel
+                head = g2l[self.entity2id.get(sbj_key, sbj_key)]
+                tail = g2l[self.entity2id.get(obj_key, obj_key)]
                 try:
-                    if isinstance(sbj, dict) and "text" in sbj:
-                        head = g2l[self.entity2id[sbj["text"]]]
-                        rel = self.relation2id[rel["text"]]
-                        tail = g2l[self.entity2id[obj["text"]]]
-                    else:
-                        head = g2l[self.entity2id[sbj]]
-                        rel = self.relation2id[rel]
-                        tail = g2l[self.entity2id[obj]]
-                except:
-                    head = g2l[sbj]
-                    try:
-                        rel = int(rel)
-                    except:
-                        rel = self.relation2id[rel]
-                    tail = g2l[obj]
+                    rel = int(rel_key)
+                except (TypeError, ValueError):
+                    rel = self.relation2id[rel_key]
                 head_list.append(head)
                 rel_list.append(rel)
                 tail_list.append(tail)
@@ -421,6 +431,8 @@ class BasicDataLoader(object):
                             self.rel_texts[rel_id, j] = len(self.word2id)
                             self.rel_texts_inv[rel_id, j] = len(self.word2id)
         else:
+            from transformers import AutoTokenizer
+
             if tokenize == "bert":
                 tokenizer_name = "bert-base-uncased"
             elif tokenize == "roberta":
@@ -481,22 +493,15 @@ class BasicDataLoader(object):
         tail_list = []
         for i, tpl in enumerate(sample["subgraph"]["tuples"]):
             sbj, rel, obj = tpl
+            sbj_key = sbj["text"] if isinstance(sbj, dict) and "text" in sbj else sbj
+            obj_key = obj["text"] if isinstance(obj, dict) and "text" in obj else obj
+            rel_key = rel["text"] if isinstance(rel, dict) and "text" in rel else rel
+            head = g2l[self.entity2id.get(sbj_key, sbj_key)]
+            tail = g2l[self.entity2id.get(obj_key, obj_key)]
             try:
-                if isinstance(sbj, dict) and "text" in sbj:
-                    head = g2l[self.entity2id[sbj["text"]]]
-                    rel = self.relation2id[rel["text"]]
-                    tail = g2l[self.entity2id[obj["text"]]]
-                else:
-                    head = g2l[self.entity2id[sbj]]
-                    rel = self.relation2id[rel]
-                    tail = g2l[self.entity2id[obj]]
-            except:
-                head = g2l[sbj]
-                try:
-                    rel = int(rel)
-                except:
-                    rel = self.relation2id[rel]
-                tail = g2l[obj]
+                rel = int(rel_key)
+            except (TypeError, ValueError):
+                rel = self.relation2id[rel_key]
             head_list.append(head)
             rel_list.append(rel)
             tail_list.append(tail)
@@ -713,9 +718,13 @@ def load_data(config, tokenize):
     word2id = load_dict(config["data_folder"] + config["word2id"])
     relation2id = load_dict(config["data_folder"] + config["relation2id"])
 
+    train_dev_only = bool(config.get("train_dev_only", False))
+    if train_dev_only and config["is_eval"]:
+        raise ValueError("--train_dev_only cannot be combined with --is_eval")
+
     if config["is_eval"]:
         train_data = None
-        valid_data = SingleDataLoader(
+        valid_data = None if config.get("test_only_inference", False) else SingleDataLoader(
             config, word2id, relation2id, entity2id, tokenize, data_type="dev"
         )
         test_data = SingleDataLoader(
@@ -729,12 +738,13 @@ def load_data(config, tokenize):
         valid_data = SingleDataLoader(
             config, word2id, relation2id, entity2id, tokenize, data_type="dev"
         )
-        test_data = SingleDataLoader(
+        test_data = None if train_dev_only else SingleDataLoader(
             config, word2id, relation2id, entity2id, tokenize, data_type="test"
         )
         num_word = train_data.num_word
-    relation_texts = test_data.rel_texts
-    relation_texts_inv = test_data.rel_texts_inv
+    relation_source = valid_data if test_data is None else test_data
+    relation_texts = relation_source.rel_texts
+    relation_texts_inv = relation_source.rel_texts_inv
     entities_texts = None
     dataset = {
         "train": train_data,

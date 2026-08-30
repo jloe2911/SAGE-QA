@@ -217,6 +217,7 @@ data/raw/*
 !data/raw/owl2bench.zip
 !data/raw/pizza_100.zip
 !data/raw/pizza_250.zip
+data/production_generator_d_v1/
 outputs/
 checkpoints/
 results/

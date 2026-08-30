@@ -6,6 +6,7 @@ import os, math
 import torch
 from torch.optim.lr_scheduler import ExponentialLR
 import torch.optim as optim
+import json
 
 from tqdm import tqdm
 
@@ -14,10 +15,7 @@ tqdm.monitor_iterval = 0
 
 # from dataset_load_paths import load_data
 from dataset_load import load_data
-from dataset_load_graft import load_data_graft
 from models.ReaRev.rearev import ReaRev
-from models.NSM.nsm import NSM
-from models.GraftNet.graftnet import GraftNet
 from evaluate import Evaluator
 
 
@@ -49,10 +47,14 @@ class Trainer_KBQA(object):
                 self.args, len(self.entity2id), self.num_kb_relation, self.num_word
             )
         elif model_name == "NSM":
+            from models.NSM.nsm import NSM
+
             self.model = NSM(
                 self.args, len(self.entity2id), self.num_kb_relation, self.num_word
             )
         elif model_name == "GraftNet":
+            from models.GraftNet.graftnet import GraftNet
+
             self.model = GraftNet(
                 self.args, len(self.entity2id), self.num_kb_relation, self.num_word
             )
@@ -104,6 +106,8 @@ class Trainer_KBQA(object):
 
     def load_data(self, args, tokenize):
         if args["model_name"] == "GraftNet":
+            from dataset_load_graft import load_data_graft
+
             dataset = load_data_graft(args, tokenize)
         else:
             dataset = load_data(args, tokenize)
@@ -114,7 +118,8 @@ class Trainer_KBQA(object):
         self.relation2id = dataset["relation2id"]
         self.word2id = dataset["word2id"]
         self.num_word = dataset["num_word"]
-        self.num_kb_relation = self.test_data.num_kb_relation
+        relation_source = self.test_data if self.test_data is not None else self.valid_data
+        self.num_kb_relation = relation_source.num_kb_relation
         self.num_entity = len(self.entity2id)
         self.rel_texts = dataset["rel_texts"]
         self.rel_texts_inv = dataset["rel_texts_inv"]
@@ -135,6 +140,7 @@ class Trainer_KBQA(object):
         # eval_acc = inference(self.model, self.valid_data, self.entity2id, self.args)
         # self.evaluate(self.test_data, self.test_batch_size)
         print("Start Training------------------")
+        dev_metrics = []
         for epoch in range(start_epoch, end_epoch + 1):
             st = time.time()
             loss, extras, h1_list_all, f1_list_all = self.train_epoch()
@@ -162,6 +168,15 @@ class Trainer_KBQA(object):
                         eval_f1, eval_h1, eval_em
                     )
                 )
+                dev_metrics.append(
+                    {
+                        "epoch": epoch + 1,
+                        "dev_f1": float(eval_f1),
+                        "dev_h1": float(eval_h1),
+                        "dev_em": float(eval_em),
+                    }
+                )
+                self._write_dev_metrics(dev_metrics)
                 # eval_f1, eval_h1 = self.evaluate(self.test_data, self.test_batch_size)
                 # self.logger.info("TEST F1: {:.4f}, H1: {:.4f}".format(eval_f1, eval_h1))
                 do_test = False
@@ -178,14 +193,15 @@ class Trainer_KBQA(object):
                         self.logger.info("BEST EVAL F1: {:.4f}".format(eval_f1))
                         do_test = True
 
-                eval_f1, eval_h1, eval_em = self.evaluate(
-                    self.test_data, self.test_batch_size
-                )
-                self.logger.info(
-                    "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                        eval_f1, eval_h1, eval_em
+                if not self.args.get("train_dev_only", False):
+                    eval_f1, eval_h1, eval_em = self.evaluate(
+                        self.test_data, self.test_batch_size
                     )
-                )
+                    self.logger.info(
+                        "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
+                            eval_f1, eval_h1, eval_em
+                        )
+                    )
                 # if do_test:
                 #     eval_f1, eval_h1 = self.evaluate(self.test_data, self.test_batch_size)
                 #     self.logger.info("TEST F1: {:.4f}, H1: {:.4f}".format(eval_f1, eval_h1))
@@ -204,9 +220,23 @@ class Trainer_KBQA(object):
                 #     self.logger.info('No improvement after 5 evaluation. Early Stopping.')
                 #     break
         self.save_ckpt("final")
-        self.logger.info("Train Done! Evaluate on testset with saved model")
         print("End Training------------------")
-        self.evaluate_best()
+        if self.args.get("train_dev_only", False):
+            self.logger.info("Train Done! TEST remained sealed; no TEST data was loaded.")
+        else:
+            self.logger.info("Train Done! Evaluate on testset with saved model")
+            self.evaluate_best()
+
+    def _write_dev_metrics(self, rows):
+        filename = self.args.get("dev_metrics_file")
+        if not filename:
+            return
+        tmp = filename + ".tmp"
+        os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, indent=2)
+            handle.write("\n")
+        os.replace(tmp, filename)
 
     def evaluate_best(self):
         filename = os.path.join(
@@ -261,14 +291,15 @@ class Trainer_KBQA(object):
     def evaluate_single(self, filename):
         if filename is not None:
             self.load_ckpt(filename)
-        eval_f1, eval_hits, eval_ems = self.evaluate(
-            self.valid_data, self.test_batch_size, write_info=False
-        )
-        self.logger.info(
-            "EVAL F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                eval_f1, eval_hits, eval_ems
+        if not self.args.get("test_only_inference", False):
+            eval_f1, eval_hits, eval_ems = self.evaluate(
+                self.valid_data, self.test_batch_size, write_info=False
             )
-        )
+            self.logger.info(
+                "EVAL F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
+                    eval_f1, eval_hits, eval_ems
+                )
+            )
         test_f1, test_hits, test_ems = self.evaluate(
             self.test_data, self.test_batch_size, write_info=True
         )

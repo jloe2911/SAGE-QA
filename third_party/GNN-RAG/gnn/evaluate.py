@@ -149,6 +149,8 @@ class Evaluator:
             for i in range(len(question_list)):
                 tp_obj = obj_list[i]
                 q = question_list[i]
+                sample_id = valid_data.sample_ids[i]
+                tp_obj["example_id"] = valid_data.question_id[sample_id]
                 # real_index = self.true_batch_id[i][0]
                 tp_obj["question"] = q
                 tp_obj[j] = {}
@@ -164,7 +166,6 @@ class Evaluator:
         return obj_list
 
     def evaluate(self, valid_data, test_batch_size=20, write_info=False):
-        write_info = True
         self.model.eval()
         self.count = 0
         eps = self.eps
@@ -257,6 +258,24 @@ class Evaluator:
                 precision, recall, f1, hit, em, case, retrived, ans = f1_and_hits(
                     answers, candidate2prob, self.id2entity, self.entity2name, eps
                 )
+                if self.args.get("frozen_entity_dictionary", False):
+                    sample_id = valid_data.sample_ids[batch_id]
+                    labels = valid_data.local_entity_labels[sample_id]
+                    labelled = []
+                    for local_index, (c, p, s) in enumerate(
+                        zip(candidates, probs, seed_entities)
+                    ):
+                        if s == 1.0 or c == pad_ent_id or p < ignore_prob:
+                            continue
+                        labelled.append((labels[local_index], p))
+                    labelled.sort(key=lambda item: item[1], reverse=True)
+                    retrived = []
+                    cumulative_probability = 0.0
+                    for label, probability in labelled:
+                        cumulative_probability += probability
+                        retrived.append((label, probability))
+                        if cumulative_probability > eps:
+                            break
                 if write_info:
                     tp_obj = obj_list[batch_id]
                     tp_obj["answers"] = ans

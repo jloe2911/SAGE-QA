@@ -78,6 +78,33 @@ def add_shared_args(parser):
     parser.add_argument("--eps", default=0.95, type=float)  # threshold for f1
     parser.add_argument("--test_batch_size", default=20, type=int)
     parser.add_argument("--q_type", default="seq", type=str)
+    parser.add_argument(
+        "--train_dev_only",
+        default=False,
+        type=bool_flag,
+        help="Load and evaluate only TRAIN/DEV while training; never open TEST.",
+    )
+    parser.add_argument(
+        "--dev_metrics_file",
+        default=None,
+        type=str,
+        help="Optional JSON file for epoch-wise DEV metrics.",
+    )
+    parser.add_argument(
+        "--frozen_entity_dictionary",
+        default=False,
+        type=bool_flag,
+        help=(
+            "Inference-only: keep entities.txt frozen and represent unseen graph "
+            "nodes through per-example local indices without extending it."
+        ),
+    )
+    parser.add_argument(
+        "--test_only_inference",
+        default=False,
+        type=bool_flag,
+        help="With --is_eval, skip the DEV scoring pass and run TEST only.",
+    )
 
 
 def add_parse_args(parser):

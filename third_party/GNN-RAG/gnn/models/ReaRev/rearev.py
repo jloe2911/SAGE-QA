@@ -7,7 +7,6 @@ import torch.nn as nn
 from models.base_model import BaseModel
 from modules.kg_reasoning.reasongnn import ReasonGNNLayer
 from modules.question_encoding.lstm_encoder import LSTMInstruction
-from modules.question_encoding.bert_encoder import BERTInstruction
 from modules.layer_init import TypeLayer
 from modules.query_update import AttnEncoder, Fusion, QueryReform
 
@@ -145,6 +144,8 @@ class ReaRev(BaseModel):
                 in_features=self.rel_dim, out_features=entity_dim
             )
         else:
+            from modules.question_encoding.bert_encoder import BERTInstruction
+
             self.instruction = BERTInstruction(
                 args, self.word_embedding, self.num_word, args["lm"]
             )
