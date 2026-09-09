@@ -184,6 +184,7 @@ def prepare_examples(
     candidate_selection: str = "inference",
     max_inference_candidates: int = 320,
     subsample_candidates: bool | None = None,
+    hard_pair_reservation: bool = False,
 ) -> List[Dict]:
     """
     Converts flat candidate-subgraph rows into example-level graph objects.
@@ -237,7 +238,7 @@ def prepare_examples(
 
         candidate_rows = []
 
-        for row in rows_to_materialize:
+        for materialization_order, row in enumerate(rows_to_materialize):
             subgraph_units = row.get("subgraph_units", [])
             node_ids = subgraph_units_to_node_ids(subgraph_units, axiom_to_idx)
 
@@ -273,8 +274,7 @@ def prepare_examples(
                     ),
                 )
 
-            candidate_rows.append(
-                {
+            candidate_row = {
                     "example_id": example_id,
                     "dataset": dataset,
                     "hop": hop,
@@ -317,7 +317,22 @@ def prepare_examples(
                     "answer_type": answer_type,
                     "task_type": row.get("task_type", row.get("Task Type", "")),
                 }
-            )
+            if hard_pair_reservation:
+                # These ordering fields are needed only by the opt-in v2
+                # selector. Keep the disabled materialized rows identical to
+                # production v1.
+                candidate_row.update(
+                    {
+                        "candidate_pre_rank_score": float(
+                            row.get("candidate_pre_rank_score", 0.0)
+                        ),
+                        "generation_rank": int(
+                            row.get("generation_rank", materialization_order)
+                        ),
+                        "materialization_order": materialization_order,
+                    }
+                )
+            candidate_rows.append(candidate_row)
 
         if candidate_selection == "training":
             candidate_rows = subsample_candidate_rows(
@@ -325,6 +340,7 @@ def prepare_examples(
                 max_pos=64,
                 max_hard_neg=128,
                 max_easy_neg=128,
+                reserve_hard_pair=hard_pair_reservation,
             )
         if not candidate_rows:
             continue
@@ -793,6 +809,7 @@ def subsample_candidate_rows(
     max_pos: int = 64,
     max_hard_neg: int = 128,
     max_easy_neg: int = 128,
+    reserve_hard_pair: bool = False,
 ):
     positives = [r for r in rows if int(r.get("label", 0)) == 1]
     hard_negatives = [
@@ -831,7 +848,74 @@ def subsample_candidate_rows(
 
     sampled = positives + hard_negatives + easy_negatives
     random.shuffle(sampled)
+
+    if reserve_hard_pair:
+        reserved = select_reserved_hard_pair(rows)
+        if reserved is not None:
+            complete, competitor = reserved
+            _reserve_candidate_in_sample(sampled, complete)
+            _reserve_candidate_in_sample(sampled, competitor)
+            complete["_hard_pair_role"] = "complete"
+            competitor["_hard_pair_role"] = "competitor"
+
     return sampled
+
+
+def _candidate_order_key(row: Dict[str, Any]) -> Tuple:
+    """Frozen gold-free pre-rank, then deterministic generation order."""
+    return (
+        -float(row.get("candidate_pre_rank_score", 0.0)),
+        int(row.get("generation_rank", 2**31 - 1)),
+        int(row.get("materialization_order", 2**31 - 1)),
+        tuple(str(unit) for unit in row.get("subgraph_units", []) or []),
+    )
+
+
+def select_reserved_hard_pair(
+    rows: List[Dict[str, Any]],
+) -> Tuple[Dict[str, Any], Dict[str, Any]] | None:
+    """Select the precommitted complete > hard-incomplete TRAIN pair."""
+    complete = [row for row in rows if float(row.get("rank_target", 0.0)) >= 0.9]
+    partial = [
+        row for row in rows if 0.0 < float(row.get("rank_target", 0.0)) < 0.9
+    ]
+    irrelevant = [row for row in rows if float(row.get("rank_target", 0.0)) == 0.0]
+    if not complete or not (partial or irrelevant):
+        return None
+
+    chosen_complete = min(
+        complete,
+        key=lambda row: (-float(row.get("rank_target", 0.0)), *_candidate_order_key(row)),
+    )
+    chosen_competitor = min(partial or irrelevant, key=_candidate_order_key)
+    return chosen_complete, chosen_competitor
+
+
+def _candidate_stratum(row: Dict[str, Any]) -> str:
+    target = float(row.get("rank_target", 0.0))
+    if target >= 0.9:
+        return "positive"
+    if target > 0.0:
+        return "hard_negative"
+    return "easy_negative"
+
+
+def _reserve_candidate_in_sample(
+    sampled: List[Dict[str, Any]], reserved: Dict[str, Any]
+) -> None:
+    """Use one existing same-stratum slot when reservation is required."""
+    if any(row is reserved for row in sampled):
+        return
+
+    stratum = _candidate_stratum(reserved)
+    victim_indices = [
+        index
+        for index, row in enumerate(sampled)
+        if _candidate_stratum(row) == stratum and not row.get("_hard_pair_role")
+    ]
+    if not victim_indices:
+        raise AssertionError(f"No sampled {stratum} slot available for reservation")
+    sampled[victim_indices[-1]] = reserved
 
 
 # =========================================================
@@ -844,6 +928,7 @@ def pairwise_ranking_loss(
     targets: torch.Tensor,
     margin: float = 0.2,
     max_pairs: int = 512,
+    reserved_pair: Tuple[int, int] | None = None,
 ) -> torch.Tensor:
     """
     Focused within-question ranking loss.
@@ -854,13 +939,41 @@ def pairwise_ranking_loss(
       exact supports > sufficient supersets
     """
     device = scores.device
+    weighted_pairs = sample_weighted_margin_pairs(
+        targets.detach().cpu().tolist(),
+        max_pairs=max_pairs,
+        reserved_pair=reserved_pair,
+    )
+    if not weighted_pairs:
+        return torch.tensor(0.0, device=device)
 
+    better = torch.tensor(
+        [p[0] for p in weighted_pairs], dtype=torch.long, device=device
+    )
+    worse = torch.tensor(
+        [p[1] for p in weighted_pairs], dtype=torch.long, device=device
+    )
+    weights = torch.tensor(
+        [p[2] for p in weighted_pairs], dtype=torch.float, device=device
+    )
+
+    losses = F.relu(margin - scores[better] + scores[worse])
+    return (losses * weights).mean()
+
+
+def sample_weighted_margin_pairs(
+    targets: List[float],
+    *,
+    max_pairs: int = 512,
+    reserved_pair: Tuple[int, int] | None = None,
+) -> List[Tuple[int, int, float]]:
+    """Build the v1 pair pool and optionally reserve exactly one ordered pair."""
     exact = []
     sufficient = []
     partial = []
     irrelevant = []
 
-    for i, t in enumerate(targets.detach().cpu().tolist()):
+    for i, t in enumerate(targets):
         if t >= 0.999:
             exact.append(i)
         elif t >= 0.899:
@@ -893,23 +1006,26 @@ def pairwise_ranking_loss(
             weighted_pairs.append((i, j, 0.5))
 
     if not weighted_pairs:
-        return torch.tensor(0.0, device=device)
+        return []
 
     if len(weighted_pairs) > max_pairs:
         weighted_pairs = random.sample(weighted_pairs, max_pairs)
 
-    better = torch.tensor(
-        [p[0] for p in weighted_pairs], dtype=torch.long, device=device
-    )
-    worse = torch.tensor(
-        [p[1] for p in weighted_pairs], dtype=torch.long, device=device
-    )
-    weights = torch.tensor(
-        [p[2] for p in weighted_pairs], dtype=torch.float, device=device
-    )
+    if reserved_pair is not None:
+        matches = [pair for pair in weighted_pairs if pair[:2] == reserved_pair]
+        if not matches:
+            complete_index, competitor_index = reserved_pair
+            competitor_target = float(targets[competitor_index])
+            reserved_weight = 3.0 if competitor_target > 0.0 else 2.0
+            weighted_pairs[-1] = (
+                complete_index,
+                competitor_index,
+                reserved_weight,
+            )
+        elif len(matches) != 1:
+            raise AssertionError("Reserved pair was duplicated")
 
-    losses = F.relu(margin - scores[better] + scores[worse])
-    return (losses * weights).mean()
+    return weighted_pairs
 
 
 def listwise_soft_target_loss(
@@ -942,6 +1058,7 @@ def compute_example_loss(
     bce_weight: float,
     listwise_weight: float,
     max_pairs: int,
+    hard_pair_reservation: bool = False,
 ) -> Tuple[torch.Tensor, Dict]:
     device = scores.device
 
@@ -957,11 +1074,27 @@ def compute_example_loss(
         device=device,
     )
 
+    reserved_pair = None
+    if hard_pair_reservation:
+        complete_indices = [
+            i for i, row in enumerate(candidate_rows)
+            if row.get("_hard_pair_role") == "complete"
+        ]
+        competitor_indices = [
+            i for i, row in enumerate(candidate_rows)
+            if row.get("_hard_pair_role") == "competitor"
+        ]
+        if complete_indices or competitor_indices:
+            if len(complete_indices) != 1 or len(competitor_indices) != 1:
+                raise AssertionError("Eligible example must contain exactly one reserved pair")
+            reserved_pair = (complete_indices[0], competitor_indices[0])
+
     ranking = pairwise_ranking_loss(
         scores=scores,
         targets=targets,
         margin=ranking_margin,
         max_pairs=max_pairs,
+        reserved_pair=reserved_pair,
     )
 
     bce = bce_criterion(scores, binary_labels)
@@ -1566,6 +1699,7 @@ def train(
     score_mode: str = "neural",
     size_penalty: float = 0.01,
     source_name: str | None = None,
+    hard_pair_reservation: bool = False,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -1573,7 +1707,11 @@ def train(
     train_rows = load_jsonl(train_path, source_name=source_name)
     dev_rows = load_jsonl(dev_path, source_name=source_name)
 
-    train_examples = prepare_examples(train_rows, candidate_selection="training")
+    train_examples = prepare_examples(
+        train_rows,
+        candidate_selection="training",
+        hard_pair_reservation=hard_pair_reservation,
+    )
     dev_examples = prepare_examples(dev_rows, candidate_selection="inference")
 
     # Only rankable examples can contribute ranking loss.
@@ -1705,6 +1843,7 @@ def train(
                 bce_weight=bce_weight,
                 listwise_weight=listwise_weight,
                 max_pairs=max_pairs,
+                hard_pair_reservation=hard_pair_reservation,
             )
 
             loss.backward()
@@ -1778,6 +1917,7 @@ def train(
                 "bce_weight": bce_weight,
                 "listwise_weight": listwise_weight,
                 "max_pairs": max_pairs,
+                "hard_pair_reservation": hard_pair_reservation,
                 "score_mode": score_mode,
                 "size_penalty": size_penalty,
                 "best_dev_metrics": dev_metrics,
@@ -1830,6 +1970,7 @@ def parse_args():
     parser.add_argument("--bce-weight", type=float, default=0.2)
     parser.add_argument("--listwise-weight", type=float, default=0.2)
     parser.add_argument("--max-pairs", type=int, default=512)
+    parser.add_argument("--hard-pair-reservation", action="store_true")
 
     # For evaluation during training.
     # For GNN, neural is safer initially.
@@ -1879,4 +2020,5 @@ if __name__ == "__main__":
         score_mode=args.score_mode,
         size_penalty=args.size_penalty,
         source_name=args.source_name,
+        hard_pair_reservation=args.hard_pair_reservation,
     )

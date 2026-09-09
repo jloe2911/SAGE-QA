@@ -193,6 +193,49 @@ def saturation(metrics: Mapping[str, Mapping[str, float]]) -> dict[str, Any]:
     }
 
 
+def _pearson_size_score(ranked: Sequence[Mapping[str, Any]]) -> float:
+    sizes = [float(row.get("subgraph_size", len(row.get("subgraph_units", [])))) for row in ranked]
+    scores = [float(row["adjusted_score"]) for row in ranked]
+    if len(sizes) < 2:
+        return 0.0
+    mean_size = sum(sizes) / len(sizes)
+    mean_score = sum(scores) / len(scores)
+    numerator = sum((size - mean_size) * (score - mean_score) for size, score in zip(sizes, scores))
+    size_ss = sum((size - mean_size) ** 2 for size in sizes)
+    score_ss = sum((score - mean_score) ** 2 for score in scores)
+    denominator = (size_ss * score_ss) ** 0.5
+    return numerator / denominator if denominator else 0.0
+
+
+def ranking_diagnostic(ranked: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    complete = [
+        (rank, row)
+        for rank, row in enumerate(ranked, start=1)
+        if bool(row.get("contains_any_gold_explanation"))
+    ]
+    best_rank, best = complete[0] if complete else (None, None)
+    top = ranked[0]
+    return {
+        "candidate_count": len(ranked),
+        "top1_complete": bool(top.get("contains_any_gold_explanation")),
+        "top1_adjusted_score": float(top["adjusted_score"]),
+        "top1_subgraph_size": int(top.get("subgraph_size", len(top.get("subgraph_units", [])))),
+        "best_complete_rank": best_rank,
+        "best_complete_adjusted_score": float(best["adjusted_score"]) if best is not None else None,
+        "best_complete_subgraph_size": (
+            int(best.get("subgraph_size", len(best.get("subgraph_units", []))))
+            if best is not None
+            else None
+        ),
+        "top1_minus_best_complete_score_gap": (
+            float(top["adjusted_score"]) - float(best["adjusted_score"])
+            if best is not None
+            else None
+        ),
+        "candidate_size_score_pearson": _pearson_size_score(ranked),
+    }
+
+
 def summary_markdown(metrics: Mapping[str, Any]) -> str:
     lines = [
         "# Production Generator D — DEV retrieval k sensitivity",
@@ -343,6 +386,7 @@ def main() -> None:
                             candidate_record(row, rank)
                             for rank, row in enumerate(ranked[:5], start=1)
                         ],
+                        "ranking_diagnostic": ranking_diagnostic(ranked),
                         "prefix_evaluation": prefixes,
                     }
                     ranking_handle.write(json.dumps(record, ensure_ascii=False) + "\n")
