@@ -1,7 +1,19 @@
+import json
+from pathlib import Path
+
+import pytest
+
 from experiments.cross_encoder_reranking_dev_v1.run_experiment import (
+    MODEL_NAME,
+    MODEL_PATH_ENV,
+    MODEL_REVISION,
     candidate_identity,
+    configuration,
+    load_pretrained_components,
+    pretrained_model_source,
     select_training_pairs,
     serialize_candidate,
+    validate_frozen_model_snapshot,
 )
 
 
@@ -48,3 +60,56 @@ def test_pairs_are_within_example_deterministic_and_ordered_by_target():
     assert ("complete", "partial") in targets
     assert ("complete", "irrelevant") in targets
     assert ("partial", "irrelevant") in targets
+
+
+def test_local_snapshot_is_validated_and_used_without_changing_identity(
+    monkeypatch,
+):
+    snapshot = Path("frozen-snapshot").resolve()
+    monkeypatch.setenv(MODEL_PATH_ENV, str(snapshot))
+    monkeypatch.setattr(
+        "experiments.cross_encoder_reranking_dev_v1.run_experiment.validate_frozen_model_snapshot",
+        lambda path: None,
+    )
+    source, revision_kwargs = pretrained_model_source()
+    assert source == str(snapshot)
+    assert revision_kwargs == {}
+    assert configuration()["model_name"] == MODEL_NAME
+    assert configuration()["model_revision"] == MODEL_REVISION
+    assert str(snapshot) not in json.dumps(configuration())
+
+
+def test_local_snapshot_requires_config_tokenizer_and_weights(monkeypatch):
+    monkeypatch.setattr(Path, "is_dir", lambda self: True)
+    monkeypatch.setattr(Path, "is_file", lambda self: False)
+    with pytest.raises(FileNotFoundError, match="config.json"):
+        validate_frozen_model_snapshot(Path("incomplete-snapshot"))
+
+
+def test_pretrained_loaders_receive_local_snapshot_and_offline_flag(monkeypatch):
+    snapshot = Path("frozen-snapshot").resolve()
+    calls = []
+
+    class Loader:
+        @staticmethod
+        def from_pretrained(source, **kwargs):
+            calls.append((source, kwargs))
+            return object()
+
+    monkeypatch.setenv(MODEL_PATH_ENV, str(snapshot))
+    monkeypatch.setattr(
+        "experiments.cross_encoder_reranking_dev_v1.run_experiment.validate_frozen_model_snapshot",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        "experiments.cross_encoder_reranking_dev_v1.run_experiment.AutoTokenizer", Loader
+    )
+    monkeypatch.setattr(
+        "experiments.cross_encoder_reranking_dev_v1.run_experiment.AutoModelForSequenceClassification",
+        Loader,
+    )
+    load_pretrained_components()
+    assert calls == [
+        (str(snapshot), {"local_files_only": True}),
+        (str(snapshot), {"num_labels": 1, "local_files_only": True}),
+    ]

@@ -37,6 +37,8 @@ from training.train_gnn_subgraph_retriever import (
 
 SEED = 42
 MODEL_NAME = "distilbert-base-uncased"
+MODEL_REVISION = "12040accade4e8a0f71eabdb258fecc2e7e948be"
+MODEL_PATH_ENV = "SAGEQA_DISTILBERT_PATH"
 MAX_LENGTH = 256
 MARGIN = 0.2
 EPOCHS = 1
@@ -69,6 +71,41 @@ DEFAULT_OLD_RANKINGS = (
     / "per_example_rankings.jsonl"
 )
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "development_runs" / "question_candidate_cross_encoder_v1"
+
+
+def validate_frozen_model_snapshot(path: Path) -> None:
+    if not path.is_dir():
+        raise FileNotFoundError(f"{MODEL_PATH_ENV} is not a directory: {path}")
+    required = (path / "config.json", path / "tokenizer_config.json")
+    missing = [item.name for item in required if not item.is_file()]
+    if not any((path / name).is_file() for name in ("tokenizer.json", "vocab.txt")):
+        missing.append("tokenizer.json or vocab.txt")
+    if not any(
+        (path / name).is_file() for name in ("model.safetensors", "pytorch_model.bin")
+    ):
+        missing.append("model.safetensors or pytorch_model.bin")
+    if missing:
+        raise FileNotFoundError(f"Incomplete frozen DistilBERT snapshot at {path}: {missing}")
+
+
+def pretrained_model_source() -> tuple[str, dict[str, str]]:
+    configured_path = os.environ.get(MODEL_PATH_ENV, "").strip()
+    if configured_path:
+        snapshot_path = Path(configured_path).expanduser().resolve()
+        validate_frozen_model_snapshot(snapshot_path)
+        return str(snapshot_path), {}
+    return MODEL_NAME, {"revision": MODEL_REVISION}
+
+
+def load_pretrained_components() -> tuple[Any, Any]:
+    source, revision_kwargs = pretrained_model_source()
+    tokenizer = AutoTokenizer.from_pretrained(
+        source, local_files_only=True, **revision_kwargs
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(
+        source, num_labels=1, local_files_only=True, **revision_kwargs
+    )
+    return tokenizer, model
 
 
 def dump_json(path: Path, value: Any) -> None:
@@ -212,17 +249,15 @@ def preflight(args: argparse.Namespace) -> dict[str, Any]:
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_NAME, num_labels=1, local_files_only=True
-    )
+    tokenizer, model = load_pretrained_components()
     del tokenizer, model
 
     manifest = {
         "schema_version": "question_candidate_cross_encoder_dev_v1_preflight",
         "status": "predeclared_protocol_validated_before_training",
         "scope": {"splits": ["train", "dev"], "test_accessed": False},
-        "model": MODEL_NAME,
+        "model_name": MODEL_NAME,
+        "model_revision": MODEL_REVISION,
         "configuration": configuration(),
         "protocol_sha256": sha256(Path(__file__).parent / "PROTOCOL.md"),
         "script_sha256": sha256(Path(__file__)),
@@ -240,6 +275,7 @@ def configuration() -> dict[str, Any]:
     return {
         "seed": SEED,
         "model_name": MODEL_NAME,
+        "model_revision": MODEL_REVISION,
         "loss": "mean(max(0, 0.2 - score_higher + score_lower))",
         "margin": MARGIN,
         "epochs": EPOCHS,
@@ -296,10 +332,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("No rankable TRAIN pairs")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_NAME, num_labels=1, local_files_only=True
-    ).to(device)
+    tokenizer, model = load_pretrained_components()
+    model = model.to(device)
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
     model.train()
@@ -641,7 +675,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": "question_candidate_cross_encoder_dev_v1_evaluation",
         "status": "complete",
         "split": "dev",
-        "model": MODEL_NAME,
+        "model_name": MODEL_NAME,
+        "model_revision": MODEL_REVISION,
         "configuration": configuration(),
         "adaptive_aggregation": {
             "applied": False,
