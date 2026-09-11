@@ -50,9 +50,7 @@ from models.symbolic_composer import extract_query_signature  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = (
-    ROOT / "outputs/diagnostics/production_generator_d_v1_cross_branch_completion_dev"
-)
+DEFAULT_OUTPUT = ROOT / "outputs/diagnostics/production_generator_d_v1_cross_branch_completion_dev"
 MECHANISM_PATH = (
     ROOT
     / "outputs/diagnostics/production_generator_d_v1_mechanism_decision"
@@ -123,9 +121,7 @@ def grouped_jsonl(path: Path) -> Iterable[tuple[str, list[dict[str, Any]]]]:
         yield current_id, rows
 
 
-def build_raw_text_index(
-    dataset: str, metadata: Mapping[str, Any]
-) -> dict[str, Mapping[str, Any]]:
+def build_raw_text_index(dataset: str, metadata: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     loader = load_hotpot_file if dataset == "HotpotQA" else load_2wiki_file
     records = loader(str(ROOT / Path(metadata["dev_file"])))
     return {
@@ -147,23 +143,15 @@ def text_graph(
     raw = raw_index[example_id.split(marker, 1)[1]]
     # The adapter receives only inference-visible fields.  In particular, 2Wiki
     # ``evidences`` and Hotpot ``supporting_facts`` are not passed downstream.
-    clean = {
-        key: raw[key]
-        for key in ("id", "_id", "question", "context")
-        if key in raw
-    }
+    clean = {key: raw[key] for key in ("id", "_id", "question", "context") if key in raw}
     records = (
-        flatten_hotpot_context(clean)
-        if dataset == "HotpotQA"
-        else flatten_2wiki_context(clean)
+        flatten_hotpot_context(clean) if dataset == "HotpotQA" else flatten_2wiki_context(clean)
     )
     return build_text_evidence_graph(records, question)
 
 
 def ontology_graph(item: Mapping[str, Any], qa: Mapping[str, Any]) -> EvidenceGraph:
-    question = str(
-        qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or ""
-    )
+    question = str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or "")
     sparql = str(qa.get("SPARQL Query") or "")
     signature = extract_query_signature(question=question, sparql_query=sparql)
     query_entities = set(signature.get("query_entities", []))
@@ -259,9 +247,7 @@ def build_local_lanes(
                     component_ids[anchor],
                 )
                 prior = by_size[3].get(triple)
-                if prior is None or state_preference(state, graph) < state_preference(
-                    prior, graph
-                ):
+                if prior is None or state_preference(state, graph) < state_preference(prior, graph):
                     by_size[3][triple] = state
         lanes[anchor] = {
             size: sorted(values.values(), key=lambda state: (-state.score, state.indices))
@@ -352,19 +338,21 @@ def cross_branch_completions(
                     graph.units[source.branch].unit_id,
                 )
                 prior_provenance = (
-                    prior.protected_component is None,
-                    -graph.query_scores[prior.seed],
-                    graph.units[prior.seed].unit_id,
-                    graph.units[prior.branch].unit_id,
-                ) if prior is not None else None
+                    (
+                        prior.protected_component is None,
+                        -graph.query_scores[prior.seed],
+                        graph.units[prior.seed].unit_id,
+                        graph.units[prior.branch].unit_id,
+                    )
+                    if prior is not None
+                    else None
+                )
                 if prior is None or provenance < prior_provenance:
                     completed_sources[union_mask] = source
 
     completed: dict[tuple[int, ...], _State] = {}
     for union_mask, source in completed_sources.items():
-        union = tuple(
-            index for index in range(len(graph.units)) if union_mask & (1 << index)
-        )
+        union = tuple(index for index in range(len(graph.units)) if union_mask & (1 << index))
         completed[union] = _State(
             union,
             source.seed,
@@ -381,7 +369,10 @@ def generate_experimental_pool(graph: EvidenceGraph) -> ExperimentalPool:
         return ExperimentalPool((), (), 0, 0)
     lanes, anchors, component_ids = build_local_lanes(graph)
     local_unique = {
-        state.indices for by_size in lanes.values() for states in by_size.values() for state in states
+        state.indices
+        for by_size in lanes.values()
+        for states in by_size.values()
+        for state in states
     }
     retained_partials = allocate_lanes(
         lanes,
@@ -424,9 +415,7 @@ def generate_experimental_pool(graph: EvidenceGraph) -> ExperimentalPool:
             )
             selected_indices.add(indices)
 
-    completion_selected = tuple(
-        state.indices for state in selected if state.indices in completions
-    )
+    completion_selected = tuple(state.indices for state in selected if state.indices in completions)
     return ExperimentalPool(
         candidate_indices=tuple(state.indices for state in selected),
         completion_indices=completion_selected,
@@ -450,9 +439,7 @@ def pool_diagnostics(
     for k in (1, 2, 3, 5):
         prefix_union = set().union(*candidate_sets[:k]) if candidate_sets[:k] else set()
         coverability[str(k)] = any(target <= prefix_union for target in targets)
-    recall = max(
-        (len(target & pool_union) / len(target) for target in targets), default=0.0
-    )
+    recall = max((len(target & pool_union) / len(target) for target in targets), default=0.0)
     return {
         "complete_candidate_available_anywhere": any(complete),
         "first_complete_candidate_rank": next(
@@ -463,9 +450,7 @@ def pool_diagnostics(
         "gold_unit_recall": recall,
         "candidate_count": len(candidates),
         "candidate_unit_total": sum(map(len, candidates)),
-        "mean_candidate_size": (
-            statistics.mean(map(len, candidates)) if candidates else 0.0
-        ),
+        "mean_candidate_size": (statistics.mean(map(len, candidates)) if candidates else 0.0),
         "reaches_512_budget": len(candidates) == GENERATOR_D_CONFIG.max_candidates,
     }
 
@@ -500,9 +485,7 @@ def aggregate(records: Sequence[Mapping[str, Any]], method: str) -> dict[str, An
             if candidate_total
             else 0.0
         ),
-        "fraction_reaching_512_budget": rate(
-            metric["reaches_512_budget"] for metric in metrics
-        ),
+        "fraction_reaching_512_budget": rate(metric["reaches_512_budget"] for metric in metrics),
     }
 
 
@@ -639,9 +622,13 @@ def main() -> None:
         raise AssertionError(f"Expected all 326 diagnosed examples, found {len(diagnosed)}")
     recovery_details = []
     for failure_class in ("progressive_expansion_failure", "diversity_or_composer_pruning"):
-        subset = [record for record in diagnosed if record["diagnosed_failure_class"] == failure_class]
+        subset = [
+            record for record in diagnosed if record["diagnosed_failure_class"] == failure_class
+        ]
         recovered = [
-            record for record in subset if record["modified"]["complete_candidate_available_anywhere"]
+            record
+            for record in subset
+            if record["modified"]["complete_candidate_available_anywhere"]
         ]
         recovery_details.append(
             {
@@ -681,7 +668,10 @@ def main() -> None:
         "by_domain": subgroup(records, "domain"),
         "by_hop": subgroup(records, "hop"),
     }
-    per_dataset = {dataset: comparison([r for r in records if r["dataset"] == dataset]) for dataset, _, _ in DATASETS}
+    per_dataset = {
+        dataset: comparison([r for r in records if r["dataset"] == dataset])
+        for dataset, _, _ in DATASETS
+    }
     recovery = {
         "schema_version": "generator_d_cross_branch_completion_diagnosed_recovery_v1",
         "split": "dev",
@@ -747,9 +737,7 @@ def main() -> None:
     incidental = next(
         row for row in recovery_details if row["failure_class"] == "diversity_or_composer_pruning"
     )
-    gains_concentrated_in_target_class = (
-        progressive["recovery_rate"] > incidental["recovery_rate"]
-    )
+    gains_concentrated_in_target_class = progressive["recovery_rate"] > incidental["recovery_rate"]
     no_meaningful_regression = len(regressions) == 0
     manageable_pool_pressure = (
         displacement["examples_at_512_modified"] <= displacement["examples_at_512_baseline"]
@@ -769,11 +757,11 @@ def main() -> None:
         "",
         f"Mechanism-validation decision: **{'justified for the next controlled stage' if justified else 'not justified for the next stage'}**.",
         "",
-        f"- Progressive-expansion recovery: {progressive['recovered']}/{progressive['examples']} ({100*progressive['recovery_rate']:.2f}%).",
-        f"- Incidental recovery in the remaining 127: {incidental['recovered']}/{incidental['examples']} ({100*incidental['recovery_rate']:.2f}%).",
+        f"- Progressive-expansion recovery: {progressive['recovered']}/{progressive['examples']} ({100 * progressive['recovery_rate']:.2f}%).",
+        f"- Incidental recovery in the remaining 127: {incidental['recovered']}/{incidental['examples']} ({100 * incidental['recovery_rate']:.2f}%).",
         f"- Previously successful examples losing all complete candidates: {len(regressions)}/{len(previously_successful)}.",
         f"- Modified pools reaching 512: {displacement['examples_at_512_modified']}/{len(records)}.",
-        f"- Gains concentrated in intended class: {gains_concentrated_in_target_class} (target-class recovery {100*progressive['recovery_rate']:.2f}% vs incidental {100*incidental['recovery_rate']:.2f}%).",
+        f"- Gains concentrated in intended class: {gains_concentrated_in_target_class} (target-class recovery {100 * progressive['recovery_rate']:.2f}% vs incidental {100 * incidental['recovery_rate']:.2f}%).",
         "",
         "The negative decision does not depend on an unstated recovery cutoff: the modification fails the no-regression, manageable-saturation, and target-class-concentration criteria.",
     ]
@@ -803,17 +791,17 @@ def main() -> None:
         ("Fraction at 512", "fraction_reaching_512_budget"),
     ):
         a, b = overall_a[key], overall_b[key]
-        summary.append(f"| {label} | {a:.6f} | {b:.6f} | {b-a:+.6f} |")
+        summary.append(f"| {label} | {a:.6f} | {b:.6f} | {b - a:+.6f} |")
     for k in ("1", "2", "3", "5"):
         a = overall_a["complete_support_coverability"][k]
         b = overall_b["complete_support_coverability"][k]
-        summary.append(f"| Complete-support coverability @{k} | {a:.6f} | {b:.6f} | {b-a:+.6f} |")
+        summary.append(f"| Complete-support coverability @{k} | {a:.6f} | {b:.6f} | {b - a:+.6f} |")
     summary += [
         "",
         "## Diagnosed mechanism",
         "",
-        f"- Progressive-expansion failures recovered: {progressive['recovered']}/199 ({100*progressive['recovery_rate']:.2f}%).",
-        f"- Remaining composition failures incidentally recovered: {incidental['recovered']}/127 ({100*incidental['recovery_rate']:.2f}%).",
+        f"- Progressive-expansion failures recovered: {progressive['recovered']}/199 ({100 * progressive['recovery_rate']:.2f}%).",
+        f"- Remaining composition failures incidentally recovered: {incidental['recovered']}/127 ({100 * incidental['recovery_rate']:.2f}%).",
         f"- Previously successful examples losing complete-support availability: {len(regressions)}.",
         f"- Examples where a gold-overlapping baseline candidate was displaced: {len(displacement_examples)}.",
         "",

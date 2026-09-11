@@ -72,9 +72,7 @@ def serialize_axiom_for_encoder(axiom: str) -> str:
         inside = axiom[len("EquivalentObjectProperties(") : -1]
         parts = [x.strip() for x in inside.split(",", 1)]
         if len(parts) == 2:
-            return (
-                f"rule equivalent object properties {parts[0]} equivalent to {parts[1]}"
-            )
+            return f"rule equivalent object properties {parts[0]} equivalent to {parts[1]}"
 
     if " subClassOf " in axiom:
         a, b = axiom.split(" subClassOf ", 1)
@@ -381,15 +379,11 @@ def compute_node_symbolic_features(
         )
 
         rule_mentions_query_property = (
-            1.0
-            if (parsed.axiom_type == "rule" and rule_properties & query_properties)
-            else 0.0
+            1.0 if (parsed.axiom_type == "rule" and rule_properties & query_properties) else 0.0
         )
 
         fact_mentions_query_entity = (
-            1.0
-            if (parsed.axiom_type == "fact" and unit_entities & query_entities)
-            else 0.0
+            1.0 if (parsed.axiom_type == "fact" and unit_entities & query_entities) else 0.0
         )
 
         rows.append(
@@ -408,9 +402,7 @@ def compute_node_symbolic_features(
     return torch.tensor(rows, dtype=torch.float)
 
 
-def fill_degree_feature(
-    node_features: torch.Tensor, edge_index: torch.Tensor
-) -> torch.Tensor:
+def fill_degree_feature(node_features: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
     """
     Fill feature index 6 with normalized node degree.
     """
@@ -803,16 +795,12 @@ def build_graph_inputs_for_example(
     return {
         "node_input_ids": encoded_nodes["input_ids"].to(model_device),
         "node_attention_mask": encoded_nodes["attention_mask"].to(model_device),
-        "node_token_type_ids": encoded_nodes.get("token_type_ids", None).to(
-            model_device
-        )
+        "node_token_type_ids": encoded_nodes.get("token_type_ids", None).to(model_device)
         if "token_type_ids" in encoded_nodes
         else None,
         "query_input_ids": encoded_query["input_ids"].to(model_device),
         "query_attention_mask": encoded_query["attention_mask"].to(model_device),
-        "query_token_type_ids": encoded_query.get("token_type_ids", None).to(
-            model_device
-        )
+        "query_token_type_ids": encoded_query.get("token_type_ids", None).to(model_device)
         if "token_type_ids" in encoded_query
         else None,
         "edge_index": edge_index,

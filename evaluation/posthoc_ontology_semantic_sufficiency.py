@@ -143,7 +143,9 @@ def derive(units: Iterable[str]) -> dict[tuple[str, str, str], list[frozenset[st
     while changed:
         changed = False
         snapshot = list(proofs.items())
-        by_relation: dict[str, list[tuple[tuple[str, str, str], list[frozenset[str]]]]] = collections.defaultdict(list)
+        by_relation: dict[str, list[tuple[tuple[str, str, str], list[frozenset[str]]]]] = (
+            collections.defaultdict(list)
+        )
         for fact, supports in snapshot:
             by_relation[fact[1]].append((fact, supports))
         for rule in rules:
@@ -178,16 +180,23 @@ def derive(units: Iterable[str]) -> dict[tuple[str, str, str], list[frozenset[st
                 for (s, _, mid), left in facts:
                     for (mid2, _, o), right in facts:
                         if mid == mid2:
-                            emissions.extend(((s, relation, o), proof) for proof in _joins(left, right, rule.unit))
+                            emissions.extend(
+                                ((s, relation, o), proof)
+                                for proof in _joins(left, right, rule.unit)
+                            )
             elif kind == "chain":
                 chain, target = args[:-1], args[-1]
-                states = [((s, o), supports) for (s, _, o), supports in by_relation.get(chain[0], [])]
+                states = [
+                    ((s, o), supports) for (s, _, o), supports in by_relation.get(chain[0], [])
+                ]
                 for relation in chain[1:]:
                     next_states = []
                     for (start, mid), left in states:
                         for (mid2, _, end), right in by_relation.get(relation, []):
                             if mid == mid2:
-                                next_states.append(((start, end), list(_joins(left, right, rule.unit))))
+                                next_states.append(
+                                    ((start, end), list(_joins(left, right, rule.unit)))
+                                )
                     states = next_states
                 for (s, o), supports in states:
                     emissions.extend(((s, target, o), proof | {rule.unit}) for proof in supports)
@@ -261,7 +270,9 @@ def reference_exceptions(
     return failures
 
 
-def _rates(rows: Sequence[Mapping[str, Any]], method: str, kind: str | None = None) -> dict[str, Any]:
+def _rates(
+    rows: Sequence[Mapping[str, Any]], method: str, kind: str | None = None
+) -> dict[str, Any]:
     selected = [row for row in rows if kind is None or row["query_kind"] == kind]
     n = len(selected)
     result: dict[str, Any] = {"examples": n}
@@ -287,7 +298,10 @@ def _rates(rows: Sequence[Mapping[str, Any]], method: str, kind: str | None = No
 
 def _read_frozen(name: str) -> dict[str, dict[str, Any]]:
     path = FROZEN_ROOT / name / "details.jsonl"
-    return {row["example_id"]: row for row in map(json.loads, path.read_text(encoding="utf-8").splitlines())}
+    return {
+        row["example_id"]: row
+        for row in map(json.loads, path.read_text(encoding="utf-8").splitlines())
+    }
 
 
 def run(output_dir: Path) -> dict[str, Any]:
@@ -297,7 +311,10 @@ def run(output_dir: Path) -> dict[str, Any]:
     report: dict[str, Any] = {
         "schema_version": "ontology_semantic_sufficiency_v1",
         "development_only": True,
-        "methods": {"A": "current clean candidates", "C": "unified + protected query-anchor candidates"},
+        "methods": {
+            "A": "current clean candidates",
+            "C": "unified + protected query-anchor candidates",
+        },
         "semantic_policy": "ASK entails the ground triple; SELECT yields at least one required answer, matching per-answer stored references",
         "top_k_policy": "existence of a deduplicated union of at most k generated candidate supports, matching the existing reference-coverability metric",
         "candidate_recovery_policy": "deterministic replay accepted only after exact per-example digest equality to the frozen protected comparison",
@@ -313,9 +330,19 @@ def run(output_dir: Path) -> dict[str, Any]:
     total_reference_exceptions = 0
     for name in ONTO:
         frozen = _read_frozen(name)
-        frozen_rows: list[tuple[str, list[tuple[str, ...]], list[tuple[str, ...]], Mapping[str, Any], Mapping[str, Any]]] = []
+        frozen_rows: list[
+            tuple[
+                str,
+                list[tuple[str, ...]],
+                list[tuple[str, ...]],
+                Mapping[str, Any],
+                Mapping[str, Any],
+            ]
+        ] = []
         for group_index, qa_index, item, qa in onto_rows(name):
-            question = str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or "")
+            question = str(
+                qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or ""
+            )
             sparql = str(qa.get("SPARQL Query") or "")
             owl_context = str(item.get("OWL Context") or "")
             current_generated = generate_ontology_candidates(
@@ -330,7 +357,9 @@ def run(output_dir: Path) -> dict[str, Any]:
             )
             current = _canonical(current_generated["candidate_subgraphs"])
             graph = build_ontology_evidence_graph(parse_owl_context(owl_context), question, sparql)
-            protected = _canonical(progressive_connected_supports(graph, PROTECTED_CONFIG).candidates)
+            protected = _canonical(
+                progressive_connected_supports(graph, PROTECTED_CONFIG).candidates
+            )
             example_id = f"{name}__g{group_index}__q{qa_index}"
             lock = frozen.get(example_id)
             if lock is None:
@@ -348,12 +377,19 @@ def run(output_dir: Path) -> dict[str, Any]:
             answer = qa.get("Answer")
             gold = get_gold_explanations(dict(qa))
             row: dict[str, Any] = {"dataset": DISPLAY_NAMES[name], "example_id": example_id}
-            for method, candidates, prefix in (("A", current, "current"), ("C", protected, "protected")):
+            for method, candidates, prefix in (
+                ("A", current, "current"),
+                ("C", protected, "protected"),
+            ):
                 sem = semantic_metrics(candidates, sparql, answer)
                 row["query_kind"] = sem.pop("query_kind")
                 for suffix in ("at_1", "at_2", "at_3"):
-                    row[f"{method}_reference_coverage_{suffix}"] = bool(lock[f"{prefix}_oracle_support_coverage_{suffix}"])
-                row[f"{method}_reference_coverage_all"] = bool(lock[f"{prefix}_all_candidate_union_coverage"])
+                    row[f"{method}_reference_coverage_{suffix}"] = bool(
+                        lock[f"{prefix}_oracle_support_coverage_{suffix}"]
+                    )
+                row[f"{method}_reference_coverage_all"] = bool(
+                    lock[f"{prefix}_all_candidate_union_coverage"]
+                )
                 row.update({f"{method}_{key}": value for key, value in sem.items()})
             exceptions = reference_exceptions(gold, sparql, answer)
             row["reference_explanation_count"] = len(gold)
@@ -371,16 +407,34 @@ def run(output_dir: Path) -> dict[str, Any]:
             "source_sha256": sha256_file(ONTO[name]),
             "candidate_digest_mismatches": 0,
             "reference_explanations": sum(row["reference_explanation_count"] for row in rows),
-            "insufficient_reference_explanations": sum(len(row["insufficient_reference_explanation_indices"]) for row in rows),
-            "A": {"all": _rates(rows, "A"), "ASK": _rates(rows, "A", "ASK"), "SELECT": _rates(rows, "A", "SELECT")},
-            "C": {"all": _rates(rows, "C"), "ASK": _rates(rows, "C", "ASK"), "SELECT": _rates(rows, "C", "SELECT")},
+            "insufficient_reference_explanations": sum(
+                len(row["insufficient_reference_explanation_indices"]) for row in rows
+            ),
+            "A": {
+                "all": _rates(rows, "A"),
+                "ASK": _rates(rows, "A", "ASK"),
+                "SELECT": _rates(rows, "A", "SELECT"),
+            },
+            "C": {
+                "all": _rates(rows, "C"),
+                "ASK": _rates(rows, "C", "ASK"),
+                "SELECT": _rates(rows, "C", "SELECT"),
+            },
         }
     report["overall"] = {
         "examples": len(all_rows),
         "reference_explanations": sum(row["reference_explanation_count"] for row in all_rows),
         "insufficient_reference_explanations": total_reference_exceptions,
-        "A": {"all": _rates(all_rows, "A"), "ASK": _rates(all_rows, "A", "ASK"), "SELECT": _rates(all_rows, "A", "SELECT")},
-        "C": {"all": _rates(all_rows, "C"), "ASK": _rates(all_rows, "C", "ASK"), "SELECT": _rates(all_rows, "C", "SELECT")},
+        "A": {
+            "all": _rates(all_rows, "A"),
+            "ASK": _rates(all_rows, "A", "ASK"),
+            "SELECT": _rates(all_rows, "A", "SELECT"),
+        },
+        "C": {
+            "all": _rates(all_rows, "C"),
+            "ASK": _rates(all_rows, "C", "ASK"),
+            "SELECT": _rates(all_rows, "C", "SELECT"),
+        },
     }
     write_json(output_dir / "summary.json", report)
     return report

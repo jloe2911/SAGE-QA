@@ -8,9 +8,7 @@ import importlib.util
 
 repo_root = Path(__file__).resolve().parents[6]
 llm_client_path = repo_root / "utils" / "llm_client.py"
-llm_client_spec = importlib.util.spec_from_file_location(
-    "sageqa_llm_client", llm_client_path
-)
+llm_client_spec = importlib.util.spec_from_file_location("sageqa_llm_client", llm_client_path)
 if llm_client_spec is None or llm_client_spec.loader is None:
     raise ImportError(f"Could not load SAGE-QA LLM client from {llm_client_path}")
 llm_client = importlib.util.module_from_spec(llm_client_spec)

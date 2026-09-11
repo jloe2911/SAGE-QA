@@ -37,15 +37,11 @@ class QueryReform(nn.Module):
         ent_mask: (B, C)
         """
         # q_node = self.q_encoder(q, q_mask)
-        q_ent_attn = (self.q_ent_attn(q_node).unsqueeze(1) * ent_emb).sum(
-            2, keepdim=True
-        )
+        q_ent_attn = (self.q_ent_attn(q_node).unsqueeze(1) * ent_emb).sum(2, keepdim=True)
         q_ent_attn = F.softmax(q_ent_attn - (1 - ent_mask.unsqueeze(2)) * 1e8, dim=1)
         attn_retrieve = (q_ent_attn * ent_emb).sum(1)
 
-        seed_retrieve = torch.bmm(seed_info.unsqueeze(1), ent_emb).squeeze(
-            1
-        )  # (B, 1, h_dim)
+        seed_retrieve = torch.bmm(seed_info.unsqueeze(1), ent_emb).squeeze(1)  # (B, 1, h_dim)
         # how to calculate the gate
 
         # return  self.fusion(q_node, attn_retrieve)

@@ -3,6 +3,7 @@
 Candidate generation is completed before benchmark support annotations are read.
 This diagnostic does not import or use the alternative progressive-beam generator.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,11 +65,7 @@ DISPLAY_NAMES = {
 def _canonical_candidates(candidates: Iterable[Iterable[str]]) -> list[tuple[str, ...]]:
     """Deduplicate candidates by their sorted unique evidence units."""
     return sorted(
-        {
-            tuple(sorted(set(candidate)))
-            for candidate in candidates
-            if candidate
-        },
+        {tuple(sorted(set(candidate))) for candidate in candidates if candidate},
         key=lambda candidate: (len(candidate), candidate),
     )
 
@@ -107,10 +104,7 @@ def _minimum_cover(mask_values: Sequence[int], full_mask: int) -> int | None:
     while frontier:
         depth += 1
         next_frontier = {
-            state | mask
-            for state in frontier
-            for mask in masks
-            if (state | mask) not in reached
+            state | mask for state in frontier for mask in masks if (state | mask) not in reached
         }
         if full_mask in next_frontier:
             return depth
@@ -191,8 +185,7 @@ def summarize(
         ">5 / impossible": sum(value is None or value > 5 for value in minimums),
     }
     distribution = {
-        key: {**_rate(count, total), "total": total}
-        for key, count in distribution_counts.items()
+        key: {**_rate(count, total), "total": total} for key, count in distribution_counts.items()
     }
     candidate_counts = [int(row["candidate_count"]) for row in rows]
     summary = {
@@ -229,19 +222,15 @@ def summarize(
     return summary
 
 
-def evaluate_text(name: str, sample_size: int, seed: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def evaluate_text(
+    name: str, sample_size: int, seed: int
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     examples = text_rows(name, sample_size, seed)
     config = TEXT_BASE[name]
     generator = (
-        generate_2wiki_candidates
-        if name == "2WikiMultiHopQA"
-        else generate_hotpot_candidates
+        generate_2wiki_candidates if name == "2WikiMultiHopQA" else generate_hotpot_candidates
     )
-    gold_fn = (
-        get_2wiki_gold_support
-        if name == "2WikiMultiHopQA"
-        else get_hotpot_gold_support
-    )
+    gold_fn = get_2wiki_gold_support if name == "2WikiMultiHopQA" else get_hotpot_gold_support
     kg_config = KGConstructionConfig(backend="context_only", max_triples=64)
     details = []
     started = time.perf_counter()
@@ -293,12 +282,7 @@ def evaluate_ontology(name: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     details = []
     started = time.perf_counter()
     for group_index, qa_index, item, qa in onto_rows(name):
-        question = str(
-            qa.get("NL Question")
-            or qa.get("ABS Question")
-            or qa.get("Task ID")
-            or ""
-        )
+        question = str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or "")
         generated = generate_ontology_candidates(
             question=question,
             sparql_query=str(qa.get("SPARQL Query") or ""),

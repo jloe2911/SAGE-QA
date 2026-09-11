@@ -28,19 +28,13 @@ def forward(
     bsz, q_len, _ = hidden_states.size()
 
     query_states = (
-        self.q_proj(hidden_states)
-        .view(bsz, q_len, self.num_heads, self.head_dim)
-        .transpose(1, 2)
+        self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
     )
     key_states = (
-        self.k_proj(hidden_states)
-        .view(bsz, q_len, self.num_heads, self.head_dim)
-        .transpose(1, 2)
+        self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
     )
     value_states = (
-        self.v_proj(hidden_states)
-        .view(bsz, q_len, self.num_heads, self.head_dim)
-        .transpose(1, 2)
+        self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
     )
     # [bsz, q_len, nh, hd]
     # [bsz, nh, q_len, hd]
@@ -60,9 +54,7 @@ def forward(
     # https://github.com/HazyResearch/flash-attention/blob/main/flash_attn/flash_attention.py
 
     # transform the data into the format required by flash attention
-    qkv = torch.stack(
-        [query_states, key_states, value_states], dim=2
-    )  # [bsz, nh, 3, q_len, hd]
+    qkv = torch.stack([query_states, key_states, value_states], dim=2)  # [bsz, nh, 3, q_len, hd]
     qkv = qkv.transpose(1, 3)  # [bsz, q_len, 3, nh, hd]
     # We have disabled _prepare_decoder_attention_mask in LlamaModel
     # the attention_mask should be the same as the key_padding_mask
@@ -82,16 +74,12 @@ def forward(
         nheads = qkv.shape[-2]
         x = rearrange(qkv, "b s three h d -> b s (three h d)")
         x_unpad, indices, cu_q_lens, max_s = unpad_input(x, key_padding_mask)
-        x_unpad = rearrange(
-            x_unpad, "nnz (three h d) -> nnz three h d", three=3, h=nheads
-        )
+        x_unpad = rearrange(x_unpad, "nnz (three h d) -> nnz three h d", three=3, h=nheads)
         output_unpad = flash_attn_unpadded_qkvpacked_func(
             x_unpad, cu_q_lens, max_s, 0.0, softmax_scale=None, causal=True
         )
         output = rearrange(
-            pad_input(
-                rearrange(output_unpad, "nnz h d -> nnz (h d)"), indices, bsz, q_len
-            ),
+            pad_input(rearrange(output_unpad, "nnz h d -> nnz (h d)"), indices, bsz, q_len),
             "b s (h d) -> b s h d",
             h=nheads,
         )
@@ -108,5 +96,7 @@ def _prepare_decoder_attention_mask(
 
 
 def replace_llama_attn_with_flash_attn():
-    transformers.models.llama.modeling_llama.LlamaModel._prepare_decoder_attention_mask = _prepare_decoder_attention_mask
+    transformers.models.llama.modeling_llama.LlamaModel._prepare_decoder_attention_mask = (
+        _prepare_decoder_attention_mask
+    )
     transformers.models.llama.modeling_llama.LlamaAttention.forward = forward

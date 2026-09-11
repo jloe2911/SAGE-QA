@@ -19,9 +19,18 @@ from typing import Any, Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RANKINGS = ROOT / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl"
-COMPONENTS = ROOT / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/symbolic_component_analysis.json"
-COHORTS = ROOT / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/fixed_vs_harmed.json"
+RANKINGS = (
+    ROOT
+    / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl"
+)
+COMPONENTS = (
+    ROOT
+    / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/symbolic_component_analysis.json"
+)
+COHORTS = (
+    ROOT
+    / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/fixed_vs_harmed.json"
+)
 OUTPUT_DIR = ROOT / "outputs/diagnostics/production_generator_d_v1_ontology_proof_gate_dev"
 METHODS = ("gnn", "additive_sageqa", "ontology_gated_sageqa")
 DATASET_ORDER = (
@@ -123,7 +132,9 @@ def selection_pass(rankings: Path, components: Path) -> dict[str, dict[str, Any]
         if gnn["domain"] == "ontology" and changed:
             proof_key = (gnn["dataset"], example_id, key(sage["units"]))
             if proof_key not in proof_by_candidate:
-                raise ValueError(f"{example_id}: unavailable persisted promoted-candidate Proof score")
+                raise ValueError(
+                    f"{example_id}: unavailable persisted promoted-candidate Proof score"
+                )
             used_proof_keys.add(proof_key)
             proof_value = proof_by_candidate[proof_key]
             proof_received = math.isclose(proof_value, PROOF_BONUS, rel_tol=0.0, abs_tol=TOLERANCE)
@@ -136,7 +147,9 @@ def selection_pass(rankings: Path, components: Path) -> dict[str, dict[str, Any]
             "additive_changed_top1": changed,
             "proof_entailment_bonus": proof_value,
             "promoted_candidate_received_proof_bonus": proof_received,
-            "override_permitted": gate_permitted if gnn["domain"] == "ontology" and changed else None,
+            "override_permitted": gate_permitted
+            if gnn["domain"] == "ontology" and changed
+            else None,
             "predictions": {
                 "gnn": list(gnn["units"]),
                 "additive_sageqa": list(sage["units"]),
@@ -250,17 +263,27 @@ def main() -> None:
     gold_by_id = gold_pass(args.rankings, set(selections))
     evaluated: list[dict[str, Any]] = []
     for example_id, selection in selections.items():
-        evaluated.append({
-            "example_id": example_id,
-            **{name: selection[name] for name in (
-                "dataset", "domain", "hop", "additive_changed_top1", "proof_entailment_bonus",
-                "promoted_candidate_received_proof_bonus", "override_permitted",
-            )},
-            "scores": {
-                method: score(prediction, gold_by_id[example_id])
-                for method, prediction in selection["predictions"].items()
-            },
-        })
+        evaluated.append(
+            {
+                "example_id": example_id,
+                **{
+                    name: selection[name]
+                    for name in (
+                        "dataset",
+                        "domain",
+                        "hop",
+                        "additive_changed_top1",
+                        "proof_entailment_bonus",
+                        "promoted_candidate_received_proof_bonus",
+                        "override_permitted",
+                    )
+                },
+                "scores": {
+                    method: score(prediction, gold_by_id[example_id])
+                    for method, prediction in selection["predictions"].items()
+                },
+            }
+        )
 
     datasets = sorted({row["dataset"] for row in evaluated}, key=DATASET_ORDER.index)
     if tuple(datasets) != DATASET_ORDER:
@@ -280,7 +303,10 @@ def main() -> None:
         "1hop": summarize([row for row in evaluated if row["hop"] == "1hop"]),
         "2hop": summarize([row for row in evaluated if row["hop"] == "2hop"]),
     }
-    if slices["text"]["methods"]["additive_sageqa"] != slices["text"]["methods"]["ontology_gated_sageqa"]:
+    if (
+        slices["text"]["methods"]["additive_sageqa"]
+        != slices["text"]["methods"]["ontology_gated_sageqa"]
+    ):
         raise AssertionError("Text results are not identical to additive SAGE-QA")
 
     changed = [row for row in evaluated if row["additive_changed_top1"]]
@@ -288,7 +314,13 @@ def main() -> None:
     for row in changed:
         g_complete = bool(row["scores"]["gnn"]["complete_support_containment"])
         s_complete = bool(row["scores"]["additive_sageqa"]["complete_support_containment"])
-        effect = "fixed" if not g_complete and s_complete else "harmed" if g_complete and not s_complete else "completeness_unaffected"
+        effect = (
+            "fixed"
+            if not g_complete and s_complete
+            else "harmed"
+            if g_complete and not s_complete
+            else "completeness_unaffected"
+        )
         effects[effect].append(row)
     observed_flips = {name: len(effects[name]) for name in EXPECTED_FLIPS}
     if observed_flips != EXPECTED_FLIPS:
@@ -303,7 +335,8 @@ def main() -> None:
     }
     observed_membership = {
         (str(row["dataset"]), str(row["example_id"]), effect)
-        for effect, rows in effects.items() for row in rows
+        for effect, rows in effects.items()
+        for row in rows
     }
     if expected_membership != observed_membership:
         raise AssertionError("Existing symbolic cohort membership did not reproduce exactly")
@@ -312,11 +345,20 @@ def main() -> None:
     ontology_harms = [row for row in effects["harmed"] if row["domain"] == "ontology"]
     if {"fixed": len(ontology_fixes), "harmed": len(ontology_harms)} != EXPECTED_ONTOLOGY:
         raise AssertionError("Ontology 97/4 cohort boundary failed")
-    retained_fixes = [row for row in ontology_fixes if row["scores"]["ontology_gated_sageqa"]["complete_support_containment"]]
-    prevented_harms = [row for row in ontology_harms if row["scores"]["ontology_gated_sageqa"]["complete_support_containment"]]
+    retained_fixes = [
+        row
+        for row in ontology_fixes
+        if row["scores"]["ontology_gated_sageqa"]["complete_support_containment"]
+    ]
+    prevented_harms = [
+        row
+        for row in ontology_harms
+        if row["scores"]["ontology_gated_sageqa"]["complete_support_containment"]
+    ]
     unchanged_rows = effects["completeness_unaffected"]
     new_completeness_changes = [
-        row for row in unchanged_rows
+        row
+        for row in unchanged_rows
         if row["scores"]["ontology_gated_sageqa"]["complete_support_containment"]
         != row["scores"]["gnn"]["complete_support_containment"]
     ]
@@ -330,12 +372,14 @@ def main() -> None:
     macro_delta = slices["macro"]["gated_deltas"]["additive_sageqa"]
     ontology_delta = slices["ontology"]["gated_deltas"]["additive_sageqa"]
     ontology_regressions = [
-        dataset for dataset in datasets
+        dataset
+        for dataset in datasets
         if per_dataset[dataset]["domain"] == "ontology"
         and per_dataset[dataset]["gated_deltas"]["additive_sageqa"]["f1"] < -1e-15
     ]
     ontology_improvements = [
-        dataset for dataset in datasets
+        dataset
+        for dataset in datasets
         if per_dataset[dataset]["domain"] == "ontology"
         and per_dataset[dataset]["gated_deltas"]["additive_sageqa"]["f1"] > 1e-15
     ]
@@ -360,9 +404,18 @@ def main() -> None:
     decision = "ACCEPT" if accept else "REJECT"
 
     lineage = {
-        "input_rankings": {"path": str(args.rankings.relative_to(ROOT)), "sha256": sha256(args.rankings)},
-        "proof_components": {"path": str(args.components.relative_to(ROOT)), "sha256": sha256(args.components)},
-        "existing_cohorts": {"path": str(args.cohorts.relative_to(ROOT)), "sha256": sha256(args.cohorts)},
+        "input_rankings": {
+            "path": str(args.rankings.relative_to(ROOT)),
+            "sha256": sha256(args.rankings),
+        },
+        "proof_components": {
+            "path": str(args.components.relative_to(ROOT)),
+            "sha256": sha256(args.components),
+        },
+        "existing_cohorts": {
+            "path": str(args.cohorts.relative_to(ROOT)),
+            "sha256": sha256(args.cohorts),
+        },
         "selection_boundary": "The gate projected persisted top-1 identities and promoted-candidate proof_entailment_bonus values and froze all predictions before gold_pass loaded explanations.",
         "proof_condition": "The existing binary Proof condition is used exactly: proof_entailment_bonus is 0.180 (absolute tolerance 1e-10 for persisted floating-point serialization).",
         "metric_aggregation": "Arithmetic macro mean over examples; exact persisted native evidence-unit identity; the gold alternative with maximum per-example F1 supplies P/R/F1.",
@@ -425,10 +478,13 @@ def main() -> None:
         "net_complete_top1_corrections": {
             "versus_gnn": len(retained_fixes) - (len(ontology_harms) - len(prevented_harms)),
             "current_additive_versus_gnn": len(ontology_fixes) - len(ontology_harms),
-            "gate_change_versus_current_additive": len(prevented_harms) - (len(ontology_fixes) - len(retained_fixes)),
+            "gate_change_versus_current_additive": len(prevented_harms)
+            - (len(ontology_fixes) - len(retained_fixes)),
         },
         "cases": {
-            "sacrificed_fix_ids": [row["example_id"] for row in ontology_fixes if row not in retained_fixes],
+            "sacrificed_fix_ids": [
+                row["example_id"] for row in ontology_fixes if row not in retained_fixes
+            ],
             "prevented_harm_ids": [row["example_id"] for row in prevented_harms],
             "new_completeness_change_ids": [row["example_id"] for row in new_completeness_changes],
         },
@@ -452,12 +508,14 @@ def main() -> None:
     ]
     for name in ("text", "ontology", "1hop", "2hop"):
         summary_lines.extend([f"### {name}", "", *result_table(slices[name]), ""])
-    summary_lines.extend([
-        "## Per-dataset F1",
-        "",
-        "| Dataset | Domain | Hop | GNN | Additive | Gated | Gated - additive |",
-        "|---|---|---|---:|---:|---:|---:|",
-    ])
+    summary_lines.extend(
+        [
+            "## Per-dataset F1",
+            "",
+            "| Dataset | Domain | Hop | GNN | Additive | Gated | Gated - additive |",
+            "|---|---|---|---:|---:|---:|---:|",
+        ]
+    )
     for dataset in datasets:
         values = per_dataset[dataset]
         summary_lines.append(
@@ -465,19 +523,21 @@ def main() -> None:
             f"{values['methods']['additive_sageqa']['f1']:.6f} | {values['methods']['ontology_gated_sageqa']['f1']:.6f} | "
             f"{values['gated_deltas']['additive_sageqa']['f1']:+.6f} |"
         )
-    summary_lines.extend([
-        "",
-        "## Cohorts",
-        "",
-        f"The gate retains {len(retained_fixes)}/{len(ontology_fixes)} ontology fixes ({100 * len(retained_fixes) / len(ontology_fixes):.1f}%) and prevents {len(prevented_harms)}/{len(ontology_harms)} ontology harms.",
-        f"It introduces {len(new_completeness_changes)} new completeness changes among the prior completeness-unaffected cohort. Net complete-top1 corrections are +{len(retained_fixes)} versus GNN and {len(prevented_harms) - (len(ontology_fixes) - len(retained_fixes)):+d} versus current additive SAGE-QA.",
-        "",
-        "## Evidence boundary",
-        "",
-        lineage["selection_boundary"],
-        "No training, neural or Proof inference, candidate generation, weight change, threshold/margin gate, parameter search, TEST access, or answer generation occurred.",
-        "",
-    ])
+    summary_lines.extend(
+        [
+            "",
+            "## Cohorts",
+            "",
+            f"The gate retains {len(retained_fixes)}/{len(ontology_fixes)} ontology fixes ({100 * len(retained_fixes) / len(ontology_fixes):.1f}%) and prevents {len(prevented_harms)}/{len(ontology_harms)} ontology harms.",
+            f"It introduces {len(new_completeness_changes)} new completeness changes among the prior completeness-unaffected cohort. Net complete-top1 corrections are +{len(retained_fixes)} versus GNN and {len(prevented_harms) - (len(ontology_fixes) - len(retained_fixes)):+d} versus current additive SAGE-QA.",
+            "",
+            "## Evidence boundary",
+            "",
+            lineage["selection_boundary"],
+            "No training, neural or Proof inference, candidate generation, weight change, threshold/margin gate, parameter search, TEST access, or answer generation occurred.",
+            "",
+        ]
+    )
 
     criterion_lines = [
         f"1. {'PASS' if criteria['macro_dev_f1_at_least_additive'] else 'FAIL'} - macro DEV F1 is {slices['macro']['methods']['ontology_gated_sageqa']['f1']:.6f} versus {slices['macro']['methods']['additive_sageqa']['f1']:.6f} ({macro_delta['f1']:+.6f}).",
@@ -492,7 +552,8 @@ def main() -> None:
         "",
         *criterion_lines,
         "",
-        "All four criteria are conjunctive. " + ("Accept the ontology Proof gate." if accept else "Retain current additive SAGE-QA."),
+        "All four criteria are conjunctive. "
+        + ("Accept the ontology Proof gate." if accept else "Retain current additive SAGE-QA."),
         "No other gate was tried. Evaluation stops after DEV.",
         "",
         "## Decision interpretation notes",
@@ -507,16 +568,23 @@ def main() -> None:
     write_json(args.output_dir / "per_dataset.json", per_dataset_artifact)
     write_json(args.output_dir / "cohort_analysis.json", cohort_analysis)
     (args.output_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
-    (args.output_dir / "mechanism_decision.md").write_text("\n".join(decision_lines), encoding="utf-8")
-    print(json.dumps({
-        "decision": decision,
-        "examples": len(evaluated),
-        "macro_f1_delta_vs_additive": macro_delta["f1"],
-        "ontology_f1_delta_vs_additive": ontology_delta["f1"],
-        "ontology_fixes_retained": len(retained_fixes),
-        "ontology_harms_prevented": len(prevented_harms),
-        "output_dir": str(args.output_dir),
-    }, indent=2))
+    (args.output_dir / "mechanism_decision.md").write_text(
+        "\n".join(decision_lines), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "decision": decision,
+                "examples": len(evaluated),
+                "macro_f1_delta_vs_additive": macro_delta["f1"],
+                "ontology_f1_delta_vs_additive": ontology_delta["f1"],
+                "ontology_fixes_retained": len(retained_fixes),
+                "ontology_harms_prevented": len(prevented_harms),
+                "output_dir": str(args.output_dir),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

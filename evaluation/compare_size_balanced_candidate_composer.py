@@ -4,6 +4,7 @@ Candidate atomic pools are constructed once by the clean builders and reused
 unchanged by both composers. Gold annotations are joined only after both
 candidate sets have been frozen.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -111,8 +112,7 @@ def _reserve_by_size(
     reserved_total = min(budget, int(math.floor(budget * RESERVED_FRACTION)))
     base, remainder = divmod(reserved_total, max(len(larger_sizes), 1))
     quotas = {
-        size: base + int(index < remainder)
-        for index, size in enumerate(reversed(larger_sizes))
+        size: base + int(index < remainder) for index, size in enumerate(reversed(larger_sizes))
     }
 
     selected: list[tuple[str, ...]] = []
@@ -162,15 +162,13 @@ def compose_text_balanced(
     current_order: list[tuple[str, ...]] = []
     sample_limit = budget * 4
     question_tokens = token_setter(question) if token_setter else set()
-    unit_tokens = {
-        unit: token_setter(unit) for unit in sentence_pool
-    } if token_setter else {}
-    title_tokens = {
-        unit: token_setter(unit_parser(unit)[0]) for unit in sentence_pool
-    } if token_setter and unit_parser else {}
-    titles = {
-        unit: unit_parser(unit)[0] for unit in sentence_pool
-    } if unit_parser else {}
+    unit_tokens = {unit: token_setter(unit) for unit in sentence_pool} if token_setter else {}
+    title_tokens = (
+        {unit: token_setter(unit_parser(unit)[0]) for unit in sentence_pool}
+        if token_setter and unit_parser
+        else {}
+    )
+    titles = {unit: unit_parser(unit)[0] for unit in sentence_pool} if unit_parser else {}
 
     def score(candidate: tuple[str, ...]) -> float:
         if not token_setter or not unit_parser:
@@ -276,15 +274,14 @@ def compose_ontology_balanced(
             break
         frontier = [
             combo
-            for combo, _ in sorted(
-                expansions.items(), key=lambda item: (-item[1], item[0])
-            )[:beam_width]
+            for combo, _ in sorted(expansions.items(), key=lambda item: (-item[1], item[0]))[
+                :beam_width
+            ]
         ]
 
     globally_ranked = sorted(scored, key=lambda item: (-item[0], item[1]))
     current_order = [
-        tuple(candidate_units[index] for index in combo)
-        for _, combo in globally_ranked
+        tuple(candidate_units[index] for index in combo) for _, combo in globally_ranked
     ]
     buckets: dict[int, list[tuple[float, tuple[str, ...]]]] = collections.defaultdict(list)
     for score, combo in globally_ranked:
@@ -331,8 +328,7 @@ def _method_summary(rows: Sequence[Mapping[str, Any]], method: str) -> dict[str,
             "max": max(counts, default=0),
         },
         "candidate_size_distribution": {
-            str(size): count
-            for size, count in sorted(collections.Counter(sizes).items())
+            str(size): count for size, count in sorted(collections.Counter(sizes).items())
         },
         "runtime_seconds": sum(float(row[f"{method}_runtime_seconds"]) for row in rows),
     }
@@ -504,7 +500,9 @@ def evaluate_ontology(name: str, path: Path, limit: int) -> dict[str, Any]:
         gold_sets = get_gold_explanations(qa)
         details.append(
             {
-                "all_gold_in_atomic_pool": _all_gold_in_pool(generated["candidate_units"], gold_sets),
+                "all_gold_in_atomic_pool": _all_gold_in_pool(
+                    generated["candidate_units"], gold_sets
+                ),
                 "current_complete": _complete(current, gold_sets),
                 "experimental_complete": _complete(experimental, gold_sets),
                 "current_count": len(current),
@@ -520,13 +518,9 @@ def evaluate_ontology(name: str, path: Path, limit: int) -> dict[str, Any]:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     conditions = [
-        evaluate_text(name, config, args.limit, args.seed)
-        for name, config in TEXT.items()
+        evaluate_text(name, config, args.limit, args.seed) for name, config in TEXT.items()
     ]
-    conditions.extend(
-        evaluate_ontology(name, path, args.limit)
-        for name, path in ONTOLOGY.items()
-    )
+    conditions.extend(evaluate_ontology(name, path, args.limit) for name, path in ONTOLOGY.items())
     meaningful_count = sum(condition["meaningful_improvement"] for condition in conditions)
     report = {
         "experiment": "size_balanced_structural_composer_v1",
@@ -548,9 +542,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "conditions": conditions,
         "conditions_with_meaningful_improvement": meaningful_count,
         "recommendation": (
-            "consider experimental composer"
-            if meaningful_count >= 3
-            else "keep current composer"
+            "consider experimental composer" if meaningful_count >= 3 else "keep current composer"
         ),
     }
     write_json(args.output, report)
@@ -569,7 +561,8 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "outputs/development_runs/size_balanced_structural_composer_v1/comparison.json",
+        default=ROOT
+        / "outputs/development_runs/size_balanced_structural_composer_v1/comparison.json",
     )
     args = parser.parse_args()
     print(json.dumps(run(args), indent=2, ensure_ascii=False))

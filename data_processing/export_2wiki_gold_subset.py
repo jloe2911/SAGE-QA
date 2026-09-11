@@ -39,9 +39,7 @@ def normalize_2wiki_record(row: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(sf, dict):
         titles = to_python_list(get_first_present(sf, ["title", "titles"], []))
         sent_ids = to_python_list(
-            get_first_present(
-                sf, ["sent_id", "sent_ids", "sentence_id", "sent_idx"], []
-            )
+            get_first_present(sf, ["sent_id", "sent_ids", "sentence_id", "sent_idx"], [])
         )
 
         supporting_facts = []
@@ -58,9 +56,7 @@ def normalize_2wiki_record(row: Dict[str, Any]) -> Dict[str, Any]:
         for item in sf:
             if isinstance(item, dict):
                 title = item.get("title", "")
-                idx = item.get(
-                    "sent_id", item.get("sentence_id", item.get("sent_idx", 0))
-                )
+                idx = item.get("sent_id", item.get("sentence_id", item.get("sent_idx", 0)))
                 try:
                     supporting_facts.append([str(title), int(idx)])
                 except Exception:

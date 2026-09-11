@@ -156,9 +156,7 @@ def create_parser_nsm(parser):
 
 
 def create_parser_graftnet(parser):
-    parser.add_argument(
-        "--model_name", default="GraftNet", type=str, choices=["GraftNet"]
-    )
+    parser.add_argument("--model_name", default="GraftNet", type=str, choices=["GraftNet"])
     parser.add_argument("--pagerank_lambda", default=0.8, type=float)
     parser.add_argument("--loss_type", default="bce", type=str)
     parser.add_argument("--num_layer", default=3, type=int)

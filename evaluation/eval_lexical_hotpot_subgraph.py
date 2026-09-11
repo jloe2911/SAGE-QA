@@ -137,9 +137,7 @@ def group_by_example(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any
     return dict(grouped)
 
 
-def evaluate_group(
-    rows: List[Dict[str, Any]], top_k_values=(1, 3, 5)
-) -> Dict[str, float]:
+def evaluate_group(rows: List[Dict[str, Any]], top_k_values=(1, 3, 5)) -> Dict[str, float]:
     details = build_details(rows)
 
     metrics = {
@@ -228,17 +226,13 @@ def evaluate_group(
             union_rec.append(union_best["recall"])
 
         metrics[f"exact_hit@{k}"] = sum(exact) / len(exact) if exact else 0.0
-        metrics[f"contains_gold_hit@{k}"] = (
-            sum(contains) / len(contains) if contains else 0.0
-        )
+        metrics[f"contains_gold_hit@{k}"] = sum(contains) / len(contains) if contains else 0.0
         metrics[f"best_jaccard@{k}"] = sum(jac) / len(jac) if jac else 0.0
         metrics[f"best_set_f1@{k}"] = sum(f1) / len(f1) if f1 else 0.0
         metrics[f"best_precision@{k}"] = sum(prec) / len(prec) if prec else 0.0
         metrics[f"best_recall@{k}"] = sum(rec) / len(rec) if rec else 0.0
         metrics[f"set_f1@{k}"] = sum(union_f1) / len(union_f1) if union_f1 else 0.0
-        metrics[f"precision@{k}"] = (
-            sum(union_prec) / len(union_prec) if union_prec else 0.0
-        )
+        metrics[f"precision@{k}"] = sum(union_prec) / len(union_prec) if union_prec else 0.0
         metrics[f"recall@{k}"] = sum(union_rec) / len(union_rec) if union_rec else 0.0
 
     return metrics
@@ -254,9 +248,7 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         first = ranked[0]
         gold_support_units = first.get("gold_support_units", []) or []
         explicit_gold = first.get("gold_explanations", []) or []
-        gold_reference_sets = explicit_gold or (
-            [gold_support_units] if gold_support_units else []
-        )
+        gold_reference_sets = explicit_gold or ([gold_support_units] if gold_support_units else [])
 
         top5 = []
         for rank, row in enumerate(ranked[:5], start=1):
@@ -299,9 +291,7 @@ def build_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "top1_best_precision_to_gold": top1["best_precision_to_gold"],
                 "top1_best_recall_to_gold": top1["best_recall_to_gold"],
                 "top1_exact_match_any_gold": top1["exact_match_any_gold"],
-                "top1_contains_any_gold_explanation": top1[
-                    "contains_any_gold_explanation"
-                ],
+                "top1_contains_any_gold_explanation": top1["contains_any_gold_explanation"],
                 "top5": top5,
             }
         )

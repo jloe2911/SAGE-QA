@@ -11,9 +11,7 @@ class LLMProxy(object):
         parser.add_argument(
             "--model_name", type=str, default="Llama-2-7b-chat-hf"
         )  # Llama-2-7b-chat-hf
-        parser.add_argument(
-            "--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf"
-        )
+        parser.add_argument("--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf")
         parser.add_argument("--conv_template", type=str, default="llama-2")
         parser.add_argument("--host", type=str, default="localhost")
         parser.add_argument("--port", type=int, default=8000)

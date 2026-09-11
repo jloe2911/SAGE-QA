@@ -40,11 +40,7 @@ class BaseModel(torch.nn.Module):
         # self.model_name = args['model_name'].lower()
         self.device = torch.device("cuda" if args["use_cuda"] else "cpu")
 
-        print(
-            "Entity: {}, Relation: {}, Word: {}".format(
-                num_entity, num_relation, num_word
-            )
-        )
+        print("Entity: {}, Relation: {}, Word: {}".format(num_entity, num_relation, num_word))
 
         self.kld_loss = nn.KLDivLoss(reduction="none")
         self.bce_loss = nn.BCEWithLogitsLoss(reduction="none")
@@ -188,25 +184,19 @@ class BaseModel(torch.nn.Module):
         return np.pad(load_tensor, ((0, num_pad), (0, 0)), "constant")
 
     def use_rel_texts(self, rel_texts, rel_texts_inv):
-        self.rel_texts = (
-            torch.from_numpy(rel_texts).type("torch.LongTensor").to(self.device)
-        )
+        self.rel_texts = torch.from_numpy(rel_texts).type("torch.LongTensor").to(self.device)
         self.rel_texts_inv = (
             torch.from_numpy(rel_texts_inv).type("torch.LongTensor").to(self.device)
         )
 
     def encode_rel_texts(self, rel_texts, rel_texts_inv):
-        self.rel_texts = (
-            torch.from_numpy(rel_texts).type("torch.LongTensor").to(self.device)
-        )
+        self.rel_texts = torch.from_numpy(rel_texts).type("torch.LongTensor").to(self.device)
         self.rel_texts_inv = (
             torch.from_numpy(rel_texts_inv).type("torch.LongTensor").to(self.device)
         )
         self.instruction.eval()
         with torch.no_grad():
-            self.rel_features = self.instruction.encode_question(
-                self.rel_texts, store=False
-            )
+            self.rel_features = self.instruction.encode_question(self.rel_texts, store=False)
             self.rel_features_inv = self.instruction.encode_question(
                 self.rel_texts_inv, store=False
             )
@@ -314,9 +304,7 @@ class BaseModel(torch.nn.Module):
                 if p < ignore_prob:
                     continue
                 candidate2prob.append((c, p))
-            precision, recall, f1, hits = self.f1_and_hits(
-                answer_list, candidate2prob, self.eps
-            )
+            precision, recall, f1, hits = self.f1_and_hits(answer_list, candidate2prob, self.eps)
             # hits_list.append(hits)
             f1_list.append(f1)
         # hits_vec = torch.FloatTensor(hits_list).to(self.device)
@@ -332,8 +320,6 @@ class BaseModel(torch.nn.Module):
 
     def get_eval_metric(self, pred_dist, answer_dist):
         with torch.no_grad():
-            h1 = self.calc_h1(
-                curr_dist=pred_dist, dist_ans=answer_dist, eps=VERY_SMALL_NUMBER
-            )
+            h1 = self.calc_h1(curr_dist=pred_dist, dist_ans=answer_dist, eps=VERY_SMALL_NUMBER)
             f1 = self.calc_f1_new(pred_dist, answer_dist, h1)
         return h1, f1

@@ -39,9 +39,7 @@ class BERTInstruction(BaseInstruction):
             self.pretrained_weights = "roberta-base"
             word_dim = 768  # self.word_dim
         elif model == "sbert":
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                "sentence-transformers/all-MiniLM-L6-v2"
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
             self.pretrained_weights = "sentence-transformers/all-MiniLM-L6-v2"
             word_dim = 384  # self.word_dim
         elif model == "simcse":
@@ -102,9 +100,7 @@ class BERTInstruction(BaseInstruction):
         batch_size = query_text.size(0)
 
         if self.model != "t5":
-            query_hidden_emb = self.node_encoder(query_text)[
-                0
-            ]  # 1, batch_size, entity_dim
+            query_hidden_emb = self.node_encoder(query_text)[0]  # 1, batch_size, entity_dim
         else:
             query_hidden_emb = self.node_encoder.encoder(query_text)[0]
             # print(query_hidden_emb.size())

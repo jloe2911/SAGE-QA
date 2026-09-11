@@ -170,8 +170,7 @@ class KGConstructionConfig:
         if self.backend not in SUPPORTED_KG_CONSTRUCTION_BACKENDS:
             supported = ", ".join(sorted(SUPPORTED_KG_CONSTRUCTION_BACKENDS))
             raise ValueError(
-                f"Unsupported KG construction backend {self.backend!r}. "
-                f"Choose one of: {supported}."
+                f"Unsupported KG construction backend {self.backend!r}. Choose one of: {supported}."
             )
 
     @property
@@ -386,9 +385,7 @@ def parse_llm_triples(text: str) -> List[List[str]]:
 
         if len(item_list) >= 3 and all(x is not None for x in item_list[:3]):
             subject, predicate, obj = item_list[:3]
-            triples.append(
-                [clean_text(subject), normalize_relation(predicate), clean_text(obj)]
-            )
+            triples.append([clean_text(subject), normalize_relation(predicate), clean_text(obj)])
     return dedupe_triples(triples)
 
 

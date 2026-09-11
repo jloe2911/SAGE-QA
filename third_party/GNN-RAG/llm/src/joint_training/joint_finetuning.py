@@ -26,9 +26,7 @@ import datasets
 
 datasets.disable_progress_bar()
 
-N_CPUS = (
-    int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
-)
+N_CPUS = int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
 
 INSTRUCTION = """Please generate a valid relation path that can be helpful for answering the following question: """
 SEP = "<SEP>"
@@ -59,9 +57,7 @@ class ScriptArguments:
     save_merged: Optional[bool] = field(
         default=False, metadata={"help": "Wether to save merged model"}
     )
-    lora_alpha: Optional[float] = field(
-        default=16, metadata={"help": "the lora alpha parameter"}
-    )
+    lora_alpha: Optional[float] = field(default=16, metadata={"help": "the lora alpha parameter"})
     lora_dropout: Optional[float] = field(
         default=0.05, metadata={"help": "the lora dropout parameter"}
     )
@@ -121,9 +117,7 @@ def train():
     new_tokens = [SEP, BOP, EOP]
     if script_args.add_rel_token:
         new_tokens = load_new_tokens(new_tokens, script_args.rel_dict_path)
-    smart_tokenizer_and_embedding_resize(
-        new_tokens, special_tokens_dict, tokenizer, model
-    )
+    smart_tokenizer_and_embedding_resize(new_tokens, special_tokens_dict, tokenizer, model)
 
     tokenizer.padding_side = "right"  # Fix weird overflow issue with fp16 training
 
@@ -149,19 +143,14 @@ def train():
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if (
-        os.path.isdir(training_args.output_dir)
-        and not training_args.overwrite_output_dir
-    ):
+    if os.path.isdir(training_args.output_dir) and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif (
-            last_checkpoint is not None and training_args.resume_from_checkpoint is None
-        ):
+        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
             logging.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."

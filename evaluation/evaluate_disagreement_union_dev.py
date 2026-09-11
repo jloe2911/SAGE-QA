@@ -17,7 +17,10 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RANKINGS = ROOT / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl"
+RANKINGS = (
+    ROOT
+    / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl"
+)
 OUTPUT_DIR = ROOT / "outputs/diagnostics/production_generator_d_v1_disagreement_union_dev"
 METHODS = ("gnn_k1", "sageqa_k1", "disagreement_union")
 DATASET_ORDER = (
@@ -150,7 +153,11 @@ def score(predicted: Sequence[str], alternatives: Sequence[Sequence[str]]) -> di
         if f1 > best["f1"]:
             best = {"precision": precision, "recall": recall, "f1": f1}
         complete = complete or gold_set <= predicted_set
-    return {**best, "complete_support_containment": complete, "retrieved_evidence_units": len(predicted_set)}
+    return {
+        **best,
+        "complete_support_containment": complete,
+        "retrieved_evidence_units": len(predicted_set),
+    }
 
 
 def summarize(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -192,7 +199,11 @@ def table(summary: Mapping[str, Any]) -> list[str]:
         "| Method | Precision | Recall | F1 | Complete containment | Mean units | Median units |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
-    labels = {"gnn_k1": "GNN k=1", "sageqa_k1": "SAGE-QA k=1", "disagreement_union": "Disagreement union"}
+    labels = {
+        "gnn_k1": "GNN k=1",
+        "sageqa_k1": "SAGE-QA k=1",
+        "disagreement_union": "Disagreement union",
+    }
     for method in METHODS:
         m = summary["methods"][method]
         lines.append(
@@ -215,19 +226,24 @@ def main() -> None:
     gold_by_id = gold_pass(args.rankings, set(selections))
     evaluated: list[dict[str, Any]] = []
     for example_id, selection in selections.items():
-        evaluated.append({
-            "example_id": example_id,
-            **{key: selection[key] for key in ("dataset", "domain", "hop", "agree")},
-            "scores": {
-                method: score(prediction, gold_by_id[example_id])
-                for method, prediction in selection["predictions"].items()
-            },
-        })
+        evaluated.append(
+            {
+                "example_id": example_id,
+                **{key: selection[key] for key in ("dataset", "domain", "hop", "agree")},
+                "scores": {
+                    method: score(prediction, gold_by_id[example_id])
+                    for method, prediction in selection["predictions"].items()
+                },
+            }
+        )
 
     datasets = sorted({row["dataset"] for row in evaluated}, key=DATASET_ORDER.index)
     if tuple(datasets) != DATASET_ORDER:
         raise ValueError(f"Dataset coverage mismatch: {datasets}")
-    per_dataset = {dataset: summarize([row for row in evaluated if row["dataset"] == dataset]) for dataset in datasets}
+    per_dataset = {
+        dataset: summarize([row for row in evaluated if row["dataset"] == dataset])
+        for dataset in datasets
+    }
     for dataset, values in per_dataset.items():
         values["domain"] = next(row["domain"] for row in evaluated if row["dataset"] == dataset)
         values["hop"] = next(row["hop"] for row in evaluated if row["dataset"] == dataset)
@@ -248,16 +264,30 @@ def main() -> None:
     for row in disagreements:
         g_complete = bool(row["scores"]["gnn_k1"]["complete_support_containment"])
         s_complete = bool(row["scores"]["sageqa_k1"]["complete_support_containment"])
-        effect = "fixed" if not g_complete and s_complete else "harmed" if g_complete and not s_complete else "completeness_unchanged"
+        effect = (
+            "fixed"
+            if not g_complete and s_complete
+            else "harmed"
+            if g_complete and not s_complete
+            else "completeness_unchanged"
+        )
         effect_rows[effect].append(row)
     effect_counts = {effect: len(effect_rows[effect]) for effect in EXPECTED_EFFECT_COUNTS}
     if effect_counts != EXPECTED_EFFECT_COUNTS:
         raise ValueError(f"Known flip-count reproduction failed: {effect_counts}")
 
     unchanged = effect_rows["completeness_unchanged"]
-    unchanged_both_complete = [row for row in unchanged if row["scores"]["gnn_k1"]["complete_support_containment"]]
-    unchanged_both_incomplete = [row for row in unchanged if not row["scores"]["gnn_k1"]["complete_support_containment"]]
-    newly_complete = [row for row in unchanged_both_incomplete if row["scores"]["disagreement_union"]["complete_support_containment"]]
+    unchanged_both_complete = [
+        row for row in unchanged if row["scores"]["gnn_k1"]["complete_support_containment"]
+    ]
+    unchanged_both_incomplete = [
+        row for row in unchanged if not row["scores"]["gnn_k1"]["complete_support_containment"]
+    ]
+    newly_complete = [
+        row
+        for row in unchanged_both_incomplete
+        if row["scores"]["disagreement_union"]["complete_support_containment"]
+    ]
     disagreement_analysis = {
         "schema_version": "production_generator_d_v1_disagreement_union_dev_v1",
         "split": "dev",
@@ -268,25 +298,40 @@ def main() -> None:
             "by_dataset": {
                 dataset: {
                     "agree": sum(row["agree"] for row in evaluated if row["dataset"] == dataset),
-                    "disagree": sum(not row["agree"] for row in evaluated if row["dataset"] == dataset),
+                    "disagree": sum(
+                        not row["agree"] for row in evaluated if row["dataset"] == dataset
+                    ),
                 }
                 for dataset in datasets
             },
         },
-        "known_flip_reproduction": {"expected": EXPECTED_EFFECT_COUNTS, "observed": effect_counts, "passed": True},
+        "known_flip_reproduction": {
+            "expected": EXPECTED_EFFECT_COUNTS,
+            "observed": effect_counts,
+            "passed": True,
+        },
         "symbolic_fixes": {
             "known": len(effect_rows["fixed"]),
-            "complete_under_union": sum(row["scores"]["disagreement_union"]["complete_support_containment"] for row in effect_rows["fixed"]),
+            "complete_under_union": sum(
+                row["scores"]["disagreement_union"]["complete_support_containment"]
+                for row in effect_rows["fixed"]
+            ),
         },
         "symbolic_harms": {
             "known": len(effect_rows["harmed"]),
-            "rescued_by_retaining_gnn_candidate": sum(row["scores"]["disagreement_union"]["complete_support_containment"] for row in effect_rows["harmed"]),
+            "rescued_by_retaining_gnn_candidate": sum(
+                row["scores"]["disagreement_union"]["complete_support_containment"]
+                for row in effect_rows["harmed"]
+            ),
         },
         "completeness_unchanged_disagreements": {
             "known": len(unchanged),
             "both_top1_complete": len(unchanged_both_complete),
             "both_top1_incomplete": len(unchanged_both_incomplete),
-            "both_complete_preserved_under_union": sum(row["scores"]["disagreement_union"]["complete_support_containment"] for row in unchanged_both_complete),
+            "both_complete_preserved_under_union": sum(
+                row["scores"]["disagreement_union"]["complete_support_containment"]
+                for row in unchanged_both_complete
+            ),
             "newly_complete_by_cross_candidate_union": len(newly_complete),
             "remain_incomplete_under_union": len(unchanged_both_incomplete) - len(newly_complete),
             "metrics": summarize(unchanged),
@@ -296,8 +341,16 @@ def main() -> None:
 
     overall = slices["overall"]
     union_delta = overall["union_deltas"]["sageqa_k1"]
-    improved_datasets = [dataset for dataset, values in per_dataset.items() if values["union_deltas"]["sageqa_k1"]["f1"] > 0]
-    harmed_datasets = [dataset for dataset, values in per_dataset.items() if values["union_deltas"]["sageqa_k1"]["f1"] < 0]
+    improved_datasets = [
+        dataset
+        for dataset, values in per_dataset.items()
+        if values["union_deltas"]["sageqa_k1"]["f1"] > 0
+    ]
+    harmed_datasets = [
+        dataset
+        for dataset, values in per_dataset.items()
+        if values["union_deltas"]["sageqa_k1"]["f1"] < 0
+    ]
     accept = union_delta["f1"] > 0
     decision = "ACCEPT" if accept else "REJECT"
 
@@ -351,19 +404,21 @@ def main() -> None:
     ]
     for name in ("text", "ontology", "1hop", "2hop"):
         summary_lines.extend([f"### {name}", "", *table(slices[name]), ""])
-    summary_lines.extend([
-        "## Disagreement mechanism",
-        "",
-        f"GNN and SAGE-QA agreed on {len(evaluated) - len(disagreements):,} examples and disagreed on {len(disagreements):,}.",
-        f"The union retained complete support for {disagreement_analysis['symbolic_fixes']['complete_under_union']}/{len(effect_rows['fixed'])} known symbolic fixes and rescued {disagreement_analysis['symbolic_harms']['rescued_by_retaining_gnn_candidate']}/{len(effect_rows['harmed'])} known symbolic harms.",
-        f"Of the 384 completeness-unchanged disagreements, {len(unchanged_both_complete)} had both candidates complete and remained complete; {len(unchanged_both_incomplete)} had both incomplete, of which {len(newly_complete)} became complete only through the cross-candidate union and {len(unchanged_both_incomplete) - len(newly_complete)} remained incomplete.",
-        "",
-        "## Evidence boundary",
-        "",
-        lineage["selection_boundary"],
-        "No training, neural inference, candidate generation, symbolic-weight change, hyperparameter search, TEST access, answer generation, or production modification was performed.",
-        "",
-    ])
+    summary_lines.extend(
+        [
+            "## Disagreement mechanism",
+            "",
+            f"GNN and SAGE-QA agreed on {len(evaluated) - len(disagreements):,} examples and disagreed on {len(disagreements):,}.",
+            f"The union retained complete support for {disagreement_analysis['symbolic_fixes']['complete_under_union']}/{len(effect_rows['fixed'])} known symbolic fixes and rescued {disagreement_analysis['symbolic_harms']['rescued_by_retaining_gnn_candidate']}/{len(effect_rows['harmed'])} known symbolic harms.",
+            f"Of the 384 completeness-unchanged disagreements, {len(unchanged_both_complete)} had both candidates complete and remained complete; {len(unchanged_both_incomplete)} had both incomplete, of which {len(newly_complete)} became complete only through the cross-candidate union and {len(unchanged_both_incomplete) - len(newly_complete)} remained incomplete.",
+            "",
+            "## Evidence boundary",
+            "",
+            lineage["selection_boundary"],
+            "No training, neural inference, candidate generation, symbolic-weight change, hyperparameter search, TEST access, answer generation, or production modification was performed.",
+            "",
+        ]
+    )
 
     decision_lines = [
         "# Mechanism decision",
@@ -384,8 +439,21 @@ def main() -> None:
     write_json(args.output_dir / "per_dataset.json", per_dataset_artifact)
     write_json(args.output_dir / "disagreement_analysis.json", disagreement_analysis)
     (args.output_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
-    (args.output_dir / "mechanism_decision.md").write_text("\n".join(decision_lines), encoding="utf-8")
-    print(json.dumps({"decision": decision, "examples": len(evaluated), "agree": len(evaluated) - len(disagreements), "disagree": len(disagreements), "union_delta_vs_sageqa": union_delta}, indent=2))
+    (args.output_dir / "mechanism_decision.md").write_text(
+        "\n".join(decision_lines), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "decision": decision,
+                "examples": len(evaluated),
+                "agree": len(evaluated) - len(disagreements),
+                "disagree": len(disagreements),
+                "union_delta_vs_sageqa": union_delta,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

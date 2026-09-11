@@ -39,8 +39,14 @@ from training.train_gnn_subgraph_retriever import (
 ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = ROOT / "data/production_generator_d_v1"
 CHECKPOINT_ROOT = ROOT / "checkpoints/production_generator_d_v1"
-BASELINE_RANKINGS = ROOT / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl"
-BASELINE_METADATA = ROOT / "outputs/development_runs/production_generator_d_v1_k_sensitivity/checkpoint_metadata.json"
+BASELINE_RANKINGS = (
+    ROOT
+    / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl"
+)
+BASELINE_METADATA = (
+    ROOT
+    / "outputs/development_runs/production_generator_d_v1_k_sensitivity/checkpoint_metadata.json"
+)
 OUTPUT_DIR = ROOT / "outputs/diagnostics/production_generator_d_v1_rrf_dev"
 RRF_K = 60
 METHODS = ("gnn_k1", "sageqa_additive_k1", "sageqa_rrf_k1")
@@ -157,18 +163,27 @@ def freeze_predictions(
                 if len(prepared) != 1 or prepared[0]["example_id"] != example_id:
                     raise ValueError(f"Unexpected preparation result for {example_id}")
                 example = prepared[0]
-                encoded = encode_example_graph(model, tokenizer, example, device, max_length=max_length)
+                encoded = encode_example_graph(
+                    model, tokenizer, example, device, max_length=max_length
+                )
                 scored: list[dict[str, Any]] = []
                 with torch.no_grad():
                     for start in range(0, len(example["candidate_rows"]), batch_size):
                         batch = example["candidate_rows"][start : start + batch_size]
-                        probabilities = score_candidate_rows(model, encoded, batch, device)["probs"].detach().cpu().tolist()
+                        probabilities = (
+                            score_candidate_rows(model, encoded, batch, device)["probs"]
+                            .detach()
+                            .cpu()
+                            .tolist()
+                        )
                         for row, probability in zip(batch, probabilities):
                             item = dict(row)
                             item["score"] = float(probability)
                             item["candidate_order"] = int(row["materialization_order"])
                             item["symbolic_score"] = float(
-                                compute_adjusted_score(item, 0.0, score_mode=symbolic_mode, size_penalty=0.01)
+                                compute_adjusted_score(
+                                    item, 0.0, score_mode=symbolic_mode, size_penalty=0.01
+                                )
                             )
                             item["adjusted_score"] = float(item["score"] + item["symbolic_score"])
                             scored.append(item)
@@ -177,14 +192,20 @@ def freeze_predictions(
 
                 order = lambda row: int(row["candidate_order"])
                 neural = sorted(scored, key=lambda row: (-float(row["score"]), order(row)))
-                symbolic = sorted(scored, key=lambda row: (-float(row["symbolic_score"]), order(row)))
-                additive = sorted(scored, key=lambda row: (-float(row["adjusted_score"]), order(row)))
+                symbolic = sorted(
+                    scored, key=lambda row: (-float(row["symbolic_score"]), order(row))
+                )
+                additive = sorted(
+                    scored, key=lambda row: (-float(row["adjusted_score"]), order(row))
+                )
                 neural_rank = {order(row): rank for rank, row in enumerate(neural, start=1)}
                 symbolic_rank = {order(row): rank for rank, row in enumerate(symbolic, start=1)}
                 for row in scored:
                     row["rank_gnn"] = neural_rank[order(row)]
                     row["rank_symbolic"] = symbolic_rank[order(row)]
-                    row["rrf_score"] = 1.0 / (RRF_K + row["rank_gnn"]) + 1.0 / (RRF_K + row["rank_symbolic"])
+                    row["rrf_score"] = 1.0 / (RRF_K + row["rank_gnn"]) + 1.0 / (
+                        RRF_K + row["rank_symbolic"]
+                    )
                 rrf = sorted(scored, key=lambda row: (-float(row["rrf_score"]), order(row)))
 
                 persisted = baseline.get(example_id)
@@ -193,11 +214,20 @@ def freeze_predictions(
                 else:
                     if candidate_key(neural[0]["subgraph_units"]) != persisted["gnn_only"]["units"]:
                         parity_errors.append(f"{example_id}: GNN top-1 identity mismatch")
-                    if candidate_key(additive[0]["subgraph_units"]) != persisted["sageqa_final"]["units"]:
+                    if (
+                        candidate_key(additive[0]["subgraph_units"])
+                        != persisted["sageqa_final"]["units"]
+                    ):
                         parity_errors.append(f"{example_id}: additive top-1 identity mismatch")
                     if abs(float(neural[0]["score"]) - persisted["gnn_only"]["score"]) >= 1e-7:
                         parity_errors.append(f"{example_id}: GNN score mismatch")
-                    if abs(float(additive[0]["adjusted_score"]) - persisted["sageqa_final"]["adjusted_score"]) >= 1e-7:
+                    if (
+                        abs(
+                            float(additive[0]["adjusted_score"])
+                            - persisted["sageqa_final"]["adjusted_score"]
+                        )
+                        >= 1e-7
+                    ):
                         parity_errors.append(f"{example_id}: additive score mismatch")
 
                 def top_record(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -246,7 +276,9 @@ def freeze_predictions(
 
     if parity_errors:
         raise AssertionError("Frozen production parity failed:\n" + "\n".join(parity_errors[:20]))
-    if len(selections) != EXPECTED_EXAMPLES or set(baseline) != {row["example_id"] for row in selections}:
+    if len(selections) != EXPECTED_EXAMPLES or set(baseline) != {
+        row["example_id"] for row in selections
+    }:
         raise AssertionError("DEV example coverage mismatch")
     return selections, {
         "device": str(device),
@@ -268,7 +300,9 @@ def gold_pass(path: Path, expected_ids: set[str]) -> dict[str, list[list[str]]]:
             example_id = str(row["example_id"])
             if example_id not in expected_ids:
                 raise ValueError(f"Unexpected example {example_id}")
-            alternatives = [[str(unit) for unit in alt] for alt in row.get("gold_explanations", []) if alt]
+            alternatives = [
+                [str(unit) for unit in alt] for alt in row.get("gold_explanations", []) if alt
+            ]
             if not alternatives:
                 raise ValueError(f"{example_id}: missing DEV gold")
             if example_id in gold and gold[example_id] != alternatives:
@@ -313,20 +347,29 @@ def summarize(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 def deltas(summary: Mapping[str, Any]) -> dict[str, Any]:
     rrf = summary["methods"]["sageqa_rrf_k1"]
     return {
-        baseline: {metric: float(rrf[metric]) - float(summary["methods"][baseline][metric]) for metric in rrf}
+        baseline: {
+            metric: float(rrf[metric]) - float(summary["methods"][baseline][metric])
+            for metric in rrf
+        }
         for baseline in ("gnn_k1", "sageqa_additive_k1")
     }
 
 
 def table(summary: Mapping[str, Any]) -> list[str]:
-    labels = {"gnn_k1": "GNN", "sageqa_additive_k1": "Additive SAGE-QA", "sageqa_rrf_k1": "RRF SAGE-QA"}
+    labels = {
+        "gnn_k1": "GNN",
+        "sageqa_additive_k1": "Additive SAGE-QA",
+        "sageqa_rrf_k1": "RRF SAGE-QA",
+    }
     lines = [
         "| Method | Precision | Recall | F1 | Complete containment |",
         "|---|---:|---:|---:|---:|",
     ]
     for method in METHODS:
         row = summary["methods"][method]
-        lines.append(f"| {labels[method]} | {row['precision']:.6f} | {row['recall']:.6f} | {row['f1']:.6f} | {row['complete_support_containment']:.6f} |")
+        lines.append(
+            f"| {labels[method]} | {row['precision']:.6f} | {row['recall']:.6f} | {row['f1']:.6f} | {row['complete_support_containment']:.6f} |"
+        )
     return lines
 
 
@@ -369,17 +412,31 @@ def main() -> None:
     gold = gold_pass(args.baseline_rankings, set(by_id))
     evaluated: list[dict[str, Any]] = []
     for selection in selections:
-        evaluated.append({
-            **{key: selection[key] for key in ("example_id", "dataset", "domain", "hop", "admitted_candidates")},
-            "scores": {
-                method: score(selection["predictions"][method]["subgraph_units"], gold[selection["example_id"]])
-                for method in METHODS
-            },
-            "top1_additive_rrf_differ": candidate_key(selection["predictions"]["sageqa_additive_k1"]["subgraph_units"]) != candidate_key(selection["predictions"]["sageqa_rrf_k1"]["subgraph_units"]),
-        })
+        evaluated.append(
+            {
+                **{
+                    key: selection[key]
+                    for key in ("example_id", "dataset", "domain", "hop", "admitted_candidates")
+                },
+                "scores": {
+                    method: score(
+                        selection["predictions"][method]["subgraph_units"],
+                        gold[selection["example_id"]],
+                    )
+                    for method in METHODS
+                },
+                "top1_additive_rrf_differ": candidate_key(
+                    selection["predictions"]["sageqa_additive_k1"]["subgraph_units"]
+                )
+                != candidate_key(selection["predictions"]["sageqa_rrf_k1"]["subgraph_units"]),
+            }
+        )
 
     datasets = [item[0] for item in DATASETS]
-    per_dataset = {dataset: summarize([row for row in evaluated if row["dataset"] == dataset]) for dataset in datasets}
+    per_dataset = {
+        dataset: summarize([row for row in evaluated if row["dataset"] == dataset])
+        for dataset in datasets
+    }
     for dataset, summary in per_dataset.items():
         summary["domain"] = next(row["domain"] for row in evaluated if row["dataset"] == dataset)
         summary["hop"] = next(row["hop"] for row in evaluated if row["dataset"] == dataset)
@@ -397,7 +454,9 @@ def main() -> None:
         "examples": 10,
         "methods": {
             method: {
-                metric: statistics.fmean(per_dataset[dataset]["methods"][method][metric] for dataset in datasets)
+                metric: statistics.fmean(
+                    per_dataset[dataset]["methods"][method][metric] for dataset in datasets
+                )
                 for metric in ("precision", "recall", "f1", "complete_support_containment")
             }
             for method in METHODS
@@ -410,21 +469,39 @@ def main() -> None:
     harmed: list[dict[str, Any]] = []
     for row in evaluated:
         gnn_complete = bool(row["scores"]["gnn_k1"]["complete_support_containment"])
-        additive_complete = bool(row["scores"]["sageqa_additive_k1"]["complete_support_containment"])
+        additive_complete = bool(
+            row["scores"]["sageqa_additive_k1"]["complete_support_containment"]
+        )
         if not gnn_complete and additive_complete:
             fixed.append(row)
         elif gnn_complete and not additive_complete:
             harmed.append(row)
     if {"fixed": len(fixed), "harmed": len(harmed)} != EXPECTED_EFFECT_COUNTS:
-        raise AssertionError(f"Known symbolic cohorts failed to reproduce: {len(fixed)=}, {len(harmed)=}")
+        raise AssertionError(
+            f"Known symbolic cohorts failed to reproduce: {len(fixed)=}, {len(harmed)=}"
+        )
 
-    rrf_fixes = [row for row in evaluated if not row["scores"]["gnn_k1"]["complete_support_containment"] and row["scores"]["sageqa_rrf_k1"]["complete_support_containment"]]
-    rrf_harms = [row for row in evaluated if row["scores"]["gnn_k1"]["complete_support_containment"] and not row["scores"]["sageqa_rrf_k1"]["complete_support_containment"]]
+    rrf_fixes = [
+        row
+        for row in evaluated
+        if not row["scores"]["gnn_k1"]["complete_support_containment"]
+        and row["scores"]["sageqa_rrf_k1"]["complete_support_containment"]
+    ]
+    rrf_harms = [
+        row
+        for row in evaluated
+        if row["scores"]["gnn_k1"]["complete_support_containment"]
+        and not row["scores"]["sageqa_rrf_k1"]["complete_support_containment"]
+    ]
     cohort = {
         "current_symbolic_fixes": len(fixed),
-        "fixes_preserved_by_rrf": sum(row["scores"]["sageqa_rrf_k1"]["complete_support_containment"] for row in fixed),
+        "fixes_preserved_by_rrf": sum(
+            row["scores"]["sageqa_rrf_k1"]["complete_support_containment"] for row in fixed
+        ),
         "current_symbolic_harms": len(harmed),
-        "harms_avoided_by_rrf": sum(row["scores"]["sageqa_rrf_k1"]["complete_support_containment"] for row in harmed),
+        "harms_avoided_by_rrf": sum(
+            row["scores"]["sageqa_rrf_k1"]["complete_support_containment"] for row in harmed
+        ),
         "rrf_complete_top1_fixes_vs_gnn": len(rrf_fixes),
         "rrf_complete_top1_harms_vs_gnn": len(rrf_harms),
         "net_complete_top1_corrections_vs_gnn": len(rrf_fixes) - len(rrf_harms),
@@ -434,20 +511,32 @@ def main() -> None:
     overall = slices["macro_all_examples"]
     f1_gain = overall["rrf_deltas"]["sageqa_additive_k1"]["f1"]
     symbolic_positive = cohort["net_complete_top1_corrections_vs_gnn"] > 0
-    domain_deltas = {domain: slices[domain]["rrf_deltas"]["sageqa_additive_k1"]["f1"] for domain in ("text", "ontology")}
+    domain_deltas = {
+        domain: slices[domain]["rrf_deltas"]["sageqa_additive_k1"]["f1"]
+        for domain in ("text", "ontology")
+    }
     # Predeclared operational reading of "major systematic": an absolute domain
     # F1 loss greater than 0.01, or every dataset in a domain declining.
     systematic = {}
     for domain in ("text", "ontology"):
-        domain_datasets = [dataset for dataset in datasets if per_dataset[dataset]["domain"] == domain]
-        declining = [dataset for dataset in domain_datasets if per_dataset[dataset]["rrf_deltas"]["sageqa_additive_k1"]["f1"] < 0.0]
+        domain_datasets = [
+            dataset for dataset in datasets if per_dataset[dataset]["domain"] == domain
+        ]
+        declining = [
+            dataset
+            for dataset in domain_datasets
+            if per_dataset[dataset]["rrf_deltas"]["sageqa_additive_k1"]["f1"] < 0.0
+        ]
         systematic[domain] = {
             "f1_delta": domain_deltas[domain],
             "declining_datasets": declining,
             "dataset_count": len(domain_datasets),
-            "major_systematic_regression": domain_deltas[domain] < -0.01 or len(declining) == len(domain_datasets),
+            "major_systematic_regression": domain_deltas[domain] < -0.01
+            or len(declining) == len(domain_datasets),
         }
-    no_major_domain_regression = not any(item["major_systematic_regression"] for item in systematic.values())
+    no_major_domain_regression = not any(
+        item["major_systematic_regression"] for item in systematic.values()
+    )
     accepted = f1_gain > 0.0 and symbolic_positive and no_major_domain_regression
     decision = "ACCEPT_RRF" if accepted else "RETAIN_ADDITIVE"
 
@@ -491,7 +580,10 @@ def main() -> None:
         "lineage": lineage,
     }
     write_json(args.output_dir / "metrics.json", metrics)
-    write_json(args.output_dir / "per_dataset.json", {"schema_version": metrics["schema_version"], "split": "dev", "datasets": per_dataset})
+    write_json(
+        args.output_dir / "per_dataset.json",
+        {"schema_version": metrics["schema_version"], "split": "dev", "datasets": per_dataset},
+    )
     write_json(args.output_dir / "cohort_analysis.json", cohort)
 
     summary_lines = [
@@ -512,12 +604,14 @@ def main() -> None:
     ]
     for name in ("text", "ontology", "1hop", "2hop"):
         summary_lines.extend([f"### {name}", "", *table(slices[name]), ""])
-    summary_lines.extend([
-        "## Per dataset",
-        "",
-        "| Dataset | Method | Precision | Recall | F1 | Complete containment |",
-        "|---|---|---:|---:|---:|---:|",
-    ])
+    summary_lines.extend(
+        [
+            "## Per dataset",
+            "",
+            "| Dataset | Method | Precision | Recall | F1 | Complete containment |",
+            "|---|---|---:|---:|---:|---:|",
+        ]
+    )
     for dataset in datasets:
         item = per_dataset[dataset]
         for method, label in (
@@ -531,20 +625,22 @@ def main() -> None:
                 f"{values['recall']:.6f} | {values['f1']:.6f} | "
                 f"{values['complete_support_containment']:.6f} |"
             )
-    summary_lines.extend([
-        "",
-        "## Known symbolic-change cohorts",
-        "",
-        f"RRF preserves {cohort['fixes_preserved_by_rrf']}/{cohort['current_symbolic_fixes']} current symbolic fixes and avoids {cohort['harms_avoided_by_rrf']}/{cohort['current_symbolic_harms']} current symbolic harms.",
-        f"Relative to GNN, RRF makes {cohort['rrf_complete_top1_fixes_vs_gnn']} complete-top1 fixes and {cohort['rrf_complete_top1_harms_vs_gnn']} harms, for {cohort['net_complete_top1_corrections_vs_gnn']:+d} net corrections.",
-        f"Additive SAGE-QA and RRF select different top-1 candidates on {cohort['additive_rrf_top1_differences']}/{len(evaluated)} examples.",
-        "",
-        "## Protocol",
-        "",
-        lineage["selection_boundary"],
-        "No training, candidate generation, parameter search, weight tuning, TEST access, or answer generation was performed. Frozen GNN inference was necessary because only the top five candidates had been persisted previously.",
-        "",
-    ])
+    summary_lines.extend(
+        [
+            "",
+            "## Known symbolic-change cohorts",
+            "",
+            f"RRF preserves {cohort['fixes_preserved_by_rrf']}/{cohort['current_symbolic_fixes']} current symbolic fixes and avoids {cohort['harms_avoided_by_rrf']}/{cohort['current_symbolic_harms']} current symbolic harms.",
+            f"Relative to GNN, RRF makes {cohort['rrf_complete_top1_fixes_vs_gnn']} complete-top1 fixes and {cohort['rrf_complete_top1_harms_vs_gnn']} harms, for {cohort['net_complete_top1_corrections_vs_gnn']:+d} net corrections.",
+            f"Additive SAGE-QA and RRF select different top-1 candidates on {cohort['additive_rrf_top1_differences']}/{len(evaluated)} examples.",
+            "",
+            "## Protocol",
+            "",
+            lineage["selection_boundary"],
+            "No training, candidate generation, parameter search, weight tuning, TEST access, or answer generation was performed. Frozen GNN inference was necessary because only the top five candidates had been persisted previously.",
+            "",
+        ]
+    )
     (args.output_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
 
     decision_lines = [
@@ -559,8 +655,20 @@ def main() -> None:
         "The three acceptance conditions are conjunctive. No other k, weighting, or fusion method was evaluated.",
         "",
     ]
-    (args.output_dir / "mechanism_decision.md").write_text("\n".join(decision_lines), encoding="utf-8")
-    print(json.dumps({"decision": decision, "examples": len(evaluated), "f1_delta_vs_additive": f1_gain, **cohort}, indent=2))
+    (args.output_dir / "mechanism_decision.md").write_text(
+        "\n".join(decision_lines), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "decision": decision,
+                "examples": len(evaluated),
+                "f1_delta_vs_additive": f1_gain,
+                **cohort,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

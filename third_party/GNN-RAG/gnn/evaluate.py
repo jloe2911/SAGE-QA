@@ -184,9 +184,7 @@ class Evaluator:
         max_local_entity = valid_data.max_local_entity
         ignore_prob = (1 - eps) / max_local_entity
         for iteration in tqdm(range(num_epoch)):
-            batch = valid_data.get_batch(
-                iteration, test_batch_size, fact_dropout=0.0, test=True
-            )
+            batch = valid_data.get_batch(iteration, test_batch_size, fact_dropout=0.0, test=True)
             with torch.no_grad():
                 loss, extras, pred_dist, tp_list = self.model(batch[:-1])
                 pred = torch.max(pred_dist, dim=1)[1]
@@ -262,9 +260,7 @@ class Evaluator:
                     sample_id = valid_data.sample_ids[batch_id]
                     labels = valid_data.local_entity_labels[sample_id]
                     labelled = []
-                    for local_index, (c, p, s) in enumerate(
-                        zip(candidates, probs, seed_entities)
-                    ):
+                    for local_index, (c, p, s) in enumerate(zip(candidates, probs, seed_entities)):
                         if s == 1.0 or c == pad_ent_id or p < ignore_prob:
                             continue
                         labelled.append((labels[local_index], p))

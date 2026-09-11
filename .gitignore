@@ -226,3 +226,5 @@ tests/
 # Vendored GNN-RAG generated results
 third_party/GNN-RAG/llm/results/
 third_party/GNN-RAG.git-backup/
+
+.tmp/

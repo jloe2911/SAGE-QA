@@ -8,9 +8,7 @@ from peft import AutoPeftModelForCausalLM
 @dataclass
 class ScriptArguments:
     input_path: Optional[str] = field(default=None, metadata={"help": "input path"})
-    output_path: Optional[str] = field(
-        default=None, metadata={"help": "output the path"}
-    )
+    output_path: Optional[str] = field(default=None, metadata={"help": "output the path"})
 
 
 parser = HfArgumentParser(ScriptArguments)

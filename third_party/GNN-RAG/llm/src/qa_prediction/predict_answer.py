@@ -145,15 +145,11 @@ def merge_rule_result(qa_dataset, rule_dataset, n_proc=1, filter_empty=False):
 
     qa_dataset = qa_dataset.map(find_rule, num_proc=n_proc)
     if filter_empty:
-        qa_dataset = qa_dataset.filter(
-            lambda x: len(x["ground_paths"]) > 0, num_proc=n_proc
-        )
+        qa_dataset = qa_dataset.filter(lambda x: len(x["ground_paths"]) > 0, num_proc=n_proc)
     return qa_dataset
 
 
-def prediction(
-    data, processed_list, input_builder, model, encrypt=False, data_file_gnn=None
-):
+def prediction(data, processed_list, input_builder, model, encrypt=False, data_file_gnn=None):
     question = data["question"]
     answer = data["answer"]
     entities = data["q_entity"]

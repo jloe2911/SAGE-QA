@@ -21,9 +21,7 @@ class BasicDataLoader(object):
     create mappings between global entity ids and local ids that are used during GNN updates.
     """
 
-    def __init__(
-        self, config, word2id, relation2id, entity2id, tokenize, data_type="train"
-    ):
+    def __init__(self, config, word2id, relation2id, entity2id, tokenize, data_type="train"):
         self.tokenize = tokenize
         self._parse_args(config, word2id, relation2id, entity2id)
         self._load_file(config, data_type)
@@ -52,9 +50,7 @@ class BasicDataLoader(object):
                     skip_index.add(index)
                     continue
                 self.data.append(line)
-                self.max_facts = max(
-                    self.max_facts, 2 * len(line["subgraph"]["tuples"])
-                )
+                self.max_facts = max(self.max_facts, 2 * len(line["subgraph"]["tuples"]))
                 index += 1
 
         print("skip", skip_index)
@@ -82,17 +78,11 @@ class BasicDataLoader(object):
         self.kb_fact_rels = np.full(
             (self.num_data, self.max_facts), self.num_kb_relation, dtype=int
         )
-        self.query_entities = np.zeros(
-            (self.num_data, self.max_local_entity), dtype=float
-        )
+        self.query_entities = np.zeros((self.num_data, self.max_local_entity), dtype=float)
         self.seed_list = np.empty(self.num_data, dtype=object)
-        self.seed_distribution = np.zeros(
-            (self.num_data, self.max_local_entity), dtype=float
-        )
+        self.seed_distribution = np.zeros((self.num_data, self.max_local_entity), dtype=float)
         # self.query_texts = np.full((self.num_data, self.max_query_word), len(self.word2id), dtype=int)
-        self.answer_dists = np.zeros(
-            (self.num_data, self.max_local_entity), dtype=float
-        )
+        self.answer_dists = np.zeros((self.num_data, self.max_local_entity), dtype=float)
         self.answer_lists = np.empty(self.num_data, dtype=object)
         self.local_entity_labels = np.empty(self.num_data, dtype=object)
 
@@ -126,9 +116,7 @@ class BasicDataLoader(object):
         self.relation2id = relation2id
         self.entity2id = entity2id
         self.id2entity = {i: entity for entity, i in entity2id.items()}
-        self.frozen_entity_dictionary = bool(
-            config.get("frozen_entity_dictionary", False)
-        )
+        self.frozen_entity_dictionary = bool(config.get("frozen_entity_dictionary", False))
         if self.frozen_entity_dictionary and not config.get("is_eval", False):
             raise ValueError("--frozen_entity_dictionary is inference-only")
         self.q_type = config["q_type"]
@@ -238,9 +226,7 @@ class BasicDataLoader(object):
             g2l = self.global2local_entity_maps[next_id]
             local_labels = [None] * len(g2l)
             for global_entity, local_entity in g2l.items():
-                local_labels[local_entity] = self.id2entity.get(
-                    global_entity, str(global_entity)
-                )
+                local_labels[local_entity] = self.id2entity.get(global_entity, str(global_entity))
             self.local_entity_labels[next_id] = local_labels
             # print(g2l)
             if len(g2l) == 0:
@@ -547,9 +533,7 @@ class BasicDataLoader(object):
             if self.use_self_loop:
                 num_ent_now = len(self.global2local_entity_maps[sample_id])
                 ent_array = np.array(range(num_ent_now), dtype=int) + index_bias
-                rel_array = np.array(
-                    [self.num_kb_relation - 1] * num_ent_now, dtype=int
-                )
+                rel_array = np.array([self.num_kb_relation - 1] * num_ent_now, dtype=int)
                 batch_heads = np.append(batch_heads, ent_array)
                 batch_tails = np.append(batch_tails, ent_array)
                 batch_rels = np.append(batch_rels, rel_array)
@@ -645,9 +629,7 @@ class SingleDataLoader(BasicDataLoader):
     Single Dataloader creates training/eval batches during KGQA.
     """
 
-    def __init__(
-        self, config, word2id, relation2id, entity2id, tokenize, data_type="train"
-    ):
+    def __init__(self, config, word2id, relation2id, entity2id, tokenize, data_type="train"):
         super(SingleDataLoader, self).__init__(
             config, word2id, relation2id, entity2id, tokenize, data_type
         )
@@ -724,8 +706,12 @@ def load_data(config, tokenize):
 
     if config["is_eval"]:
         train_data = None
-        valid_data = None if config.get("test_only_inference", False) else SingleDataLoader(
-            config, word2id, relation2id, entity2id, tokenize, data_type="dev"
+        valid_data = (
+            None
+            if config.get("test_only_inference", False)
+            else SingleDataLoader(
+                config, word2id, relation2id, entity2id, tokenize, data_type="dev"
+            )
         )
         test_data = SingleDataLoader(
             config, word2id, relation2id, entity2id, tokenize, data_type="test"
@@ -738,8 +724,12 @@ def load_data(config, tokenize):
         valid_data = SingleDataLoader(
             config, word2id, relation2id, entity2id, tokenize, data_type="dev"
         )
-        test_data = None if train_dev_only else SingleDataLoader(
-            config, word2id, relation2id, entity2id, tokenize, data_type="test"
+        test_data = (
+            None
+            if train_dev_only
+            else SingleDataLoader(
+                config, word2id, relation2id, entity2id, tokenize, data_type="test"
+            )
         )
         num_word = train_data.num_word
     relation_source = valid_data if test_data is None else test_data

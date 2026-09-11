@@ -109,12 +109,7 @@ def load_llm_answers(path: str) -> Dict[str, str]:
         if not raw_id:
             continue
 
-        answer = (
-            row.get("predicted_answer")
-            or row.get("answer")
-            or row.get("prediction")
-            or ""
-        )
+        answer = row.get("predicted_answer") or row.get("answer") or row.get("prediction") or ""
 
         answers[str(raw_id)] = str(answer).strip()
 

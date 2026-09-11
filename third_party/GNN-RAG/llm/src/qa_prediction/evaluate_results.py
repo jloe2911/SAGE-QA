@@ -85,9 +85,7 @@ def extract_topk_prediction(prediction, k=-1):
 def eval_result(predict_file, encrypt=False, cal_f1=True, topk=-1):
     # predict_file = os.path.join(result_path, 'predictions.jsonl')
     eval_name = (
-        "detailed_eval_result_top_{topk}.jsonl"
-        if topk > 0
-        else "detailed_eval_result.jsonl"
+        "detailed_eval_result_top_{topk}.jsonl" if topk > 0 else "detailed_eval_result.jsonl"
     )
     detailed_eval_file = predict_file.replace("predictions.jsonl", eval_name)
     # Load results
@@ -202,9 +200,7 @@ def eval_result(predict_file, encrypt=False, cal_f1=True, topk=-1):
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
-    argparser.add_argument(
-        "-d", type=str, default="results/KGQA/csqa/alpaca_default/test"
-    )
+    argparser.add_argument("-d", type=str, default="results/KGQA/csqa/alpaca_default/test")
     argparser.add_argument("--cal_f1", action="store_true")
     argparser.add_argument("--top_k", type=int, default=-1)
     args = argparser.parse_args()

@@ -254,13 +254,15 @@ def summary_markdown(metrics: Mapping[str, Any]) -> str:
                     f"| {dataset['dataset']} | {method} | {k} | {row['precision']:.6f} | "
                     f"{row['recall']:.6f} | {row['f1']:.6f} | {row['f1'] - base:+.6f} |"
                 )
-    lines.extend([
-        "",
-        "## Descriptive selection",
-        "",
-        "| Dataset | Method | Best observed DEV k | Best F1 | k=2/3/5 saturated |",
-        "|---|---|---:|---:|---|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Descriptive selection",
+            "",
+            "| Dataset | Method | Best observed DEV k | Best F1 | k=2/3/5 saturated |",
+            "|---|---|---:|---:|---|",
+        ]
+    )
     for dataset in metrics["datasets"]:
         for method in ("gnn_only", "sageqa_final"):
             result = dataset["methods"][method]
@@ -349,11 +351,16 @@ def main() -> None:
                 )
                 scored = []
                 with torch.no_grad():
-                    for start in range(0, len(example["candidate_rows"]), args.candidate_batch_size):
+                    for start in range(
+                        0, len(example["candidate_rows"]), args.candidate_batch_size
+                    ):
                         batch = example["candidate_rows"][start : start + args.candidate_batch_size]
-                        probabilities = score_candidate_rows(
-                            model, encoded, batch, device
-                        )["probs"].detach().cpu().tolist()
+                        probabilities = (
+                            score_candidate_rows(model, encoded, batch, device)["probs"]
+                            .detach()
+                            .cpu()
+                            .tolist()
+                        )
                         for row, probability in zip(batch, probabilities):
                             item = dict(row)
                             item["score"] = float(probability)
@@ -409,7 +416,12 @@ def main() -> None:
                     "saturation_k_2_3_5": saturation(observed),
                 }
             output["datasets"].append(
-                {"dataset": dataset, "domain": domain, "dev_examples": example_count, "methods": methods}
+                {
+                    "dataset": dataset,
+                    "domain": domain,
+                    "dev_examples": example_count,
+                    "methods": methods,
+                }
             )
             metadata["datasets"][dataset] = {
                 "dev_path": str(dev_path),
@@ -438,9 +450,15 @@ def main() -> None:
     metadata["test_gold_accessed"] = False
     metadata["adaptive_k_ready"] = True
     metadata["adaptive_k_readiness_fields"] = [
-        "example_id", "domain", "method", "score_mode", "gold_explanations",
-        "ranked_candidates.rank", "ranked_candidates.score",
-        "ranked_candidates.adjusted_score", "ranked_candidates.subgraph_units",
+        "example_id",
+        "domain",
+        "method",
+        "score_mode",
+        "gold_explanations",
+        "ranked_candidates.rank",
+        "ranked_candidates.score",
+        "ranked_candidates.adjusted_score",
+        "ranked_candidates.subgraph_units",
         "prefix_evaluation",
     ]
     metadata["git_status_after"] = git_output("status", "--short").splitlines()

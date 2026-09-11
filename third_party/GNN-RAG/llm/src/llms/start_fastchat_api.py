@@ -79,17 +79,13 @@ def start_fastchat_api(model_names, model_path, conv_template, host, port):
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--model_name", type=str, default="Llama-2-7b-chat-hf")
-    argparser.add_argument(
-        "--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf"
-    )
+    argparser.add_argument("--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf")
     argparser.add_argument("--conv_template", type=str, default="llama-2")
     argparser.add_argument("--host", type=str, default="localhost")
     argparser.add_argument("--port", type=int, default=8000)
 
     args = argparser.parse_args()
-    start_fastchat_api(
-        args.model_name, args.model_path, args.conv_template, args.host, args.port
-    )
+    start_fastchat_api(args.model_name, args.model_path, args.conv_template, args.host, args.port)
 
     def exit_handler(signal, frame):
         sys.exit(0)

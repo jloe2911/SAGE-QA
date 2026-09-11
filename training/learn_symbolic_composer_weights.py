@@ -165,9 +165,7 @@ def parse_args() -> argparse.Namespace:
         description="Fit lightweight SymbolicComposer weights from support rows."
     )
     parser.add_argument("--train-path", required=True)
-    parser.add_argument(
-        "--output", default="checkpoints/symbolic_composer_weights.json"
-    )
+    parser.add_argument("--output", default="checkpoints/symbolic_composer_weights.json")
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--lr", type=float, default=0.02)
     parser.add_argument("--margin", type=float, default=0.05)
@@ -200,14 +198,10 @@ def main() -> None:
         initial_weights = [float(loaded.get(name, 0.0)) for name in FEATURE_NAMES]
     elif args.initial_weights:
         initial_weights = [
-            float(value.strip())
-            for value in args.initial_weights.split(",")
-            if value.strip()
+            float(value.strip()) for value in args.initial_weights.split(",") if value.strip()
         ]
         if len(initial_weights) != len(FEATURE_NAMES):
-            raise ValueError(
-                f"--initial-weights must contain {len(FEATURE_NAMES)} values"
-            )
+            raise ValueError(f"--initial-weights must contain {len(FEATURE_NAMES)} values")
 
     weights, diagnostics = fit_weights(
         rows=rows,

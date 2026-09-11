@@ -56,9 +56,7 @@ def tokenize(text: str) -> Set[str]:
 
 
 def get_question_text(row: Dict, input_format: str = "hybrid") -> str:
-    question = (
-        row.get("question") or row.get("NL Question") or row.get("nl_question") or ""
-    )
+    question = row.get("question") or row.get("NL Question") or row.get("nl_question") or ""
     abs_question = row.get("abs_question") or row.get("ABS Question") or ""
     sparql = row.get("sparql_query") or row.get("SPARQL Query") or ""
 
@@ -151,9 +149,7 @@ def get_gold_explanations(row: Dict) -> List[List[str]]:
     if gold_explanations:
         return [strip_tag_units(g) for g in gold_explanations if strip_tag_units(g)]
 
-    gold_units = strip_tag_units(
-        row.get("gold_support_units", []) or row.get("gold_units", [])
-    )
+    gold_units = strip_tag_units(row.get("gold_support_units", []) or row.get("gold_units", []))
     if gold_units:
         return [gold_units]
 
@@ -214,11 +210,7 @@ def set_scores(pred: List[str], gold_explanations: List[List[str]]) -> Dict:
 
         precision = inter / max(len(pred_set), 1)
         recall = inter / max(len(gold_set), 1)
-        f1 = (
-            0.0
-            if precision + recall == 0
-            else 2 * precision * recall / (precision + recall)
-        )
+        f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
         jaccard = inter / max(union, 1)
 
         exact = pred_set == gold_set
@@ -326,34 +318,22 @@ def compute_metrics(details: List[Dict]) -> Dict:
     return {
         "examples": len(details),
         "em@1": sum(1 for d in details if d["top1_exact_match_any_gold"]) / n,
-        "gold_contained@1": sum(
-            1 for d in details if d["top1_contains_any_gold_explanation"]
-        )
-        / n,
+        "gold_contained@1": sum(1 for d in details if d["top1_contains_any_gold_explanation"]) / n,
         "support_jaccard@1": sum(d["top1_best_jaccard_to_gold"] for d in details) / n,
         "support_f1@1": sum(d["top1_best_set_f1_to_gold"] for d in details) / n,
-        "support_precision@1": sum(d["top1_best_precision_to_gold"] for d in details)
-        / n,
+        "support_precision@1": sum(d["top1_best_precision_to_gold"] for d in details) / n,
         "support_recall@1": sum(d["top1_best_recall_to_gold"] for d in details) / n,
         "em@3": sum(1 for d in details if d["top3_exact_match_any_gold"]) / n,
-        "gold_contained@3": sum(
-            1 for d in details if d["top3_contains_any_gold_explanation"]
-        )
-        / n,
+        "gold_contained@3": sum(1 for d in details if d["top3_contains_any_gold_explanation"]) / n,
         "support_jaccard@3": sum(d["top3_best_jaccard_to_gold"] for d in details) / n,
         "support_f1@3": sum(d["top3_best_set_f1_to_gold"] for d in details) / n,
-        "support_precision@3": sum(d["top3_best_precision_to_gold"] for d in details)
-        / n,
+        "support_precision@3": sum(d["top3_best_precision_to_gold"] for d in details) / n,
         "support_recall@3": sum(d["top3_best_recall_to_gold"] for d in details) / n,
         "em@5": sum(1 for d in details if d["top5_exact_match_any_gold"]) / n,
-        "gold_contained@5": sum(
-            1 for d in details if d["top5_contains_any_gold_explanation"]
-        )
-        / n,
+        "gold_contained@5": sum(1 for d in details if d["top5_contains_any_gold_explanation"]) / n,
         "support_jaccard@5": sum(d["top5_best_jaccard_to_gold"] for d in details) / n,
         "support_f1@5": sum(d["top5_best_set_f1_to_gold"] for d in details) / n,
-        "support_precision@5": sum(d["top5_best_precision_to_gold"] for d in details)
-        / n,
+        "support_precision@5": sum(d["top5_best_precision_to_gold"] for d in details) / n,
         "support_recall@5": sum(d["top5_best_recall_to_gold"] for d in details) / n,
     }
 
@@ -380,9 +360,7 @@ def main():
     parser.add_argument(
         "--input-format", choices=["nl", "abs", "sparql", "hybrid"], default="hybrid"
     )
-    parser.add_argument(
-        "--support-size-mode", choices=["min_gold", "fixed"], default="min_gold"
-    )
+    parser.add_argument("--support-size-mode", choices=["min_gold", "fixed"], default="min_gold")
     parser.add_argument("--fixed-k", type=int, default=3)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--source-name", default=None)

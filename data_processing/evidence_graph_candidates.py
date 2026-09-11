@@ -18,20 +18,49 @@ GENERATOR_D_VERSION = "generator_d_frozen_v1"
 GENERATOR_D_VALIDATION_REPORT = (
     "outputs/development_runs/query_local_candidate_closure_v1/comparison.json"
 )
-GENERATOR_D_VALIDATION_SHA256 = (
-    "680EFCC8BB6AFAADCD0DD357F592331F8ED987C29635A866FEA555779C32EE5E"
-)
+GENERATOR_D_VALIDATION_SHA256 = "680EFCC8BB6AFAADCD0DD357F592331F8ED987C29635A866FEA555779C32EE5E"
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-_CAPITALIZED_RE = re.compile(
-    r"\b(?:[A-Z][A-Za-z0-9'-]*)(?:\s+[A-Z][A-Za-z0-9'-]*)*"
-)
+_CAPITALIZED_RE = re.compile(r"\b(?:[A-Z][A-Za-z0-9'-]*)(?:\s+[A-Z][A-Za-z0-9'-]*)*")
 _STOPWORDS = {
-    "about", "after", "also", "among", "because", "before", "being",
-    "between", "both", "could", "does", "from", "have", "into", "more",
-    "other", "over", "same", "such", "than", "that", "their", "there",
-    "these", "they", "this", "those", "through", "under", "what", "when",
-    "where", "which", "while", "with", "would", "were", "whose",
+    "about",
+    "after",
+    "also",
+    "among",
+    "because",
+    "before",
+    "being",
+    "between",
+    "both",
+    "could",
+    "does",
+    "from",
+    "have",
+    "into",
+    "more",
+    "other",
+    "over",
+    "same",
+    "such",
+    "than",
+    "that",
+    "their",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "through",
+    "under",
+    "what",
+    "when",
+    "where",
+    "which",
+    "while",
+    "with",
+    "would",
+    "were",
+    "whose",
 }
 
 
@@ -400,11 +429,7 @@ def _allocate_query_local_candidates(
     if capacity <= 0:
         return []
     ordered_anchors = _interleave_anchor_components(anchors, component_ids, graph)
-    positions = {
-        (anchor, size): 0
-        for anchor in ordered_anchors
-        for size in (1, 2, 3)
-    }
+    positions = {(anchor, size): 0 for anchor in ordered_anchors for size in (1, 2, 3)}
     selected: list[_State] = []
     selected_indices: set[tuple[int, ...]] = set()
     while len(selected) < capacity:
@@ -742,9 +767,7 @@ def query_local_candidate_closure(
             size: sorted(states.values(), key=lambda state: (-state.score, state.indices))
             for size, states in by_size.items()
         }
-        local_unique.update(
-            state.indices for states in lanes[anchor].values() for state in states
-        )
+        local_unique.update(state.indices for states in lanes[anchor].values() for state in states)
 
     retained_local = _allocate_query_local_candidates(
         lanes,
@@ -790,11 +813,7 @@ def query_local_candidate_closure(
             graph.units[index].unit_id
             for index in sorted(
                 explored
-                | {
-                    index
-                    for indices in progressive.candidate_indices
-                    for index in indices
-                },
+                | {index for indices in progressive.candidate_indices for index in indices},
                 key=lambda index: graph.units[index].unit_id,
             )
         ),

@@ -207,9 +207,7 @@ def build_prompt(question: str, support_units: List[str]) -> str:
             reasoning_lines.append(f"[{i}] Evidence -> {sent}")
 
     reasoning_context = (
-        "\n".join(reasoning_lines)
-        if reasoning_lines
-        else "No retrieved reasoning paths."
+        "\n".join(reasoning_lines) if reasoning_lines else "No retrieved reasoning paths."
     )
 
     return f"""You are answering a multi-hop question using retrieved reasoning paths.
@@ -348,9 +346,7 @@ def call_openai(prompt: str, model: str, temperature: float = 0.0) -> str:
     return response.choices[0].message.content
 
 
-def call_local_transformers(
-    prompt: str, model_name: str, max_new_tokens: int = 128
-) -> str:
+def call_local_transformers(prompt: str, model_name: str, max_new_tokens: int = 128) -> str:
     """
     Optional local generation fallback using transformers.
     This is slower and may be lower quality unless you use an instruction model.
@@ -365,9 +361,7 @@ def call_local_transformers(
     model.to(device)
     model.eval()
 
-    inputs = tokenizer(
-        prompt, return_tensors="pt", truncation=True, max_length=2048
-    ).to(device)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048).to(device)
 
     with torch.no_grad():
         output_ids = model.generate(
@@ -430,11 +424,7 @@ def generate_answers(
             predicted_answer, parsed, raw = ask(support_units)
             answer_source_top_k = top_k
 
-            if (
-                fallback_top_k
-                and fallback_top_k > top_k
-                and is_unknown_answer(predicted_answer)
-            ):
+            if fallback_top_k and fallback_top_k > top_k and is_unknown_answer(predicted_answer):
                 fallback_units = get_support_units(item, top_k=fallback_top_k)
                 if fallback_units != support_units:
                     fallback_answer, fallback_parsed, fallback_raw = ask(fallback_units)
@@ -496,9 +486,7 @@ def main():
     parser.add_argument("--output", type=str, required=True)
 
     parser.add_argument("--top-k", type=int, default=1)
-    parser.add_argument(
-        "--backend", type=str, choices=["openai", "local"], default="openai"
-    )
+    parser.add_argument("--backend", type=str, choices=["openai", "local"], default="openai")
 
     parser.add_argument(
         "--model",

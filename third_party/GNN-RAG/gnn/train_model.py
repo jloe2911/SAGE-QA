@@ -43,15 +43,11 @@ class Trainer_KBQA(object):
             self.decay_rate = 0.98
 
         if model_name == "ReaRev":
-            self.model = ReaRev(
-                self.args, len(self.entity2id), self.num_kb_relation, self.num_word
-            )
+            self.model = ReaRev(self.args, len(self.entity2id), self.num_kb_relation, self.num_word)
         elif model_name == "NSM":
             from models.NSM.nsm import NSM
 
-            self.model = NSM(
-                self.args, len(self.entity2id), self.num_kb_relation, self.num_word
-            )
+            self.model = NSM(self.args, len(self.entity2id), self.num_kb_relation, self.num_word)
         elif model_name == "GraftNet":
             from models.GraftNet.graftnet import GraftNet
 
@@ -59,9 +55,7 @@ class Trainer_KBQA(object):
                 self.args, len(self.entity2id), self.num_kb_relation, self.num_word
             )
         elif model_name == "NuTrea":
-            self.model = NuTrea(
-                self.args, len(self.entity2id), self.num_kb_relation, self.num_word
-            )
+            self.model = NuTrea(self.args, len(self.entity2id), self.num_kb_relation, self.num_word)
 
         if args["relation_word_emb"]:
             # self.model.use_rel_texts(self.rel_texts, self.rel_texts_inv)
@@ -149,9 +143,7 @@ class Trainer_KBQA(object):
                 self.scheduler.step()
 
             self.logger.info(
-                "Epoch: {}, loss : {:.4f}, time: {}".format(
-                    epoch + 1, loss, time.time() - st
-                )
+                "Epoch: {}, loss : {:.4f}, time: {}".format(epoch + 1, loss, time.time() - st)
             )
             self.logger.info(
                 "Training h1 : {:.4f}, f1 : {:.4f}".format(
@@ -160,13 +152,9 @@ class Trainer_KBQA(object):
             )
 
             if (epoch + 1) % eval_every == 0:
-                eval_f1, eval_h1, eval_em = self.evaluate(
-                    self.valid_data, self.test_batch_size
-                )
+                eval_f1, eval_h1, eval_em = self.evaluate(self.valid_data, self.test_batch_size)
                 self.logger.info(
-                    "EVAL F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                        eval_f1, eval_h1, eval_em
-                    )
+                    "EVAL F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_h1, eval_em)
                 )
                 dev_metrics.append(
                     {
@@ -194,13 +182,9 @@ class Trainer_KBQA(object):
                         do_test = True
 
                 if not self.args.get("train_dev_only", False):
-                    eval_f1, eval_h1, eval_em = self.evaluate(
-                        self.test_data, self.test_batch_size
-                    )
+                    eval_f1, eval_h1, eval_em = self.evaluate(self.test_data, self.test_batch_size)
                     self.logger.info(
-                        "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                            eval_f1, eval_h1, eval_em
-                        )
+                        "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_h1, eval_em)
                     )
                 # if do_test:
                 #     eval_f1, eval_h1 = self.evaluate(self.test_data, self.test_batch_size)
@@ -250,9 +234,7 @@ class Trainer_KBQA(object):
             )
             self.logger.info("Best h1 evaluation")
             self.logger.info(
-                "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                    eval_f1, eval_h1, eval_em
-                )
+                "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_h1, eval_em)
             )
         else:
             self.logger.info("Best h1 checkpoint not found; skipping h1 evaluation")
@@ -268,9 +250,7 @@ class Trainer_KBQA(object):
             )
             self.logger.info("Best f1 evaluation")
             self.logger.info(
-                "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                    eval_f1, eval_h1, eval_em
-                )
+                "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_h1, eval_em)
             )
         else:
             self.logger.info("Best f1 checkpoint not found; skipping f1 evaluation")
@@ -284,9 +264,7 @@ class Trainer_KBQA(object):
             self.test_data, self.test_batch_size, write_info=False
         )
         self.logger.info("Final evaluation")
-        self.logger.info(
-            "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_h1, eval_em)
-        )
+        self.logger.info("TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_h1, eval_em))
 
     def evaluate_single(self, filename):
         if filename is not None:
@@ -296,17 +274,13 @@ class Trainer_KBQA(object):
                 self.valid_data, self.test_batch_size, write_info=False
             )
             self.logger.info(
-                "EVAL F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                    eval_f1, eval_hits, eval_ems
-                )
+                "EVAL F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(eval_f1, eval_hits, eval_ems)
             )
         test_f1, test_hits, test_ems = self.evaluate(
             self.test_data, self.test_batch_size, write_info=True
         )
         self.logger.info(
-            "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(
-                test_f1, test_hits, test_ems
-            )
+            "TEST F1: {:.4f}, H1: {:.4f}, EM {:.4f}".format(test_f1, test_hits, test_ems)
         )
 
     def train_epoch(self):

@@ -18,9 +18,7 @@ class BaseGNNLayer(torch.nn.Module):
         self.normalized_gnn = args["normalized_gnn"]
 
     def build_matrix(self):
-        batch_heads, batch_rels, batch_tails, batch_ids, fact_ids, weight_list, _ = (
-            self.edge_list
-        )
+        batch_heads, batch_rels, batch_tails, batch_ids, fact_ids, weight_list, _ = self.edge_list
         num_fact = len(fact_ids)
         num_relation = self.num_relation
         batch_size = self.batch_size
@@ -31,12 +29,12 @@ class BaseGNNLayer(torch.nn.Module):
         head2fact = torch.LongTensor([fact_ids, batch_heads]).to(self.device)
         tail2fact = torch.LongTensor([fact_ids, batch_tails]).to(self.device)
         head2tail = torch.LongTensor([batch_heads, batch_tails]).to(self.device)
-        rel2fact = torch.LongTensor(
-            [fact_ids, batch_rels + batch_ids * num_relation]
-        ).to(self.device)
-        fact2rel = torch.LongTensor(
-            [batch_rels + batch_ids * num_relation, fact_ids]
-        ).to(self.device)
+        rel2fact = torch.LongTensor([fact_ids, batch_rels + batch_ids * num_relation]).to(
+            self.device
+        )
+        fact2rel = torch.LongTensor([batch_rels + batch_ids * num_relation, fact_ids]).to(
+            self.device
+        )
         self.batch_rels = torch.LongTensor(batch_rels).to(self.device)
         self.batch_ids = torch.LongTensor(batch_ids).to(self.device)
         self.batch_heads = torch.LongTensor(batch_heads).to(self.device)
@@ -82,9 +80,7 @@ class BaseGNNLayer(torch.nn.Module):
         max_local_entity = self.max_local_entity
         max_fact = self.max_fact
 
-        (e2f_batch, e2f_f, e2f_e, e2f_val), (f2e_batch, f2e_e, f2e_f, f2e_val) = (
-            self.edge_list2
-        )
+        (e2f_batch, e2f_f, e2f_e, e2f_val), (f2e_batch, f2e_e, f2e_f, f2e_val) = self.edge_list2
 
         entity2fact_index = torch.LongTensor([e2f_batch, e2f_f, e2f_e]).to(self.device)
         entity2fact_val = torch.FloatTensor(e2f_val).to(self.device)

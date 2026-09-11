@@ -257,9 +257,7 @@ def build_vocab(
     words = {"__unk__"}
     for samples in samples_by_split.values():
         for sample in samples:
-            words.update(
-                token.lower() for token in TOKEN_RE.findall(sample["question"])
-            )
+            words.update(token.lower() for token in TOKEN_RE.findall(sample["question"]))
             entities.update(sample["entities"])
             entities.update(sample["subgraph"]["entities"])
             for answer in sample["answers"]:

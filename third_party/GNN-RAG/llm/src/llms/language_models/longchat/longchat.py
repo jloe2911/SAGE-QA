@@ -25,9 +25,7 @@ class Longchat(BaseLanguageModel):
             help="HUGGING FACE MODEL or model path",
             default="lmsys/longchat-7b-16k",
         )
-        parser.add_argument(
-            "--max_new_tokens", type=int, help="max length", default=512
-        )
+        parser.add_argument("--max_new_tokens", type=int, help="max length", default=512)
         parser.add_argument("--dtype", choices=["fp32", "fp16", "bf16"], default="fp16")
         parser.add_argument(
             "--longchat_flash_attn",
@@ -54,9 +52,7 @@ class Longchat(BaseLanguageModel):
         return len(self.tokenizer.tokenize(text))
 
     def prepare_for_inference(self, **model_kwargs):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.args.model_path, use_fast=False
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.args.model_path, use_fast=False)
         maybe_monkey_patch(self.args)
         self.generator = pipeline(
             "text-generation",

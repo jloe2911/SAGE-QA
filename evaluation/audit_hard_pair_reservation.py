@@ -159,21 +159,27 @@ def audit_dataset(path: Path) -> dict:
             counts["no_duplicate_reserved_pairs"] += 1
 
         if len(examples) < 5:
-            examples.append({
-                "example_id": example_id,
-                "eligible": eligible,
-                "full_candidates": len(full_rows),
-                "sampled_candidates": len(reserved),
-                "sampled_pairs": len(reserved_pairs),
-                "candidate_displacements": missing_reservations,
-            })
+            examples.append(
+                {
+                    "example_id": example_id,
+                    "eligible": eligible,
+                    "full_candidates": len(full_rows),
+                    "sampled_candidates": len(reserved),
+                    "sampled_pairs": len(reserved_pairs),
+                    "candidate_displacements": missing_reservations,
+                }
+            )
 
     result_counts = dict(counts)
     eligible_count = result_counts.get("eligible_examples", 0)
     return {
         "counts": result_counts,
-        "reserved_candidate_inclusion_rate": result_counts.get("candidate_reserved_pair_included", 0) / max(eligible_count, 1),
-        "reserved_margin_pair_inclusion_rate": result_counts.get("margin_reserved_pair_included", 0) / max(eligible_count, 1),
+        "reserved_candidate_inclusion_rate": result_counts.get(
+            "candidate_reserved_pair_included", 0
+        )
+        / max(eligible_count, 1),
+        "reserved_margin_pair_inclusion_rate": result_counts.get("margin_reserved_pair_included", 0)
+        / max(eligible_count, 1),
         "sample_examples": examples,
     }
 
@@ -184,7 +190,8 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "outputs/final_results/production_generator_d_v2_freeze/implementation_invariance_gate.json",
+        default=ROOT
+        / "outputs/final_results/production_generator_d_v2_freeze/implementation_invariance_gate.json",
     )
     args = parser.parse_args()
     report = {
@@ -211,9 +218,15 @@ def main() -> None:
         report["datasets"][dataset] = result
         report["accessed_files"].append(str(path.relative_to(ROOT)))
 
-    total_eligible = sum(d["counts"].get("eligible_examples", 0) for d in report["datasets"].values())
-    total_candidate = sum(d["counts"].get("candidate_reserved_pair_included", 0) for d in report["datasets"].values())
-    total_pair = sum(d["counts"].get("margin_reserved_pair_included", 0) for d in report["datasets"].values())
+    total_eligible = sum(
+        d["counts"].get("eligible_examples", 0) for d in report["datasets"].values()
+    )
+    total_candidate = sum(
+        d["counts"].get("candidate_reserved_pair_included", 0) for d in report["datasets"].values()
+    )
+    total_pair = sum(
+        d["counts"].get("margin_reserved_pair_included", 0) for d in report["datasets"].values()
+    )
     report["global"] = {
         "eligible_examples": total_eligible,
         "reserved_candidate_inclusion_rate": total_candidate / max(total_eligible, 1),

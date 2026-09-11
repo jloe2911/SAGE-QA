@@ -44,9 +44,7 @@ class BERTTokenizer:
 
         self.q_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         self.max_query_word = max_query_word
-        self.num_word = self.q_tokenizer.encode("[UNK]")[
-            0
-        ]  # len(self.q_tokenizer.vocab.keys())
+        self.num_word = self.q_tokenizer.encode("[UNK]")[0]  # len(self.q_tokenizer.vocab.keys())
 
     def tokenize(self, question):
         query_text = np.full(self.max_query_word, 0, dtype=int)

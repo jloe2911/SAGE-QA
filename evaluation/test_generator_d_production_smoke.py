@@ -27,27 +27,34 @@ from training.train_gnn_subgraph_retriever import prepare_examples
 
 
 def _bytes(value) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def _assert_candidate_bounds(candidates) -> None:
     assert candidates
     assert len(candidates) <= GENERATOR_D_CONFIG.max_candidates
-    assert all(1 <= len(candidate) <= GENERATOR_D_CONFIG.max_support_size for candidate in candidates)
+    assert all(
+        1 <= len(candidate) <= GENERATOR_D_CONFIG.max_support_size for candidate in candidates
+    )
 
 
 def _smoke_record(name: str, candidates) -> None:
-    print(json.dumps({
-        "dataset": name,
-        "candidate_count": len(candidates),
-        "candidate_size_min": min(map(len, candidates)),
-        "candidate_size_max": max(map(len, candidates)),
-        "candidate_digest": hashlib.sha256(_bytes(candidates)).hexdigest(),
-        "gold_deleted_identical": True,
-        "gnn_preparation": "accepted",
-    }, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "dataset": name,
+                "candidate_count": len(candidates),
+                "candidate_size_min": min(map(len, candidates)),
+                "candidate_size_max": max(map(len, candidates)),
+                "candidate_digest": hashlib.sha256(_bytes(candidates)).hexdigest(),
+                "gold_deleted_identical": True,
+                "gnn_preparation": "accepted",
+            },
+            sort_keys=True,
+        )
+    )
 
 
 @pytest.mark.parametrize("name", ["HotpotQA", "2WikiMultiHopQA"])
@@ -85,7 +92,10 @@ def test_generator_d_real_text_smoke_is_gold_invariant_and_gnn_compatible(name):
     test_rows = materializer(normal, supporting_facts=None, max_subgraph_size=6)
     assert test_rows
     assert not {
-        "gold_support_units", "raw_supporting_facts", "label", "rank_target",
+        "gold_support_units",
+        "raw_supporting_facts",
+        "label",
+        "rank_target",
         "best_set_f1_to_gold",
     }.intersection(test_rows[0])
 
@@ -109,14 +119,10 @@ def test_generator_d_real_text_smoke_is_gold_invariant_and_gnn_compatible(name):
     _smoke_record(name, normal["candidates"])
 
 
-@pytest.mark.parametrize(
-    "name", ["Family_2hop", "Pizza_100_2hop", "OWL2Bench_2hop"]
-)
+@pytest.mark.parametrize("name", ["Family_2hop", "Pizza_100_2hop", "OWL2Bench_2hop"])
 def test_generator_d_real_ontology_smoke_is_gold_invariant_and_gnn_compatible(name):
     group_index, qa_index, item, qa = onto_rows(name)[0]
-    question = str(
-        qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or ""
-    )
+    question = str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or "")
     sparql = str(qa.get("SPARQL Query") or "")
     kwargs = {
         "question": question,
@@ -169,7 +175,10 @@ def test_generator_d_real_ontology_smoke_is_gold_invariant_and_gnn_compatible(na
     )
     assert rows
     assert not {
-        "gold_explanations", "gold_units", "label", "rank_target",
+        "gold_explanations",
+        "gold_units",
+        "label",
+        "rank_target",
         "best_set_f1_to_gold",
     }.intersection(rows[0])
     assert prepare_examples(rows[:4], candidate_selection="inference")

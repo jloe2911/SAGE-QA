@@ -61,7 +61,9 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def candidate_key(dataset: str, example_id: str, units: list[str]) -> tuple[str, str, tuple[str, ...]]:
+def candidate_key(
+    dataset: str, example_id: str, units: list[str]
+) -> tuple[str, str, tuple[str, ...]]:
     return dataset, example_id, tuple(str(unit) for unit in units)
 
 
@@ -111,7 +113,9 @@ def load_candidate_rows(
                         "question": raw.get("question", ""),
                         "sparql_query": raw.get("sparql_query", ""),
                         "subgraph_units": list(raw.get("subgraph_units", []) or []),
-                        "subgraph_size": int(raw.get("subgraph_size", len(raw.get("subgraph_units", []) or []))),
+                        "subgraph_size": int(
+                            raw.get("subgraph_size", len(raw.get("subgraph_units", []) or []))
+                        ),
                         "graph_context_units": list(raw.get("graph_context_units", []) or []),
                         "symbolic_features": list(raw.get("symbolic_features", []) or []),
                     }
@@ -212,7 +216,7 @@ def ontology_case(
 def pct(value: dict[str, Any]) -> str:
     if value["frequency"] is None:
         return "not defined"
-    return f'{value["count"]}/{value["denominator"]} ({100.0 * value["frequency"]:.1f}%)'
+    return f"{value['count']}/{value['denominator']} ({100.0 * value['frequency']:.1f}%)"
 
 
 def markdown_table(summary: dict[str, Any]) -> list[str]:
@@ -227,12 +231,14 @@ def main() -> None:
     parser.add_argument(
         "--cohorts",
         type=Path,
-        default=ROOT / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/fixed_vs_harmed.json",
+        default=ROOT
+        / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/fixed_vs_harmed.json",
     )
     parser.add_argument(
         "--component-analysis",
         type=Path,
-        default=ROOT / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/symbolic_component_analysis.json",
+        default=ROOT
+        / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev/symbolic_component_analysis.json",
     )
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
     parser.add_argument(
@@ -260,7 +266,9 @@ def main() -> None:
     promoted_components = {}
     for item in component_artifact["changed_candidates"]:
         if item.get("symbolic_top5_rank") == 1:
-            promoted_components[candidate_key(item["dataset"], item["example_id"], item["subgraph_units"])] = item
+            promoted_components[
+                candidate_key(item["dataset"], item["example_id"], item["subgraph_units"])
+            ] = item
 
     needed = {
         candidate_key(row["dataset"], row["example_id"], row["symbolic_top1_units"])
@@ -443,17 +451,24 @@ def main() -> None:
     for name, (kind, content) in outputs.items():
         path = args.output_dir / name
         if kind == "json":
-            path.write_text(json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            path.write_text(
+                json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
         else:
             path.write_text(str(content), encoding="utf-8")
 
-    print(json.dumps({
-        "cohorts": dict(counts),
-        "domain_cohorts": comparison_output["domain_cohorts"],
-        "proof_condition": {"fixes": proof_fix, "harms": proof_harm},
-        "decision": decision["outcome"],
-        "output_dir": str(args.output_dir),
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "cohorts": dict(counts),
+                "domain_cohorts": comparison_output["domain_cohorts"],
+                "proof_condition": {"fixes": proof_fix, "harms": proof_harm},
+                "decision": decision["outcome"],
+                "output_dir": str(args.output_dir),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

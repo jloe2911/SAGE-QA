@@ -176,8 +176,7 @@ def parse_rdf_graph(owl_context: str) -> Graph:
             errors.append(f"{rdf_format}: {exc}")
 
     raise ValueError(
-        "Could not parse OWL Context as Turtle or RDF/XML. "
-        f"Parser errors: {'; '.join(errors)}"
+        f"Could not parse OWL Context as Turtle or RDF/XML. Parser errors: {'; '.join(errors)}"
     )
 
 
@@ -240,10 +239,7 @@ def parse_owl_context(owl_context: str) -> List[str]:
             if isinstance(member, URIRef)
         ]
         if chain:
-            add(
-                f"ObjectPropertyChain({','.join(chain)}->"
-                f"{local_name(str(super_property))})"
-            )
+            add(f"ObjectPropertyChain({','.join(chain)}->{local_name(str(super_property))})")
 
     return axioms
 
@@ -472,11 +468,7 @@ def set_scores(pred: List[str], gold_explanations: List[List[str]]) -> Dict:
         inter = len(pred_set & gold_set)
         precision = inter / max(len(pred_set), 1)
         recall = inter / max(len(gold_set), 1)
-        f1 = (
-            0.0
-            if precision + recall == 0
-            else 2 * precision * recall / (precision + recall)
-        )
+        f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
         jaccard = inter / max(len(pred_set | gold_set), 1)
         exact = pred_set == gold_set
         contains = gold_set.issubset(pred_set)
@@ -495,9 +487,7 @@ def set_scores(pred: List[str], gold_explanations: List[List[str]]) -> Dict:
             )
 
         best["exact_match_any_gold"] = best["exact_match_any_gold"] or exact
-        best["contains_any_gold_explanation"] = (
-            best["contains_any_gold_explanation"] or contains
-        )
+        best["contains_any_gold_explanation"] = best["contains_any_gold_explanation"] or contains
         best["contained_in_any_gold_explanation"] = (
             best["contained_in_any_gold_explanation"] or contained
         )
@@ -575,9 +565,7 @@ def answer_type_for(item: Dict, qa: Dict | None = None) -> str:
     return str(qa.get("Answer Type") or item.get("Answer Type") or "").strip()
 
 
-def build_split_map(
-    groups: List[Dict], train_ratio: float, dev_ratio: float
-) -> Dict[int, str]:
+def build_split_map(groups: List[Dict], train_ratio: float, dev_ratio: float) -> Dict[int, str]:
     if not 0.0 <= train_ratio <= 1.0:
         raise ValueError(f"train_ratio must be in [0, 1], got {train_ratio}")
     if not 0.0 <= dev_ratio <= 1.0:
@@ -683,10 +671,7 @@ def build_rows_for_qa(
 ) -> List[Dict]:
     sparql_query = str(qa.get("SPARQL Query") or "")
     question = str(
-        qa.get("NL Question")
-        or qa.get("ABS Question")
-        or qa.get("Task ID")
-        or sparql_query
+        qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or sparql_query
     )
     generated = generate_ontology_candidates(
         question=question,
@@ -725,9 +710,7 @@ def build_rows_for_qa(
     for generation_rank, combo in enumerate(frozen_candidate_subgraphs):
         subgraph_units = list(combo)
         scores = set_scores(subgraph_units, gold_explanations)
-        label = int(
-            scores["exact_match_any_gold"] or scores["contains_any_gold_explanation"]
-        )
+        label = int(scores["exact_match_any_gold"] or scores["contains_any_gold_explanation"])
 
         row = {
             "example_id": (
@@ -743,9 +726,7 @@ def build_rows_for_qa(
             "group_index": group_index,
             "qa_index": qa_index,
             "subgraph_node_ids": [
-                candidate_units.index(unit)
-                for unit in subgraph_units
-                if unit in candidate_units
+                candidate_units.index(unit) for unit in subgraph_units if unit in candidate_units
             ],
             "subgraph_units": subgraph_units,
             "subgraph_size": len(subgraph_units),
@@ -763,14 +744,16 @@ def build_rows_for_qa(
             "builder_version": BUILDER_VERSION,
         }
         if attach_gold:
-            row.update({
-                "gold_explanations": gold_explanations,
-                "gold_units": gold_explanations[0],
-                "gold_context_coverage": gold_context_coverage,
-                **scores,
-                "label": label,
-                "rank_target": float(scores["best_set_f1_to_gold"]),
-            })
+            row.update(
+                {
+                    "gold_explanations": gold_explanations,
+                    "gold_units": gold_explanations[0],
+                    "gold_context_coverage": gold_context_coverage,
+                    **scores,
+                    "label": label,
+                    "rank_target": float(scores["best_set_f1_to_gold"]),
+                }
+            )
 
         rows.append(row)
 
@@ -789,12 +772,7 @@ def build_answer_only_row(
     max_context_units: int,
 ) -> Dict:
     sparql_query = str(qa.get("SPARQL Query") or "")
-    question = (
-        qa.get("NL Question")
-        or qa.get("ABS Question")
-        or qa.get("Task ID")
-        or sparql_query
-    )
+    question = qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or sparql_query
     question = str(question)
 
     context_axioms = parse_owl_context(item["OWL Context"])
@@ -832,10 +810,7 @@ def empty_splits() -> Dict[str, List[Dict]]:
 
 
 def assert_disjoint_output_ids(splits: Dict[str, List[Dict]]) -> Dict[str, List[str]]:
-    ids = {
-        split: {str(row["example_id"]) for row in rows}
-        for split, rows in splits.items()
-    }
+    ids = {split: {str(row["example_id"]) for row in rows} for split, rows in splits.items()}
     overlaps = {
         "train_dev": sorted(ids["train"] & ids["dev"]),
         "train_test": sorted(ids["train"] & ids["test"]),
@@ -928,7 +903,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", default="data")
     parser.add_argument(
-        "--min-subgraph-size", type=int, default=1,
+        "--min-subgraph-size",
+        type=int,
+        default=1,
         help="Legacy compatibility option; frozen Generator D always starts at size 1.",
     )
     parser.add_argument(
@@ -938,7 +915,9 @@ def parse_args() -> argparse.Namespace:
         help="Legacy compatibility option; frozen Generator D always uses size 6.",
     )
     parser.add_argument(
-        "--max-context-units", type=int, default=40,
+        "--max-context-units",
+        type=int,
+        default=40,
         help="Legacy compatibility option; Generator D adapts the full OWL context.",
     )
     parser.add_argument("--max-negative-per-example", type=int, default=200)
@@ -996,9 +975,7 @@ def main() -> None:
                 rows,
             )
             combined[split_name].extend(rows)
-        source_path = next(
-            Path(path) for path in args.input_json if Path(path).stem == source_name
-        )
+        source_path = next(Path(path) for path in args.input_json if Path(path).stem == source_name)
         split_ids = {
             split_name: list(dict.fromkeys(row["example_id"] for row in rows))
             for split_name, rows in splits.items()
@@ -1027,9 +1004,7 @@ def main() -> None:
     for source_name, splits in answer_only_by_source.items():
         for split_name, rows in splits.items():
             write_jsonl(
-                output_dir
-                / source_name
-                / f"{split_name}_answer_only_no_explanation.jsonl",
+                output_dir / source_name / f"{split_name}_answer_only_no_explanation.jsonl",
                 rows,
             )
             combined_answer_only[split_name].extend(rows)
@@ -1038,9 +1013,7 @@ def main() -> None:
         for split_name, rows in combined.items():
             write_jsonl(output_dir / f"{split_name}_subgraph_retrieval.jsonl", rows)
         for split_name, rows in combined_answer_only.items():
-            write_jsonl(
-                output_dir / f"{split_name}_answer_only_no_explanation.jsonl", rows
-            )
+            write_jsonl(output_dir / f"{split_name}_answer_only_no_explanation.jsonl", rows)
 
 
 if __name__ == "__main__":

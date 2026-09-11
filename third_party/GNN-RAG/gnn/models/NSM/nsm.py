@@ -42,16 +42,10 @@ class NSM(BaseModel):
 
         self.linear_dropout = args["linear_dropout"]
 
-        self.entity_linear = nn.Linear(
-            in_features=self.ent_dim, out_features=entity_dim
-        )
+        self.entity_linear = nn.Linear(in_features=self.ent_dim, out_features=entity_dim)
 
-        self.relation_linear1 = nn.Linear(
-            in_features=self.rel_dim, out_features=entity_dim
-        )
-        self.relation_linear2 = nn.Linear(
-            in_features=self.rel_dim, out_features=entity_dim
-        )
+        self.relation_linear1 = nn.Linear(in_features=self.rel_dim, out_features=entity_dim)
+        self.relation_linear2 = nn.Linear(in_features=self.rel_dim, out_features=entity_dim)
 
         self.kg_lin = nn.Linear(in_features=entity_dim, out_features=entity_dim)
         self.softmax_d1 = nn.Softmax(dim=1)
@@ -83,18 +77,12 @@ class NSM(BaseModel):
         self.reasoning = NSMLayer(args, num_entity, num_relation, entity_dim)
         self.reasoning2 = NSMLayer(args, num_entity, num_relation, entity_dim)
         if self.lambda_back != 0.0 or self.lambda_constrain != 0.0:
-            self.reasoning_back = NSMLayer_back(
-                args, num_entity, num_relation, entity_dim
-            )
+            self.reasoning_back = NSMLayer_back(args, num_entity, num_relation, entity_dim)
         if args["lm"] == "lstm":
             self.instruction = LSTMInstruction(args, self.word_embedding, self.num_word)
         else:
-            self.instruction = BERTInstruction(
-                args, self.word_embedding, self.num_word, args["lm"]
-            )
-            self.relation_linear = nn.Linear(
-                in_features=self.word_dim, out_features=entity_dim
-            )
+            self.instruction = BERTInstruction(args, self.word_embedding, self.num_word, args["lm"])
+            self.relation_linear = nn.Linear(in_features=self.word_dim, out_features=entity_dim)
 
     def get_ent_init(self, local_entity, kb_adj_mat, rel_features):
         if self.encode_type:
@@ -138,9 +126,7 @@ class NSM(BaseModel):
         rel_features = self.get_rel_feature()
         # print(self.rel_features1)
         # self.rel_features2 = self.get_rel_feature2()
-        self.local_entity_emb = self.get_ent_init(
-            local_entity, kb_adj_mat, rel_features
-        )
+        self.local_entity_emb = self.get_ent_init(local_entity, kb_adj_mat, rel_features)
         # self.kge_entity_emb = self.get_ent_init2(local_entity, kb_adj_mat, self.rel_features)
         self.curr_dist = curr_dist
         self.dist_history = []
@@ -171,8 +157,7 @@ class NSM(BaseModel):
         # loss_kl_2 = self.kld_loss_1(log_mean_dist, dist_2)
         # print(loss_kl_1.item(), loss_kl_2.item())
         loss = 0.5 * (
-            self.kld_loss_1(log_mean_dist, dist_1)
-            + self.kld_loss_1(log_mean_dist, dist_2)
+            self.kld_loss_1(log_mean_dist, dist_1) + self.kld_loss_1(log_mean_dist, dist_2)
         )
         return loss
 
@@ -200,9 +185,7 @@ class NSM(BaseModel):
         return back_loss, constrain_loss
 
     def calc_loss_label(self, curr_dist, teacher_dist, label_valid):
-        tp_loss = self.get_loss(
-            pred_dist=curr_dist, answer_dist=teacher_dist, reduction="none"
-        )
+        tp_loss = self.get_loss(pred_dist=curr_dist, answer_dist=teacher_dist, reduction="none")
         tp_loss = tp_loss * label_valid
         cur_loss = torch.sum(tp_loss) / curr_dist.size(0)
         return cur_loss
@@ -217,20 +200,12 @@ class NSM(BaseModel):
             true_batch_id,
             answer_dist,
         ) = batch
-        local_entity = (
-            torch.from_numpy(local_entity).type("torch.LongTensor").to(self.device)
-        )
+        local_entity = torch.from_numpy(local_entity).type("torch.LongTensor").to(self.device)
 
         # local_entity_mask = (local_entity != self.num_entity).float()
-        query_entities = (
-            torch.from_numpy(query_entities).type("torch.FloatTensor").to(self.device)
-        )
-        answer_dist = (
-            torch.from_numpy(answer_dist).type("torch.FloatTensor").to(self.device)
-        )
-        seed_dist = (
-            torch.from_numpy(seed_dist).type("torch.FloatTensor").to(self.device)
-        )
+        query_entities = torch.from_numpy(query_entities).type("torch.FloatTensor").to(self.device)
+        answer_dist = torch.from_numpy(answer_dist).type("torch.FloatTensor").to(self.device)
+        seed_dist = torch.from_numpy(seed_dist).type("torch.FloatTensor").to(self.device)
         current_dist = Variable(seed_dist, requires_grad=True)
 
         q_input = torch.from_numpy(query_text).type("torch.LongTensor").to(self.device)
@@ -271,9 +246,7 @@ class NSM(BaseModel):
         self.dist_history2.append(self.curr_dist)
 
         for i in range(self.num_step):
-            self.curr_dist = self.reasoning(
-                self.curr_dist, self.instruction_list[i], step=i
-            )
+            self.curr_dist = self.reasoning(self.curr_dist, self.instruction_list[i], step=i)
             self.dist_history.append(self.curr_dist)
 
         """
@@ -304,11 +277,7 @@ class NSM(BaseModel):
 
         if self.lambda_back > 0.0 or self.lambda_constrain > 0.0:
             back_loss, constrain_loss = self.calc_loss_backward(case_valid)
-            loss = (
-                loss
-                + self.lambda_back * back_loss
-                + self.lambda_constrain * constrain_loss
-            )
+            loss = loss + self.lambda_back * back_loss + self.lambda_constrain * constrain_loss
         pred = torch.max(pred_dist, dim=1)[1]
         if training:
             h1, f1 = self.get_eval_metric(pred_dist, answer_dist)

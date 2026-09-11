@@ -118,12 +118,7 @@ def load_llm_answers(path: str) -> Dict[str, str]:
 
         hp_id = get_hotpot_id(ex_id)
 
-        answer = (
-            row.get("predicted_answer")
-            or row.get("answer")
-            or row.get("prediction")
-            or ""
-        )
+        answer = row.get("predicted_answer") or row.get("answer") or row.get("prediction") or ""
 
         answers[hp_id] = str(answer)
 

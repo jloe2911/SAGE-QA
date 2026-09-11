@@ -36,9 +36,7 @@ class LSTMInstruction(BaseInstruction):
 
     def encode_question(self, query_text, store=True):
         batch_size = query_text.size(0)
-        query_word_emb = self.word_embedding(
-            query_text
-        )  # batch_size, max_query_word, word_dim
+        query_word_emb = self.word_embedding(query_text)  # batch_size, max_query_word, word_dim
         query_hidden_emb, (h_n, c_n) = self.node_encoder(
             self.lstm_drop(query_word_emb),
             self.init_hidden(1, batch_size, self.entity_dim),
@@ -46,9 +44,7 @@ class LSTMInstruction(BaseInstruction):
         if store:
             self.instruction_hidden = h_n
             self.instruction_mem = c_n
-            self.query_node_emb = h_n.squeeze(dim=0).unsqueeze(
-                dim=1
-            )  # batch_size, 1, entity_dim
+            self.query_node_emb = h_n.squeeze(dim=0).unsqueeze(dim=1)  # batch_size, 1, entity_dim
             self.query_hidden_emb = query_hidden_emb
             self.query_mask = (query_text != self.num_word).float()
             return query_hidden_emb, self.query_node_emb

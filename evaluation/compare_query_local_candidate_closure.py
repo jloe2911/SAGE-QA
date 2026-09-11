@@ -100,9 +100,7 @@ def _d_failure_class(
     if min(len(gold) for gold in relevant) >= 3:
         return "required_units_require_size_ge_3"
     if not any(
-        len(candidate) == 2 and gold <= candidate
-        for gold in relevant
-        for candidate in pre_cap_sets
+        len(candidate) == 2 and gold <= candidate for gold in relevant for candidate in pre_cap_sets
     ):
         return "required_units_never_together_in_connected_size_2_candidate"
     return "other"
@@ -220,9 +218,7 @@ def evaluate_text(
         current = _canonical(generated["candidates"])
 
         started = time.perf_counter()
-        graph = build_text_evidence_graph(
-            flattener(clean), str(clean.get("question", ""))
-        )
+        graph = build_text_evidence_graph(flattener(clean), str(clean.get("question", "")))
         graph_seconds = time.perf_counter() - started
         started = time.perf_counter()
         protected_result = progressive_connected_supports(graph, PROTECTED_CONFIG)
@@ -285,13 +281,15 @@ def evaluate_text(
         deleted_graph = build_text_evidence_graph(
             flattener(deleted_clean), str(deleted_clean.get("question", ""))
         )
-        if protected_result.candidates != progressive_connected_supports(
-            deleted_graph, PROTECTED_CONFIG
-        ).candidates:
+        if (
+            protected_result.candidates
+            != progressive_connected_supports(deleted_graph, PROTECTED_CONFIG).candidates
+        ):
             mismatches["protected"].append(generated["example_id"])
-        if closure_result.candidates != query_local_candidate_closure(
-            deleted_graph, D_CONFIG
-        ).candidates:
+        if (
+            closure_result.candidates
+            != query_local_candidate_closure(deleted_graph, D_CONFIG).candidates
+        ):
             mismatches["closure"].append(generated["example_id"])
     return rows, _invariance_summary(
         len(rows), mismatches["current"], mismatches["protected"], mismatches["closure"]
@@ -375,13 +373,15 @@ def evaluate_ontology(name: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         ):
             mismatches["current"].append(example_id)
         deleted_graph = build_ontology_evidence_graph(context_axioms, question, sparql)
-        if protected_result.candidates != progressive_connected_supports(
-            deleted_graph, PROTECTED_CONFIG
-        ).candidates:
+        if (
+            protected_result.candidates
+            != progressive_connected_supports(deleted_graph, PROTECTED_CONFIG).candidates
+        ):
             mismatches["protected"].append(example_id)
-        if closure_result.candidates != query_local_candidate_closure(
-            deleted_graph, D_CONFIG
-        ).candidates:
+        if (
+            closure_result.candidates
+            != query_local_candidate_closure(deleted_graph, D_CONFIG).candidates
+        ):
             mismatches["closure"].append(example_id)
     return rows, _invariance_summary(
         len(rows), mismatches["current"], mismatches["protected"], mismatches["closure"]
@@ -390,9 +390,7 @@ def evaluate_ontology(name: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
 
 def _summary(rows: Sequence[Mapping[str, Any]], prefix: str) -> dict[str, Any]:
     summary = _method_summary(rows, prefix)
-    sizes = collections.Counter(
-        size for row in rows for size in row[f"{prefix}_candidate_sizes"]
-    )
+    sizes = collections.Counter(size for row in rows for size in row[f"{prefix}_candidate_sizes"])
     total = sum(sizes.values())
     summary["candidate_size_proportions"] = {
         str(size): count / total for size, count in sorted(sizes.items())
@@ -410,9 +408,7 @@ def _closure_failure_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any
     return {
         "eligible_examples": eligible,
         "counts": dict(sorted(classes.items())),
-        "rates_within_eligible": {
-            key: value / eligible for key, value in sorted(classes.items())
-        }
+        "rates_within_eligible": {key: value / eligible for key, value in sorted(classes.items())}
         if eligible
         else {},
         "example_ids": {

@@ -220,9 +220,7 @@ def prepare_examples(
                 f"Candidate artifact {example_id!r} reports gold access during generation."
             )
         if dataset.lower() in {"2wikimultihopqa", "2wiki"}:
-            validate_clean_kg_backend(
-                str(first.get("kg_construction_method") or "context_only")
-            )
+            validate_clean_kg_backend(str(first.get("kg_construction_method") or "context_only"))
 
         # Freeze the inference cohort before any target/label/diagnostic field
         # is read below. Training keeps its supervised sampler after target
@@ -250,9 +248,8 @@ def prepare_examples(
             if _is_text_dataset(row):
                 kg_bridge_units = row.get("graph_context_units", []) or []
             else:
-                kg_bridge_units = (
-                    row.get("graph_context_units", [])
-                    or row.get("kg_evidence_units", [])
+                kg_bridge_units = row.get("graph_context_units", []) or row.get(
+                    "kg_evidence_units", []
                 )
 
             if _is_text_dataset(row):
@@ -269,66 +266,52 @@ def prepare_examples(
                     subgraph_units=subgraph_units,
                     use_gold_features=False,
                     exact_match_any_gold=row.get("exact_match_any_gold", False),
-                    contains_any_gold_explanation=row.get(
-                        "contains_any_gold_explanation", False
-                    ),
+                    contains_any_gold_explanation=row.get("contains_any_gold_explanation", False),
                 )
 
             candidate_row = {
-                    "example_id": example_id,
-                    "dataset": dataset,
-                    "hop": hop,
-                    "answer": answer,
-                    "answer_type": answer_type,
-                    "question": str(row.get("question") or question),
-                    "sparql_query": str(row.get("sparql_query") or sparql_query),
-                    "subgraph_units": subgraph_units,
-                    "subgraph_node_ids": node_ids,
-                    "subgraph_size": len(subgraph_units),
-                    "graph_context_units": kg_bridge_units,
-                    "symbolic_features": symbolic_features,
-                    # Ranking supervision
-                    "rank_target": target,
-                    "label": binary_label,
-                    # Original/debug fields
-                    "gold_support_units": gold_support_units_from_row(row),
-                    "gold_explanations": gold_explanations_from_row(row),
-                    "best_matching_gold_explanation": row.get(
-                        "best_matching_gold_explanation", []
-                    ),
-                    "best_matching_gold_index": row.get("best_matching_gold_index", -1),
-                    "best_jaccard_to_gold": float(row.get("best_jaccard_to_gold", 0.0)),
-                    "best_set_f1_to_gold": float(row.get("best_set_f1_to_gold", 0.0)),
-                    "best_set_precision_to_gold": float(
-                        row.get("best_set_precision_to_gold", 0.0)
-                    ),
-                    "best_set_recall_to_gold": float(
-                        row.get("best_set_recall_to_gold", 0.0)
-                    ),
-                    "exact_match_any_gold": bool(
-                        row.get("exact_match_any_gold", False)
-                    ),
-                    "contains_any_gold_explanation": bool(
-                        row.get("contains_any_gold_explanation", False)
-                    ),
-                    "dataset": dataset,
-                    "hop": hop,
-                    "answer": "",
-                    "answer_type": answer_type,
-                    "task_type": row.get("task_type", row.get("Task Type", "")),
-                }
+                "example_id": example_id,
+                "dataset": dataset,
+                "hop": hop,
+                "answer": answer,
+                "answer_type": answer_type,
+                "question": str(row.get("question") or question),
+                "sparql_query": str(row.get("sparql_query") or sparql_query),
+                "subgraph_units": subgraph_units,
+                "subgraph_node_ids": node_ids,
+                "subgraph_size": len(subgraph_units),
+                "graph_context_units": kg_bridge_units,
+                "symbolic_features": symbolic_features,
+                # Ranking supervision
+                "rank_target": target,
+                "label": binary_label,
+                # Original/debug fields
+                "gold_support_units": gold_support_units_from_row(row),
+                "gold_explanations": gold_explanations_from_row(row),
+                "best_matching_gold_explanation": row.get("best_matching_gold_explanation", []),
+                "best_matching_gold_index": row.get("best_matching_gold_index", -1),
+                "best_jaccard_to_gold": float(row.get("best_jaccard_to_gold", 0.0)),
+                "best_set_f1_to_gold": float(row.get("best_set_f1_to_gold", 0.0)),
+                "best_set_precision_to_gold": float(row.get("best_set_precision_to_gold", 0.0)),
+                "best_set_recall_to_gold": float(row.get("best_set_recall_to_gold", 0.0)),
+                "exact_match_any_gold": bool(row.get("exact_match_any_gold", False)),
+                "contains_any_gold_explanation": bool(
+                    row.get("contains_any_gold_explanation", False)
+                ),
+                "dataset": dataset,
+                "hop": hop,
+                "answer": "",
+                "answer_type": answer_type,
+                "task_type": row.get("task_type", row.get("Task Type", "")),
+            }
             if hard_pair_reservation:
                 # These ordering fields are needed only by the opt-in v2
                 # selector. Keep the disabled materialized rows identical to
                 # production v1.
                 candidate_row.update(
                     {
-                        "candidate_pre_rank_score": float(
-                            row.get("candidate_pre_rank_score", 0.0)
-                        ),
-                        "generation_rank": int(
-                            row.get("generation_rank", materialization_order)
-                        ),
+                        "candidate_pre_rank_score": float(row.get("candidate_pre_rank_score", 0.0)),
+                        "generation_rank": int(row.get("generation_rank", materialization_order)),
                         "materialization_order": materialization_order,
                     }
                 )
@@ -605,8 +588,7 @@ def _kg_connectivity_score(
         title, _, sent = _parse_sent_unit(unit)
         haystack = f"{title} {sent}"
         if any(
-            _text_mentions_for_chain(haystack, subject)
-            or _text_mentions_for_chain(haystack, obj)
+            _text_mentions_for_chain(haystack, subject) or _text_mentions_for_chain(haystack, obj)
             for subject, _, obj in parsed_kg
         ):
             connected_sentences += 1
@@ -700,9 +682,7 @@ def adjusted_score(row, score_mode="neural", size_penalty=0.01):
         feats = row.get("symbolic_features", [])
         fact_rule_mix = feats[4] if len(feats) > 4 else 0.0
         has_query_property_rule = feats[2] if len(feats) > 2 else 0.0
-        subgraph_size = int(
-            row.get("subgraph_size", len(row.get("subgraph_units", [])))
-        )
+        subgraph_size = int(row.get("subgraph_size", len(row.get("subgraph_units", []))))
         oversize_penalty = max(0, subgraph_size - 2)
 
         return (
@@ -815,14 +795,12 @@ def subsample_candidate_rows(
     hard_negatives = [
         r
         for r in rows
-        if int(r.get("label", 0)) == 0
-        and float(r.get("best_set_f1_to_gold", 0.0)) > 0.0
+        if int(r.get("label", 0)) == 0 and float(r.get("best_set_f1_to_gold", 0.0)) > 0.0
     ]
     easy_negatives = [
         r
         for r in rows
-        if int(r.get("label", 0)) == 0
-        and float(r.get("best_set_f1_to_gold", 0.0)) == 0.0
+        if int(r.get("label", 0)) == 0 and float(r.get("best_set_f1_to_gold", 0.0)) == 0.0
     ]
 
     positives = sorted(
@@ -876,9 +854,7 @@ def select_reserved_hard_pair(
 ) -> Tuple[Dict[str, Any], Dict[str, Any]] | None:
     """Select the precommitted complete > hard-incomplete TRAIN pair."""
     complete = [row for row in rows if float(row.get("rank_target", 0.0)) >= 0.9]
-    partial = [
-        row for row in rows if 0.0 < float(row.get("rank_target", 0.0)) < 0.9
-    ]
+    partial = [row for row in rows if 0.0 < float(row.get("rank_target", 0.0)) < 0.9]
     irrelevant = [row for row in rows if float(row.get("rank_target", 0.0)) == 0.0]
     if not complete or not (partial or irrelevant):
         return None
@@ -900,9 +876,7 @@ def _candidate_stratum(row: Dict[str, Any]) -> str:
     return "easy_negative"
 
 
-def _reserve_candidate_in_sample(
-    sampled: List[Dict[str, Any]], reserved: Dict[str, Any]
-) -> None:
+def _reserve_candidate_in_sample(sampled: List[Dict[str, Any]], reserved: Dict[str, Any]) -> None:
     """Use one existing same-stratum slot when reservation is required."""
     if any(row is reserved for row in sampled):
         return
@@ -947,15 +921,9 @@ def pairwise_ranking_loss(
     if not weighted_pairs:
         return torch.tensor(0.0, device=device)
 
-    better = torch.tensor(
-        [p[0] for p in weighted_pairs], dtype=torch.long, device=device
-    )
-    worse = torch.tensor(
-        [p[1] for p in weighted_pairs], dtype=torch.long, device=device
-    )
-    weights = torch.tensor(
-        [p[2] for p in weighted_pairs], dtype=torch.float, device=device
-    )
+    better = torch.tensor([p[0] for p in weighted_pairs], dtype=torch.long, device=device)
+    worse = torch.tensor([p[1] for p in weighted_pairs], dtype=torch.long, device=device)
+    weights = torch.tensor([p[2] for p in weighted_pairs], dtype=torch.float, device=device)
 
     losses = F.relu(margin - scores[better] + scores[worse])
     return (losses * weights).mean()
@@ -1077,12 +1045,10 @@ def compute_example_loss(
     reserved_pair = None
     if hard_pair_reservation:
         complete_indices = [
-            i for i, row in enumerate(candidate_rows)
-            if row.get("_hard_pair_role") == "complete"
+            i for i, row in enumerate(candidate_rows) if row.get("_hard_pair_role") == "complete"
         ]
         competitor_indices = [
-            i for i, row in enumerate(candidate_rows)
-            if row.get("_hard_pair_role") == "competitor"
+            i for i, row in enumerate(candidate_rows) if row.get("_hard_pair_role") == "competitor"
         ]
         if complete_indices or competitor_indices:
             if len(complete_indices) != 1 or len(competitor_indices) != 1:
@@ -1476,11 +1442,7 @@ def evaluate(
             inter = len(pred_set & gold_set)
             precision = inter / max(len(pred_set), 1)
             recall = inter / len(gold_set)
-            f1 = (
-                0.0
-                if precision + recall == 0
-                else (2 * precision * recall / (precision + recall))
-            )
+            f1 = 0.0 if precision + recall == 0 else (2 * precision * recall / (precision + recall))
             if f1 > best_f1:
                 best_precision = precision
                 best_recall = recall
@@ -1603,9 +1565,7 @@ def evaluate(
                     "top1_best_precision_to_gold": top1["best_set_precision_to_gold"],
                     "top1_best_recall_to_gold": top1["best_set_recall_to_gold"],
                     "top1_exact_match_any_gold": top1["exact_match_any_gold"],
-                    "top1_contains_any_gold_explanation": top1[
-                        "contains_any_gold_explanation"
-                    ],
+                    "top1_contains_any_gold_explanation": top1["contains_any_gold_explanation"],
                     "gold_support_units": top1["gold_support_units"],
                     "top5": [
                         {
@@ -1617,14 +1577,10 @@ def evaluate(
                             "subgraph_size": r["subgraph_size"],
                             "subgraph_units": r["subgraph_units"],
                             "best_set_f1_to_gold": r["best_set_f1_to_gold"],
-                            "best_set_precision_to_gold": r[
-                                "best_set_precision_to_gold"
-                            ],
+                            "best_set_precision_to_gold": r["best_set_precision_to_gold"],
                             "best_set_recall_to_gold": r["best_set_recall_to_gold"],
                             "best_jaccard_to_gold": r["best_jaccard_to_gold"],
-                            "contains_any_gold_explanation": r[
-                                "contains_any_gold_explanation"
-                            ],
+                            "contains_any_gold_explanation": r["contains_any_gold_explanation"],
                             "exact_match_any_gold": r["exact_match_any_gold"],
                         }
                         for i, r in enumerate(top5)
@@ -1768,9 +1724,7 @@ def train(
     print(f"Auxiliary negative rows: {neg}")
     print(f"Using auxiliary BCE pos_weight={pos_weight.item():.4f}")
     print(f"Ranking margin={ranking_margin}")
-    print(
-        f"Loss weights: ranking={ranking_weight}, bce={bce_weight}, listwise={listwise_weight}"
-    )
+    print(f"Loss weights: ranking={ranking_weight}, bce={bce_weight}, listwise={listwise_weight}")
 
     bce_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
@@ -1941,19 +1895,11 @@ def train(
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--train-path", type=str, default="data/train_subgraph_retrieval.jsonl"
-    )
-    parser.add_argument(
-        "--dev-path", type=str, default="data/dev_subgraph_retrieval.jsonl"
-    )
-    parser.add_argument(
-        "--save-dir", type=str, default="checkpoints/gnn_subgraph_retriever"
-    )
+    parser.add_argument("--train-path", type=str, default="data/train_subgraph_retrieval.jsonl")
+    parser.add_argument("--dev-path", type=str, default="data/dev_subgraph_retrieval.jsonl")
+    parser.add_argument("--save-dir", type=str, default="checkpoints/gnn_subgraph_retriever")
 
-    parser.add_argument(
-        "--model-name", type=str, default="google/bert_uncased_L-2_H-128_A-2"
-    )
+    parser.add_argument("--model-name", type=str, default="google/bert_uncased_L-2_H-128_A-2")
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--epochs", type=int, default=5)
 

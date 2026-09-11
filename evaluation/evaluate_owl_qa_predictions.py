@@ -173,9 +173,7 @@ def support_scores(pred_units: List[str], gold_units: List[str]) -> Dict[str, fl
 
     precision = tp / (tp + fp) if tp + fp > 0 else 0.0
     recall = tp / (tp + fn) if tp + fn > 0 else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
-    )
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
     em = 1.0 if fp + fn == 0 else 0.0
 
     return {
@@ -242,9 +240,7 @@ def get_top_support_units(
             )["support_units"]
         if aggregation_mode == "adaptive_v2":
             if adaptive_v2_policy is None:
-                raise ValueError(
-                    "adaptive_v2_policy is required in adaptive_v2 aggregation mode"
-                )
+                raise ValueError("adaptive_v2_policy is required in adaptive_v2 aggregation mode")
             return adaptive_v2_support_aggregate(
                 top_list,
                 policy=adaptive_v2_policy,
@@ -342,9 +338,7 @@ def evaluate(
 
     answer_rows = load_jsonl(llm_answers_path)
 
-    answers_by_id = {
-        row.get("example_id"): row for row in answer_rows if row.get("example_id")
-    }
+    answers_by_id = {row.get("example_id"): row for row in answer_rows if row.get("example_id")}
 
     metrics = {
         "em": 0.0,
@@ -468,9 +462,7 @@ def evaluate(
                 metrics["retrieval_examples"] += 1
                 metrics[f"exact@{top_k}"] += ret[f"exact@{top_k}"]
                 metrics[f"contained@{top_k}"] += ret[f"contained@{top_k}"]
-                metrics[f"retrieval_precision@{top_k}"] += ret[
-                    f"retrieval_precision@{top_k}"
-                ]
+                metrics[f"retrieval_precision@{top_k}"] += ret[f"retrieval_precision@{top_k}"]
                 metrics[f"retrieval_recall@{top_k}"] += ret[f"retrieval_recall@{top_k}"]
                 metrics[f"retrieval_f1@{top_k}"] += ret[f"retrieval_f1@{top_k}"]
                 metrics[f"support_set_f1@{top_k}"] += ret[f"support_set_f1@{top_k}"]

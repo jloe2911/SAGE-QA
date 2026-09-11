@@ -27,9 +27,7 @@ def normalize_hotpot_record(row):
     sf = out.get("supporting_facts")
     if isinstance(sf, dict):
         titles = first_present(sf, ["title", "titles"], [])
-        sent_ids = first_present(
-            sf, ["sent_id", "sent_ids", "sentence_id", "sent_idx"], []
-        )
+        sent_ids = first_present(sf, ["sent_id", "sent_ids", "sentence_id", "sent_idx"], [])
         out["supporting_facts"] = [[t, int(i)] for t, i in zip(titles, sent_ids)]
 
     return out

@@ -71,9 +71,7 @@ CONDITION_CONFIG = {
 }
 DOMAIN_CONDITIONS = {
     domain: tuple(
-        condition
-        for condition, config in CONDITION_CONFIG.items()
-        if config["domain"] == domain
+        condition for condition, config in CONDITION_CONFIG.items() if config["domain"] == domain
     )
     for domain in ("text", "ontology")
 }
@@ -85,9 +83,7 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
@@ -153,9 +149,7 @@ def best_support_scores(
     return best
 
 
-def example_record(
-    item: Mapping[str, Any], *, condition: str, domain: str
-) -> dict[str, Any]:
+def example_record(item: Mapping[str, Any], *, condition: str, domain: str) -> dict[str, Any]:
     example_id = str(item.get("example_id") or "")
     if not example_id:
         raise ValueError(f"{condition}: empty example_id")
@@ -177,8 +171,7 @@ def load_split(input_root: Path, split: str) -> tuple[list[dict[str, Any]], dict
         hashes[condition] = sha256(path)
         items = read_json(path)
         records.extend(
-            example_record(item, condition=condition, domain=config["domain"])
-            for item in items
+            example_record(item, condition=condition, domain=config["domain"]) for item in items
         )
     return records, hashes
 
@@ -250,9 +243,7 @@ def build_decision_rows(
     for record in records:
         oracle_k = int(oracle_lookup[record["example_id"]]["oracle_best_k"])
         for decision_rank in range(1, min(MAX_ADAPTIVE_K, len(record["candidates"]))):
-            features = compute_decision_features(
-                record["candidates"], decision_rank=decision_rank
-            )
+            features = compute_decision_features(record["candidates"], decision_rank=decision_rank)
             rows.append(
                 {
                     "example_id": record["example_id"],
@@ -331,9 +322,7 @@ def grouped_oof(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]]
         if train_groups & valid_groups:
             raise AssertionError("Grouped validation leaked an example_id across folds")
         train_rows = [row for row in rows if row["group_id"] in train_groups]
-        valid_indexes = [
-            index for index, row in enumerate(rows) if row["group_id"] in valid_groups
-        ]
+        valid_indexes = [index for index, row in enumerate(rows) if row["group_id"] in valid_groups]
         valid_rows = [rows[index] for index in valid_indexes]
         scaler, model = fit_model(train_rows)
         probabilities[valid_indexes] = predict_rows(valid_rows, scaler, model)
@@ -345,9 +334,7 @@ def grouped_oof(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]]
                 "train_decision_rows": len(train_rows),
                 "validation_decision_rows": len(valid_rows),
                 "train_continue": sum(int(row["label_continue"]) for row in train_rows),
-                "validation_continue": sum(
-                    int(row["label_continue"]) for row in valid_rows
-                ),
+                "validation_continue": sum(int(row["label_continue"]) for row in valid_rows),
                 "validation_example_ids": sorted(valid_groups),
             }
         )
@@ -366,9 +353,7 @@ def grouped_oof(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]]
     }
 
 
-def classification_metrics(
-    rows: Sequence[Mapping[str, Any]], threshold: float
-) -> dict[str, Any]:
+def classification_metrics(rows: Sequence[Mapping[str, Any]], threshold: float) -> dict[str, Any]:
     y = np.asarray([int(row["label_continue"]) for row in rows], dtype=int)
     probabilities = np.asarray(
         [float(row["oof_continue_probability"]) for row in rows], dtype=float
@@ -405,9 +390,7 @@ def summarize_example_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, An
         "support_f1": sum(float(row["support_f1"]) for row in rows) / len(rows),
         "average_selected_k": sum(int(row["selected_k"]) for row in rows) / len(rows),
         "selected_k_distribution": k_distribution(rows, "selected_k"),
-        "average_deduplicated_support_units": sum(
-            int(row["final_support_size"]) for row in rows
-        )
+        "average_deduplicated_support_units": sum(int(row["final_support_size"]) for row in rows)
         / len(rows),
     }
 
@@ -424,9 +407,7 @@ def evaluate_aggregations(
                 "condition": record["condition"],
                 "selected_k": aggregate["selected_k"],
                 "final_support_size": aggregate["final_support_size"],
-                **best_support_scores(
-                    aggregate["support_units"], record["gold_explanations"]
-                ),
+                **best_support_scores(aggregate["support_units"], record["gold_explanations"]),
             }
         )
     return summarize_example_metrics(rows)
@@ -446,9 +427,7 @@ def simulate_oof_threshold(
     threshold: float,
 ) -> dict[str, Any]:
     probability = {
-        (str(row["example_id"]), int(row["decision_rank"])): float(
-            row["oof_continue_probability"]
-        )
+        (str(row["example_id"]), int(row["decision_rank"])): float(row["oof_continue_probability"])
         for row in rows
     }
     aggregates = {}
@@ -545,11 +524,7 @@ def model_description(
         "training_counts_by_condition": {
             condition: {
                 "examples": len(
-                    {
-                        str(row["example_id"])
-                        for row in rows
-                        if row["condition"] == condition
-                    }
+                    {str(row["example_id"]) for row in rows if row["condition"] == condition}
                 ),
                 "decision_rows": sum(row["condition"] == condition for row in rows),
             }
@@ -602,18 +577,14 @@ def dev_phase(input_root: Path, output_dir: Path) -> None:
                 for threshold in THRESHOLD_GRID
             ]
         )
-        chosen, constraint_satisfied = choose_threshold(
-            table, float(fixed_k3["support_recall"])
-        )
+        chosen, constraint_satisfied = choose_threshold(table, float(fixed_k3["support_recall"]))
         threshold = float(chosen["threshold"])
         chosen_thresholds[domain] = threshold
 
         for row in oof_rows:
             row["threshold"] = threshold
             row["predicted_decision"] = (
-                "CONTINUE"
-                if float(row["oof_continue_probability"]) >= threshold
-                else "STOP"
+                "CONTINUE" if float(row["oof_continue_probability"]) >= threshold else "STOP"
             )
         write_jsonl(output_dir / f"{domain}_oof_predictions.jsonl", oof_rows)
 
@@ -739,9 +710,7 @@ def pooled_metrics(
                 )
             },
             "selected_k_distribution": {
-                str(k): sum(
-                    int(entry["selected_k_distribution"][str(k)]) for entry in entries
-                )
+                str(k): sum(int(entry["selected_k_distribution"][str(k)]) for entry in entries)
                 for k in range(1, MAX_ADAPTIVE_K + 1)
             },
         }
@@ -820,8 +789,7 @@ def fixed_regression(
 def test_phase(input_root: Path, output_dir: Path, v1_policy_dir: Path) -> None:
     manifest = verify_frozen_policy(output_dir)
     policies = {
-        domain: load_domain_policy(output_dir, domain=domain)
-        for domain in ("text", "ontology")
+        domain: load_domain_policy(output_dir, domain=domain) for domain in ("text", "ontology")
     }
     v1_manifest = read_json(v1_policy_dir / "chosen_tau.json")
     v1_tau = float(v1_manifest["selected_tau"])

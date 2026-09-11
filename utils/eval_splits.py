@@ -124,16 +124,9 @@ def support_metrics_from_details(details: List[Dict]) -> Dict:
     n = max(len(details), 1)
 
     hit1 = sum(1 for d in details if int(d.get("top1_label", 0)) == 1) / n
-    exact1 = (
-        sum(1 for d in details if bool(d.get("top1_exact_match_any_gold", False))) / n
-    )
+    exact1 = sum(1 for d in details if bool(d.get("top1_exact_match_any_gold", False))) / n
     contains1 = (
-        sum(
-            1
-            for d in details
-            if bool(d.get("top1_contains_any_gold_explanation", False))
-        )
-        / n
+        sum(1 for d in details if bool(d.get("top1_contains_any_gold_explanation", False))) / n
     )
 
     best_jaccard1 = average_metric(details, "top1_best_jaccard_to_gold")
@@ -160,15 +153,11 @@ def support_metrics_from_details(details: List[Dict]) -> Dict:
 
         hit3 += int(any(int(r.get("label", 0)) == 1 for r in top3))
         exact3 += int(any(bool(r.get("exact_match_any_gold", False)) for r in top3))
-        contains3 += int(
-            any(bool(r.get("contains_any_gold_explanation", False)) for r in top3)
-        )
+        contains3 += int(any(bool(r.get("contains_any_gold_explanation", False)) for r in top3))
 
         hit5 += int(any(int(r.get("label", 0)) == 1 for r in top5))
         exact5 += int(any(bool(r.get("exact_match_any_gold", False)) for r in top5))
-        contains5 += int(
-            any(bool(r.get("contains_any_gold_explanation", False)) for r in top5)
-        )
+        contains5 += int(any(bool(r.get("contains_any_gold_explanation", False)) for r in top5))
 
         if top3:
             best3 = max(top3, key=lambda r: float(r.get("best_set_f1_to_gold", 0.0)))

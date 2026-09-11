@@ -14,9 +14,7 @@ class FlanT5(BaseLanguageModel):
             help="HUGGING FACE MODEL or model path",
             default="google/flan-t5-xl",
         )
-        parser.add_argument(
-            "--max_new_tokens", type=int, help="max length", default=512
-        )
+        parser.add_argument("--max_new_tokens", type=int, help="max length", default=512)
         parser.add_argument("--dtype", choices=["fp32", "fp16", "bf16"], default="fp16")
 
     def __init__(self, args):
@@ -31,9 +29,7 @@ class FlanT5(BaseLanguageModel):
         return len(self.tokenizer.tokenize(text))
 
     def prepare_for_inference(self, **model_kwargs):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.args.model_path, use_fast=False
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.args.model_path, use_fast=False)
         self.generator = pipeline(
             "text2text-generation",
             model=self.args.model_path,

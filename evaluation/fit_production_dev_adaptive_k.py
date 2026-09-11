@@ -1,11 +1,11 @@
 """Fit and freeze adaptive-v2 from clean production Generator-D DEV rankings.
 
-This command fits from only the persisted DEV ranking artifact and its two
-metadata files. It additionally reads the frozen SAGE-QA DEV metrics/config for
-the requested comparison table. It does not load raw datasets, checkpoints,
-TEST data, generation code, or training code. The fitted policies preserve the
-existing adaptive-v2 feature/model/calibration family while restricting
-selected depths to ``{1, 2, 3, 5}``.
+This command fits from only the selected method's persisted DEV rankings and
+the ranking artifact's two metadata files. It does not load raw datasets,
+checkpoints, TEST data, generation code, training code, or symbolic reranking
+code. The fitted policies preserve the existing adaptive-v2
+feature/model/calibration family while restricting selected depths to
+``{1, 2, 3, 5}``.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ INPUT_FILENAMES = (
     "metrics.json",
     "checkpoint_metadata.json",
 )
-SAGEQA_FROZEN_THRESHOLDS = {"text": 0.78, "ontology": 0.79}
+RANKING_METHODS = ("gnn_only", "sageqa_final")
 
 
 def sha256(path: Path) -> str:
@@ -72,9 +72,7 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
@@ -91,7 +89,11 @@ def git_output(*args: str) -> str:
     return result.stdout.strip()
 
 
-def load_clean_final_records(input_dir: Path) -> list[dict[str, Any]]:
+def load_clean_final_records(
+    input_dir: Path, ranking_method: str = "gnn_only"
+) -> list[dict[str, Any]]:
+    if ranking_method not in RANKING_METHODS:
+        raise ValueError(f"ranking_method must be one of {RANKING_METHODS}, got {ranking_method!r}")
     path = input_dir / "per_example_rankings.jsonl"
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -100,7 +102,7 @@ def load_clean_final_records(input_dir: Path) -> list[dict[str, Any]]:
             item = json.loads(line)
             if item.get("split") != "dev":
                 raise ValueError(f"line {line_number}: non-DEV split encountered")
-            if item.get("method") != "gnn_only":
+            if item.get("method") != ranking_method:
                 continue
             example_id = str(item.get("example_id") or "")
             if not example_id or example_id in seen:
@@ -128,7 +130,7 @@ def load_clean_final_records(input_dir: Path) -> list[dict[str, Any]]:
                 }
             )
     if not records:
-        raise ValueError("No gnn_only DEV records found")
+        raise ValueError(f"No {ranking_method} DEV records found")
     if {record["domain"] for record in records} != set(DOMAINS):
         raise ValueError("Expected both pooled text and ontology DEV records")
     return records
@@ -148,7 +150,9 @@ def best_support_scores(
     predicted: Sequence[Any], alternatives: Sequence[Sequence[Any]]
 ) -> dict[str, float]:
     values = [support_scores(predicted, gold) for gold in alternatives]
-    return max(values, key=lambda row: row["f1"], default={"precision": 0.0, "recall": 0.0, "f1": 0.0})
+    return max(
+        values, key=lambda row: row["f1"], default={"precision": 0.0, "recall": 0.0, "f1": 0.0}
+    )
 
 
 def prefix(record: Mapping[str, Any], k: int) -> dict[str, Any]:
@@ -174,9 +178,7 @@ def build_decision_rows(records: Sequence[Mapping[str, Any]]) -> list[dict[str, 
     for record in records:
         best_k = oracle_k(record)
         for current_k, next_k in zip(ALLOWED_K, ALLOWED_K[1:]):
-            features = compute_decision_features(
-                record["candidates"], decision_rank=current_k
-            )
+            features = compute_decision_features(record["candidates"], decision_rank=current_k)
             rows.append(
                 {
                     "example_id": record["example_id"],
@@ -241,9 +243,8 @@ def summarize(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             }
             for k in ALLOWED_K
         },
-        "mean_deduplicated_support_units": sum(
-            int(row["final_support_size"]) for row in rows
-        ) / count,
+        "mean_deduplicated_support_units": sum(int(row["final_support_size"]) for row in rows)
+        / count,
     }
 
 
@@ -259,9 +260,7 @@ def simulate_threshold(
     records: Sequence[Mapping[str, Any]], oof_rows: Sequence[Mapping[str, Any]], threshold: float
 ) -> dict[str, Any]:
     probabilities = {
-        (str(row["example_id"]), int(row["current_k"])): float(
-            row["oof_continue_probability"]
-        )
+        (str(row["example_id"]), int(row["current_k"])): float(row["oof_continue_probability"])
         for row in oof_rows
     }
     evaluated = []
@@ -293,6 +292,7 @@ def simulate_threshold(
 def fit(args: argparse.Namespace) -> None:
     input_dir = args.input_dir
     output_dir = args.output_dir
+    ranking_method = args.ranking_method
     output_dir.mkdir(parents=True, exist_ok=True)
     unexpected_existing = [path for path in output_dir.iterdir()]
     if unexpected_existing and not args.overwrite:
@@ -308,16 +308,6 @@ def fit(args: argparse.Namespace) -> None:
     input_hashes_before = {path.name: sha256(path) for path in input_paths}
     source_metrics = read_json(input_dir / "metrics.json")
     source_metadata = read_json(input_dir / "checkpoint_metadata.json")
-    sageqa_metrics_path = args.sageqa_policy_dir / "metrics.json"
-    sageqa_config_path = args.sageqa_policy_dir / "adaptive_k_config.json"
-    if not sageqa_metrics_path.is_file() or not sageqa_config_path.is_file():
-        raise FileNotFoundError("Frozen SAGE-QA policy metrics/config are required for comparison")
-    sageqa_metrics = read_json(sageqa_metrics_path)
-    sageqa_config = read_json(sageqa_config_path)
-    if sageqa_config.get("thresholds") != SAGEQA_FROZEN_THRESHOLDS:
-        raise ValueError("Frozen SAGE-QA thresholds are not exactly text=0.78, ontology=0.79")
-    if sageqa_config.get("ranking_method") != "sageqa_final":
-        raise ValueError("Comparison policy is not the frozen SAGE-QA policy")
     if source_metadata.get("test_rows_read") != 0 or source_metadata.get("test_gold_accessed"):
         raise ValueError("Source metadata does not establish a DEV-only input artifact")
     if source_metadata.get("adaptive_k_ready") is not True:
@@ -325,7 +315,7 @@ def fit(args: argparse.Namespace) -> None:
     if tuple(source_metrics.get("k_values", [])) != ALLOWED_K:
         raise ValueError("Source fixed-k evaluation does not exactly match allowed depths")
 
-    records = load_clean_final_records(input_dir)
+    records = load_clean_final_records(input_dir, ranking_method)
     decision_rows = build_decision_rows(records)
     thresholds: dict[str, float] = {}
     oof_by_domain: dict[str, list[dict[str, Any]]] = {}
@@ -388,9 +378,7 @@ def fit(args: argparse.Namespace) -> None:
     for record in records:
         domain = record["domain"]
         probability_lookup = {
-            (str(row["example_id"]), int(row["current_k"])): float(
-                row["oof_continue_probability"]
-            )
+            (str(row["example_id"]), int(row["current_k"])): float(row["oof_continue_probability"])
             for row in oof_by_domain[domain]
         }
         selected = select_with_probabilities(record, probability_lookup, thresholds[domain])
@@ -401,7 +389,7 @@ def fit(args: argparse.Namespace) -> None:
                 "domain": domain,
                 "split": "dev",
                 "example_id": record["example_id"],
-                "method": "gnn_only_adaptive_v2_oof",
+                "method": f"{ranking_method}_adaptive_v2_oof",
                 "score_mode": record["score_mode"],
                 "selected_k": selected["selected_k"],
                 "final_support_size": selected["final_support_size"],
@@ -413,9 +401,6 @@ def fit(args: argparse.Namespace) -> None:
     write_jsonl(output_dir / "per_example_adaptive_dev.jsonl", per_example)
 
     datasets = sorted({record["dataset"] for record in records})
-    sageqa_by_dataset = {
-        str(row["dataset"]): row for row in sageqa_metrics.get("datasets", [])
-    }
     dataset_metrics: list[dict[str, Any]] = []
     for dataset in datasets:
         dataset_records = [record for record in records if record["dataset"] == dataset]
@@ -436,26 +421,12 @@ def fit(args: argparse.Namespace) -> None:
                 "delta_f1_adaptive_minus_k1": adaptive["f1"] - fixed["1"]["f1"],
                 "delta_f1_adaptive_minus_k3": adaptive["f1"] - fixed["3"]["f1"],
                 "policy_scope_best_globally_fixed_k": globally_fixed_k,
-                "policy_scope_best_globally_fixed_f1_on_this_dataset": fixed[str(globally_fixed_k)]["f1"],
+                "policy_scope_best_globally_fixed_f1_on_this_dataset": fixed[str(globally_fixed_k)][
+                    "f1"
+                ],
                 "adaptive_improves_over_policy_scope_best_globally_fixed_k": (
                     adaptive["f1"] > fixed[str(globally_fixed_k)]["f1"]
                 ),
-            }
-        )
-
-    comparison_dev_f1 = []
-    for row in dataset_metrics:
-        sageqa = sageqa_by_dataset.get(row["dataset"])
-        if sageqa is None:
-            raise ValueError(f"Frozen SAGE-QA metrics missing dataset {row['dataset']}")
-        comparison_dev_f1.append(
-            {
-                "dataset": row["dataset"],
-                "domain": row["domain"],
-                "gnn_fixed_k1": row["fixed"]["1"]["f1"],
-                "gnn_adaptive_k_oof": row["adaptive_oof"]["f1"],
-                "sageqa_fixed_k1": sageqa["fixed"]["1"]["f1"],
-                "frozen_sageqa_adaptive_k_oof": sageqa["adaptive_oof"]["f1"],
             }
         )
 
@@ -473,7 +444,8 @@ def fit(args: argparse.Namespace) -> None:
             "best_globally_fixed_k": best_k,
             "best_globally_fixed_f1": fixed[str(best_k)]["f1"],
             "adaptive_delta_f1_vs_best_globally_fixed": adaptive["f1"] - fixed[str(best_k)]["f1"],
-            "adaptive_improves_over_best_globally_fixed_k": adaptive["f1"] > fixed[str(best_k)]["f1"],
+            "adaptive_improves_over_best_globally_fixed_k": adaptive["f1"]
+            > fixed[str(best_k)]["f1"],
         }
 
     metrics = {
@@ -481,26 +453,24 @@ def fit(args: argparse.Namespace) -> None:
         "status": "frozen_production_policy_after_clean_dev",
         "evaluation_estimate": "grouped out-of-fold DEV predictions",
         "metric_aggregation": "macro mean over examples",
-        "method": "GNN-only ranking and neural scores only",
+        "ranking_method": ranking_method,
+        "score_source": "persisted adjusted_score values from the selected ranking records",
         "allowed_k": list(ALLOWED_K),
         "policy_scope": "separate pooled text and ontology policies; no dataset-specific thresholds",
         "domains": domain_metrics,
         "datasets": dataset_metrics,
-        "dev_f1_comparison": comparison_dev_f1,
     }
     write_json(output_dir / "metrics.json", metrics)
 
     fitted_files = [
-        output_dir / f"{domain}_{kind}.joblib"
-        for domain in DOMAINS
-        for kind in ("scaler", "model")
+        output_dir / f"{domain}_{kind}.joblib" for domain in DOMAINS for kind in ("scaler", "model")
     ] + [output_dir / "chosen_thresholds.joblib"]
     config = {
         "schema_version": "production_generator_d_adaptive_k_config_v1",
-        "status": "frozen_production_gnn_only_adaptive_k_policy",
+        "status": f"frozen_production_{ranking_method}_adaptive_k_policy",
         "source_policy_family": "adaptive_v2 sequential STOP/CONTINUE",
-        "ranking_method": "gnn_only",
-        "score_key": "adjusted_score (identical to neural score in gnn_only records)",
+        "ranking_method": ranking_method,
+        "score_key": "persisted adjusted_score",
         "allowed_k": list(ALLOWED_K),
         "transitions": [
             {"current_k": current, "continue_to_k": next_k, "feature_decision_rank": current}
@@ -525,9 +495,7 @@ def fit(args: argparse.Namespace) -> None:
         },
         "threshold_grid": list(THRESHOLD_GRID),
         "threshold_selection": sweeps["text"]["selection_rule"],
-        "legacy_threshold_selection_departure": sweeps["text"][
-            "legacy_selection_rule_not_reused"
-        ],
+        "legacy_threshold_selection_departure": sweeps["text"]["legacy_selection_rule_not_reused"],
         "oracle_target": (
             "highest per-example DEV retrieval F1 among allowed k; ties by fewer "
             "deduplicated evidence units, then smaller k"
@@ -538,12 +506,6 @@ def fit(args: argparse.Namespace) -> None:
             "final ranked adjusted scores, rank position, and exact deduplicated candidate "
             "evidence identities only; no gold, answer, dataset, hop, proof-label, or split feature"
         ),
-        "frozen_sageqa_policy_unchanged": {
-            "directory": str(args.sageqa_policy_dir),
-            "thresholds": SAGEQA_FROZEN_THRESHOLDS,
-            "config_sha256": sha256(sageqa_config_path),
-            "metrics_sha256": sha256(sageqa_metrics_path),
-        },
         "fitted_artifact_sha256": {path.name: sha256(path) for path in fitted_files},
         "full_dev_model_parameters": model_descriptions,
     }
@@ -556,7 +518,7 @@ def fit(args: argparse.Namespace) -> None:
     input_hashes_after = {path.name: sha256(path) for path in input_paths}
     lineage = {
         "schema_version": "production_generator_d_adaptive_k_lineage_v1",
-        "status": "frozen_production_gnn_only_adaptive_k_policy_after_clean_dev",
+        "status": f"frozen_production_{ranking_method}_adaptive_k_policy_after_clean_dev",
         "current_code_commit_hash": git_output("rev-parse", "HEAD"),
         "source_code_commit_hash": source_metadata.get("code_commit_hash"),
         "git_status_after": git_output("status", "--short").splitlines(),
@@ -577,12 +539,8 @@ def fit(args: argparse.Namespace) -> None:
             }
             for dataset, values in source_metadata.get("datasets", {}).items()
         },
-        "input_scope": (
-            "three persisted clean DEV output artifacts for fitting; frozen SAGE-QA DEV "
-            "metrics/config read only for the requested comparison"
-        ),
+        "input_scope": "three persisted clean DEV output artifacts for fitting",
         "accessed_files": [str(path) for path in input_paths],
-        "comparison_only_accessed_files": [str(sageqa_metrics_path), str(sageqa_config_path)],
         "fit_process_test_files_opened": 0,
         "test_scores_labels_answers_or_gold_used": False,
         "candidate_generation_rerun": False,
@@ -592,20 +550,21 @@ def fit(args: argparse.Namespace) -> None:
         "text_chain_parameters_changed": False,
         "proof_reranking_parameters_changed": False,
         "answer_generation_run": False,
-        "old_threshold_values_reused_for_gnn_policy": False,
-        "frozen_sageqa_thresholds_modified": False,
+        "historical_threshold_values_required_or_reused": False,
         "fitting_split": "dev only",
         "fitting_method": "grouped OOF calibration plus final refit on all clean DEV",
         "test_application_run": False,
     }
     write_json(output_dir / "lineage_checkpoint_metadata.json", lineage)
 
+    display_method = "SAGE-QA final" if ranking_method == "sageqa_final" else "GNN-only"
     lines = [
-        "# Frozen production GNN-only adaptive-k policy (clean DEV)",
+        f"# Frozen production {display_method} adaptive-k policy (clean DEV)",
         "",
-        "This policy is fitted only from the GNN-only rankings and neural scores in the clean "
-        "production Generator-D DEV ranking artifact. Reported adaptive metrics are grouped "
-        "out-of-fold DEV estimates; the fit process did not open TEST.",
+        f"This policy is fitted only from the `{ranking_method}` records and their persisted "
+        "`adjusted_score` values in the clean production Generator-D DEV ranking artifact. "
+        "Reported adaptive metrics are grouped out-of-fold DEV estimates; the fit process "
+        "did not open TEST.",
         "",
         "## Rule",
         "",
@@ -637,7 +596,7 @@ def fit(args: argparse.Namespace) -> None:
     lines.extend(
         [
             "",
-            "## GNN-only fixed-depth DEV baselines",
+            f"## {display_method} fixed-depth DEV baselines",
             "",
             "| Dataset | k | P | R | F1 |",
             "|---|---:|---:|---:|---:|",
@@ -669,21 +628,6 @@ def fit(args: argparse.Namespace) -> None:
     lines.extend(
         [
             "",
-            "## DEV F1 method comparison",
-            "",
-            "| Dataset | GNN fixed k=1 | GNN adaptive k | SAGE-QA fixed k=1 | Frozen SAGE-QA adaptive k |",
-            "|---|---:|---:|---:|---:|",
-        ]
-    )
-    for row in comparison_dev_f1:
-        lines.append(
-            f"| {row['dataset']} | {row['gnn_fixed_k1']:.6f} | "
-            f"{row['gnn_adaptive_k_oof']:.6f} | {row['sageqa_fixed_k1']:.6f} | "
-            f"{row['frozen_sageqa_adaptive_k_oof']:.6f} |"
-        )
-    lines.extend(
-        [
-            "",
             "## Freeze boundary",
             "",
             "The scaler/model parameters were refitted on all clean DEV after grouped-OOF threshold "
@@ -703,7 +647,8 @@ def fit(args: argparse.Namespace) -> None:
     write_json(
         output_dir / "artifact_manifest.json",
         {
-            "status": "frozen_production_gnn_only_adaptive_k_policy",
+            "status": f"frozen_production_{ranking_method}_adaptive_k_policy",
+            "ranking_method": ranking_method,
             "files": {path.name: sha256(path) for path in output_files},
         },
     )
@@ -723,9 +668,9 @@ def parse_args() -> argparse.Namespace:
         default=Path("outputs/development_runs/production_generator_d_v1_gnn_adaptive_k"),
     )
     parser.add_argument(
-        "--sageqa-policy-dir",
-        type=Path,
-        default=Path("outputs/development_runs/production_generator_d_v1_adaptive_k"),
+        "--ranking-method",
+        choices=RANKING_METHODS,
+        default="gnn_only",
     )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()

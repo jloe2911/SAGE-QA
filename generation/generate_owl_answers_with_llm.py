@@ -119,9 +119,7 @@ def get_top_support_units(
             )["support_units"]
         if aggregation_mode == "adaptive_v2":
             if adaptive_v2_policy is None:
-                raise ValueError(
-                    "adaptive_v2_policy is required in adaptive_v2 aggregation mode"
-                )
+                raise ValueError("adaptive_v2_policy is required in adaptive_v2 aggregation mode")
             return adaptive_v2_support_aggregate(
                 top_list,
                 policy=adaptive_v2_policy,
@@ -244,9 +242,7 @@ def parse_owl_support(units: List[str]) -> Dict[str, Any]:
         if func_match:
             fun = canonical_relation(func_match.group(1))
             args = [
-                local_name(arg.strip())
-                for arg in func_match.group(2).split(",")
-                if arg.strip()
+                local_name(arg.strip()) for arg in func_match.group(2).split(",") if arg.strip()
             ]
             if fun == "inverseobjectproperties" and len(args) >= 2:
                 add(inverses, args[0], args[1])
@@ -385,9 +381,7 @@ def infer_property_assertions(
     entailed: Dict[Tuple[str, str, str], str] = {}
 
     def add(head: str, rel: str, tail: str, proof: str) -> None:
-        entailed.setdefault(
-            (local_name(head), local_name(rel), local_name(tail)), proof
-        )
+        entailed.setdefault((local_name(head), local_name(rel), local_name(tail)), proof)
 
     for head, rel, tail in parsed["triples"]:
         for rel_name in property_closure(rel, parsed["subproperties"]):
@@ -518,9 +512,7 @@ def build_prompt(question: str, support_units: List[str]) -> str:
         reasoning_lines.append(f"[{i}] {owl_reasoning_line(unit)}")
 
     reasoning_context = (
-        "\n".join(reasoning_lines)
-        if reasoning_lines
-        else "No retrieved reasoning paths."
+        "\n".join(reasoning_lines) if reasoning_lines else "No retrieved reasoning paths."
     )
 
     if is_boolean_question(question):
@@ -706,9 +698,7 @@ def generate_answers(
             "aggregation_mode": aggregation_mode,
             "adaptive_tau": adaptive_tau,
             "adaptive_k_max": (
-                adaptive_k_max
-                if aggregation_mode in {"adaptive", "adaptive_v2"}
-                else None
+                adaptive_k_max if aggregation_mode in {"adaptive", "adaptive_v2"} else None
             ),
             "adaptive_v2_domain": (
                 adaptive_v2_policy.domain if adaptive_v2_policy is not None else None
@@ -745,9 +735,7 @@ def generate_answers(
 
             parsed = parse_json_response(raw)
 
-            row["predicted_answer"] = normalize_generated_answer(
-                question, parsed["answer"]
-            )
+            row["predicted_answer"] = normalize_generated_answer(question, parsed["answer"])
             row["explanation"] = parsed["explanation"]
             row["raw_response"] = raw
 
@@ -809,9 +797,7 @@ def main():
                 "Model provider is openrouter, but OPENROUTER_API_KEY is not set."
             )
         if ref.provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-            raise EnvironmentError(
-                "Model provider is openai, but OPENAI_API_KEY is not set."
-            )
+            raise EnvironmentError("Model provider is openai, but OPENAI_API_KEY is not set.")
         if ref.provider is None and not (
             os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
         ):

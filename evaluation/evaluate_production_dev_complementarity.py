@@ -104,7 +104,9 @@ def support_scores(predicted: Sequence[Any], gold: Sequence[Any]) -> dict[str, f
     return {"precision": precision, "recall": recall, "f1": f1}
 
 
-def best_scores(predicted: Sequence[Any], alternatives: Sequence[Sequence[Any]]) -> dict[str, float]:
+def best_scores(
+    predicted: Sequence[Any], alternatives: Sequence[Sequence[Any]]
+) -> dict[str, float]:
     rows = [support_scores(predicted, gold) for gold in alternatives]
     return max(rows, key=lambda row: (row["f1"], row["recall"], row["precision"]))
 
@@ -117,7 +119,9 @@ def aggregate(candidates: Sequence[Mapping[str, Any]], k_value: int) -> list[Any
     )
 
 
-def sequential_order(candidates: Sequence[Mapping[str, Any]], lambda_value: float) -> list[dict[str, Any]]:
+def sequential_order(
+    candidates: Sequence[Mapping[str, Any]], lambda_value: float
+) -> list[dict[str, Any]]:
     """Freeze rank 1, then greedily maximize score + lambda * novel fraction."""
     remaining = [dict(candidate) for candidate in candidates]
     if not remaining:
@@ -131,9 +135,19 @@ def sequential_order(candidates: Sequence[Mapping[str, Any]], lambda_value: floa
         choices: list[tuple[float, float, int, int, set[Any]]] = []
         for index, candidate in enumerate(remaining):
             candidate_keys = unit_keys(candidate.get("subgraph_units", []) or [])
-            novelty = len(candidate_keys - selected_keys) / len(candidate_keys) if candidate_keys else 0.0
+            novelty = (
+                len(candidate_keys - selected_keys) / len(candidate_keys) if candidate_keys else 0.0
+            )
             adjusted = float(candidate["adjusted_score"]) + lambda_value * novelty
-            choices.append((adjusted, float(candidate["adjusted_score"]), -int(candidate["rank"]), index, candidate_keys))
+            choices.append(
+                (
+                    adjusted,
+                    float(candidate["adjusted_score"]),
+                    -int(candidate["rank"]),
+                    index,
+                    candidate_keys,
+                )
+            )
         adjusted, _, _, chosen_index, chosen_keys = max(choices, key=lambda row: row[:3])
         chosen = remaining.pop(chosen_index)
         candidate_keys = unit_keys(chosen.get("subgraph_units", []) or [])
@@ -195,7 +209,9 @@ def load_records(rankings_path: Path, metadata_path: Path) -> list[dict[str, Any
     return records
 
 
-def evaluate_order(record: Mapping[str, Any], ordered: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def evaluate_order(
+    record: Mapping[str, Any], ordered: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
     by_k: dict[str, Any] = {}
     for k_value in K_VALUES:
         support = aggregate(ordered, k_value)
@@ -218,15 +234,17 @@ def summarize_evaluations(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "precision": sum(row["precision"] for row in values) / len(values),
             "recall": sum(row["recall"] for row in values) / len(values),
             "f1": sum(row["f1"] for row in values) / len(values),
-            "complete_support_containment_rate": sum(bool(row["complete_support"]) for row in values) / len(values),
-            "mean_retrieved_evidence_units": sum(row["retrieved_evidence_units"] for row in values) / len(values),
+            "complete_support_containment_rate": sum(
+                bool(row["complete_support"]) for row in values
+            )
+            / len(values),
+            "mean_retrieved_evidence_units": sum(row["retrieved_evidence_units"] for row in values)
+            / len(values),
         }
     return result
 
 
-def adaptive_features(
-    ordered: Sequence[Mapping[str, Any]], decision_rank: int
-) -> dict[str, float]:
+def adaptive_features(ordered: Sequence[Mapping[str, Any]], decision_rank: int) -> dict[str, float]:
     """Existing v2 features, allowing the deliberately non-score-monotone new order."""
     scores = [float(candidate["adjusted_score"]) for candidate in ordered]
     score_scale = effective_score_scale(ordered)
@@ -295,9 +313,11 @@ def summarize_adaptive(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "precision": sum(row["precision"] for row in values) / len(values),
         "recall": sum(row["recall"] for row in values) / len(values),
         "f1": sum(row["f1"] for row in values) / len(values),
-        "complete_support_containment_rate": sum(bool(row["complete_support"]) for row in values) / len(values),
+        "complete_support_containment_rate": sum(bool(row["complete_support"]) for row in values)
+        / len(values),
         "mean_k": sum(row["selected_k"] for row in values) / len(values),
-        "mean_retrieved_evidence_units": sum(row["retrieved_evidence_units"] for row in values) / len(values),
+        "mean_retrieved_evidence_units": sum(row["retrieved_evidence_units"] for row in values)
+        / len(values),
         "selected_k_distribution": {str(k): distribution.get(k, 0) for k in K_VALUES},
     }
 
@@ -314,10 +334,16 @@ def score_lambda(records: Sequence[Mapping[str, Any]], lambda_value: float) -> d
             "mean_complete_support_containment_k2_k3_k5": statistics.mean(
                 summary[str(k)]["complete_support_containment_rate"] for k in TUNED_K_VALUES
             ),
-            "mean_recall_k2_k3_k5": statistics.mean(summary[str(k)]["recall"] for k in TUNED_K_VALUES),
+            "mean_recall_k2_k3_k5": statistics.mean(
+                summary[str(k)]["recall"] for k in TUNED_K_VALUES
+            ),
             "mean_f1_k2_k3_k5": statistics.mean(summary[str(k)]["f1"] for k in TUNED_K_VALUES),
-            "mean_precision_k2_k3_k5": statistics.mean(summary[str(k)]["precision"] for k in TUNED_K_VALUES),
-            "mean_units_k2_k3_k5": statistics.mean(summary[str(k)]["mean_retrieved_evidence_units"] for k in TUNED_K_VALUES),
+            "mean_precision_k2_k3_k5": statistics.mean(
+                summary[str(k)]["precision"] for k in TUNED_K_VALUES
+            ),
+            "mean_units_k2_k3_k5": statistics.mean(
+                summary[str(k)]["mean_retrieved_evidence_units"] for k in TUNED_K_VALUES
+            ),
         },
         "fixed_k": summary,
     }
@@ -342,7 +368,9 @@ def reconstruct_aggregation_required(
     state = {
         example_id: {"union": set(), "single_complete": False}
         for example_id in by_id
-        if not contains_gold(aggregate(by_id[example_id]["candidates"], 1), by_id[example_id]["gold_explanations"])
+        if not contains_gold(
+            aggregate(by_id[example_id]["candidates"], 1), by_id[example_id]["gold_explanations"]
+        )
     }
     for dataset in DATASETS:
         path = data_root / dataset / "dev_subgraph_retrieval.jsonl"
@@ -406,7 +434,9 @@ def aggregation_analysis(
     for row in rows:
         current_eval = row["current"]["fixed"]
         comp_eval = row["complementarity"]["fixed"]
-        current_gold = best_gold_keys_for_progress(row["current"]["order"], row["gold_explanations"])
+        current_gold = best_gold_keys_for_progress(
+            row["current"]["order"], row["gold_explanations"]
+        )
         current_ranks = first_unit_ranks(row["current"]["order"], current_gold)
         comp_ranks = first_unit_ranks(row["complementarity"]["order"], current_gold)
         if any(comp_ranks.get(unit, 99) < current_ranks.get(unit, 99) for unit in current_gold):
@@ -420,7 +450,9 @@ def aggregation_analysis(
         ranks = [first_complete_rank(row[condition]["fixed"]) for row in rows]
         observed = [rank for rank in ranks if rank is not None]
         mean_rank[condition] = {
-            "mean_first_complete_rank_among_solved_by_k5": statistics.mean(observed) if observed else None,
+            "mean_first_complete_rank_among_solved_by_k5": statistics.mean(observed)
+            if observed
+            else None,
             "solved_by_k5": len(observed),
             "unresolved_by_k5": len(ranks) - len(observed),
         }
@@ -429,8 +461,16 @@ def aggregation_analysis(
         subset = [row for row in rows if row["dataset"] == dataset]
         by_dataset[dataset] = {
             "cohort_examples": len(subset),
-            "current_solved": {str(k): sum(r["current"]["fixed"][str(k)]["complete_support"] for r in subset) for k in TUNED_K_VALUES},
-            "complementarity_solved": {str(k): sum(r["complementarity"]["fixed"][str(k)]["complete_support"] for r in subset) for k in TUNED_K_VALUES},
+            "current_solved": {
+                str(k): sum(r["current"]["fixed"][str(k)]["complete_support"] for r in subset)
+                for k in TUNED_K_VALUES
+            },
+            "complementarity_solved": {
+                str(k): sum(
+                    r["complementarity"]["fixed"][str(k)]["complete_support"] for r in subset
+                )
+                for k in TUNED_K_VALUES
+            },
         }
     return {
         "cohort_definition": "DEV top-1 incomplete; no single complete candidate in the full frozen Generator-D pool; full-pool union contains a valid gold explanation",
@@ -478,7 +518,9 @@ def build_summary_md(
     ]
     for domain in DOMAINS:
         for k_value in K_VALUES:
-            row = metrics["pooled_domains"][domain]["delta_complementarity_minus_current"][str(k_value)]
+            row = metrics["pooled_domains"][domain]["delta_complementarity_minus_current"][
+                str(k_value)
+            ]
             lines.append(
                 f"| {domain} | {k_value} | {row['precision']:+.6f} | {row['recall']:+.6f} | "
                 f"{row['f1']:+.6f} | {row['complete_support_containment_rate']:+.6f} | "
@@ -521,26 +563,43 @@ def build_summary_md(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-dir", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_k_sensitivity"))
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("outputs/development_runs/production_generator_d_v1_k_sensitivity"),
+    )
     parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
-    parser.add_argument("--policy-dir", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_adaptive_k"))
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/diagnostics/production_generator_d_v1_complementarity_dev"))
+    parser.add_argument(
+        "--policy-dir",
+        type=Path,
+        default=Path("outputs/development_runs/production_generator_d_v1_adaptive_k"),
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("outputs/diagnostics/production_generator_d_v1_complementarity_dev"),
+    )
     args = parser.parse_args()
 
     if args.output_dir.exists() and any(args.output_dir.iterdir()):
-        raise FileExistsError(f"Refusing to overwrite non-empty output directory: {args.output_dir}")
+        raise FileExistsError(
+            f"Refusing to overwrite non-empty output directory: {args.output_dir}"
+        )
     rankings_path = args.input_dir / "per_example_rankings.jsonl"
     metadata_path = args.input_dir / "checkpoint_metadata.json"
     records = load_records(rankings_path, metadata_path)
 
-    score_values = [float(candidate["adjusted_score"]) for row in records for candidate in row["candidates"]]
+    score_values = [
+        float(candidate["adjusted_score"]) for row in records for candidate in row["candidates"]
+    ]
     score_scale = {
         "minimum": min(score_values),
         "maximum": max(score_values),
         "mean": statistics.mean(score_values),
         "population_std": statistics.pstdev(score_values),
         "mean_top1_to_top5_gap": statistics.mean(
-            float(row["candidates"][0]["adjusted_score"]) - float(row["candidates"][4]["adjusted_score"])
+            float(row["candidates"][0]["adjusted_score"])
+            - float(row["candidates"][4]["adjusted_score"])
             for row in records
         ),
         "grid_scale_assessment": "Predeclared grid retained: lambda increments are commensurate with the frozen-score range and typical within-top-five gaps.",
@@ -569,8 +628,16 @@ def main() -> None:
         comp_adaptive = apply_frozen_adaptive(record, comp_order, policies[record["domain"]])
         evaluated_row = {
             **record,
-            "current": {"order": current_order, "fixed": current_fixed, "adaptive": current_adaptive},
-            "complementarity": {"order": comp_order, "fixed": comp_fixed, "adaptive": comp_adaptive},
+            "current": {
+                "order": current_order,
+                "fixed": current_fixed,
+                "adaptive": current_adaptive,
+            },
+            "complementarity": {
+                "order": comp_order,
+                "fixed": comp_fixed,
+                "adaptive": comp_adaptive,
+            },
         }
         evaluated.append(evaluated_row)
         for new_rank, candidate in enumerate(comp_order[1:], start=2):
@@ -581,29 +648,44 @@ def main() -> None:
                 if gap >= LOW_SCORE_PROMOTION_GAP:
                     low_score_promotions.append(
                         {
-                            "example_id": record["example_id"], "dataset": record["dataset"],
-                            "new_rank": new_rank, "original_rank": original_rank,
+                            "example_id": record["example_id"],
+                            "dataset": record["dataset"],
+                            "new_rank": new_rank,
+                            "original_rank": original_rank,
                             "promoted_frozen_score": float(candidate["adjusted_score"]),
                             "displaced_frozen_score": float(displaced["adjusted_score"]),
-                            "score_gap": gap, "novelty_at_selection": candidate["selection_novelty"],
+                            "score_gap": gap,
+                            "novelty_at_selection": candidate["selection_novelty"],
                         }
                     )
         for k_value in TUNED_K_VALUES:
             drop = current_fixed[str(k_value)]["precision"] - comp_fixed[str(k_value)]["precision"]
             if drop >= SUBSTANTIAL_PRECISION_DROP:
                 precision_drops.append(
-                    {"example_id": record["example_id"], "dataset": record["dataset"], "k": k_value,
-                     "current_precision": current_fixed[str(k_value)]["precision"],
-                     "complementarity_precision": comp_fixed[str(k_value)]["precision"], "drop": drop}
+                    {
+                        "example_id": record["example_id"],
+                        "dataset": record["dataset"],
+                        "k": k_value,
+                        "current_precision": current_fixed[str(k_value)]["precision"],
+                        "complementarity_precision": comp_fixed[str(k_value)]["precision"],
+                        "drop": drop,
+                    }
                 )
 
     for row in evaluated:
         for k_value in K_VALUES:
-            if row["current"]["fixed"][str(k_value)] != row["complementarity"]["fixed"][str(k_value)] and k_value == 1:
+            if (
+                row["current"]["fixed"][str(k_value)]
+                != row["complementarity"]["fixed"][str(k_value)]
+                and k_value == 1
+            ):
                 raise AssertionError(f"k=1 metric invariant failed: {row['example_id']}")
 
     def condition_summary(rows: Sequence[Mapping[str, Any]], condition: str) -> dict[str, Any]:
-        shaped = [{"fixed": row[condition]["fixed"], "adaptive": row[condition]["adaptive"]} for row in rows]
+        shaped = [
+            {"fixed": row[condition]["fixed"], "adaptive": row[condition]["adaptive"]}
+            for row in rows
+        ]
         return {"fixed": summarize_evaluations(shaped), "adaptive": summarize_adaptive(shaped)}
 
     per_dataset: dict[str, Any] = {}
@@ -612,10 +694,23 @@ def main() -> None:
         current = condition_summary(subset, "current")
         comp = condition_summary(subset, "complementarity")
         per_dataset[dataset] = {
-            "domain": subset[0]["domain"], "hop_group": subset[0]["hop_group"], "selected_lambda": selected[subset[0]["domain"]],
-            "current": current, "complementarity": comp,
+            "domain": subset[0]["domain"],
+            "hop_group": subset[0]["hop_group"],
+            "selected_lambda": selected[subset[0]["domain"]],
+            "current": current,
+            "complementarity": comp,
             "delta_complementarity_minus_current": deltas(comp["fixed"], current["fixed"]),
-            "adaptive_delta": {name: comp["adaptive"][name] - current["adaptive"][name] for name in ("precision", "recall", "f1", "complete_support_containment_rate", "mean_k", "mean_retrieved_evidence_units")},
+            "adaptive_delta": {
+                name: comp["adaptive"][name] - current["adaptive"][name]
+                for name in (
+                    "precision",
+                    "recall",
+                    "f1",
+                    "complete_support_containment_rate",
+                    "mean_k",
+                    "mean_retrieved_evidence_units",
+                )
+            },
         }
 
     pooled_domains: dict[str, Any] = {}
@@ -624,9 +719,21 @@ def main() -> None:
         current = condition_summary(subset, "current")
         comp = condition_summary(subset, "complementarity")
         pooled_domains[domain] = {
-            "selected_lambda": selected[domain], "current": current, "complementarity": comp,
+            "selected_lambda": selected[domain],
+            "current": current,
+            "complementarity": comp,
             "delta_complementarity_minus_current": deltas(comp["fixed"], current["fixed"]),
-            "adaptive_delta": {name: comp["adaptive"][name] - current["adaptive"][name] for name in ("precision", "recall", "f1", "complete_support_containment_rate", "mean_k", "mean_retrieved_evidence_units")},
+            "adaptive_delta": {
+                name: comp["adaptive"][name] - current["adaptive"][name]
+                for name in (
+                    "precision",
+                    "recall",
+                    "f1",
+                    "complete_support_containment_rate",
+                    "mean_k",
+                    "mean_retrieved_evidence_units",
+                )
+            },
         }
 
     hop_effects: dict[str, Any] = {}
@@ -635,7 +742,9 @@ def main() -> None:
         current = condition_summary(subset, "current")
         comp = condition_summary(subset, "complementarity")
         hop_effects[hop] = {
-            "datasets": sorted({row["dataset"] for row in subset}), "current": current, "complementarity": comp,
+            "datasets": sorted({row["dataset"] for row in subset}),
+            "current": current,
+            "complementarity": comp,
             "delta_complementarity_minus_current": deltas(comp["fixed"], current["fixed"]),
         }
 
@@ -644,39 +753,74 @@ def main() -> None:
     diagnostics = {
         "low_score_promotion_definition": f"promoted over a candidate with frozen-score advantage >= {LOW_SCORE_PROMOTION_GAP}",
         "low_score_promotion_count": len(low_score_promotions),
-        "low_score_promotions": sorted(low_score_promotions, key=lambda row: -row["score_gap"])[:50],
+        "low_score_promotions": sorted(low_score_promotions, key=lambda row: -row["score_gap"])[
+            :50
+        ],
         "substantial_precision_drop_definition": f"per-example precision decrease >= {SUBSTANTIAL_PRECISION_DROP} at matched k",
         "substantial_precision_drop_event_count": len(precision_drops),
-        "substantial_precision_drop_examples": sorted(precision_drops, key=lambda row: -row["drop"])[:50],
+        "substantial_precision_drop_examples": sorted(
+            precision_drops, key=lambda row: -row["drop"]
+        )[:50],
         "hop_effects": hop_effects,
     }
     aggregation["risk_diagnostics"] = diagnostics
 
     metrics = {
-        "schema_version": "production_generator_d_v1_complementarity_dev_v1", "split": "dev",
-        "examples": len(records), "datasets": list(DATASETS), "lambda_selected": selected,
-        "pooled_domains": pooled_domains, "hop_effects": hop_effects,
-        "rank1_invariant": True, "test_rows_read": 0, "answer_generation_run": False,
+        "schema_version": "production_generator_d_v1_complementarity_dev_v1",
+        "split": "dev",
+        "examples": len(records),
+        "datasets": list(DATASETS),
+        "lambda_selected": selected,
+        "pooled_domains": pooled_domains,
+        "hop_effects": hop_effects,
+        "rank1_invariant": True,
+        "test_rows_read": 0,
+        "answer_generation_run": False,
     }
     lambda_grid = {
-        "schema_version": "production_generator_d_v1_complementarity_lambda_grid_v1", "split": "dev",
-        "predeclared_grid": list(LAMBDA_GRID), "novelty_definition": "novel candidate units / unique candidate units relative to selected union S",
-        "selection_formula": "frozen_final_score + lambda * novelty", "score_scale_inspection": score_scale,
+        "schema_version": "production_generator_d_v1_complementarity_lambda_grid_v1",
+        "split": "dev",
+        "predeclared_grid": list(LAMBDA_GRID),
+        "novelty_definition": "novel candidate units / unique candidate units relative to selected union S",
+        "selection_formula": "frozen_final_score + lambda * novelty",
+        "score_scale_inspection": score_scale,
         "selection_rule": "pooled within domain; lexicographically maximize mean complete-support containment over k=2,3,5, then mean recall, F1, precision; then fewer mean units and smaller lambda",
-        "dataset_specific_tuning": False, "by_domain": grid_by_domain, "selected": selected,
+        "dataset_specific_tuning": False,
+        "by_domain": grid_by_domain,
+        "selected": selected,
     }
     selected_config = {
-        "schema_version": "production_generator_d_v1_complementarity_dev_config_v1", "status": "dev_only_not_promoted_to_production",
-        "lambdas": selected, "domains": list(DOMAINS), "rank1_frozen": True, "candidate_cap": 320,
-        "candidate_scope": "persisted frozen top-five SAGE-QA final ranking", "score_key": "adjusted_score",
-        "novelty_definition": "|unique units(c) minus S| / |unique units(c)|", "sequential": True,
-        "adaptive_policy_directory": str(args.policy_dir), "adaptive_policy_refit": False,
-        "source_rankings": str(rankings_path), "source_rankings_sha256": sha256(rankings_path),
-        "source_checkpoint_metadata": str(metadata_path), "source_checkpoint_metadata_sha256": sha256(metadata_path),
-        "selection_inputs": ["frozen adjusted_score", "candidate subgraph_units", "selected evidence union S", "original rank for deterministic ties"],
-        "forbidden_selection_inputs_used": [], "split": "dev", "test_rows_read": 0,
-        "generator_modified": False, "gnn_retrained": False, "checkpoint_modified": False,
-        "symbolic_weights_modified": False, "production_outputs_modified": False, "answer_generation_run": False,
+        "schema_version": "production_generator_d_v1_complementarity_dev_config_v1",
+        "status": "dev_only_not_promoted_to_production",
+        "lambdas": selected,
+        "domains": list(DOMAINS),
+        "rank1_frozen": True,
+        "candidate_cap": 320,
+        "candidate_scope": "persisted frozen top-five SAGE-QA final ranking",
+        "score_key": "adjusted_score",
+        "novelty_definition": "|unique units(c) minus S| / |unique units(c)|",
+        "sequential": True,
+        "adaptive_policy_directory": str(args.policy_dir),
+        "adaptive_policy_refit": False,
+        "source_rankings": str(rankings_path),
+        "source_rankings_sha256": sha256(rankings_path),
+        "source_checkpoint_metadata": str(metadata_path),
+        "source_checkpoint_metadata_sha256": sha256(metadata_path),
+        "selection_inputs": [
+            "frozen adjusted_score",
+            "candidate subgraph_units",
+            "selected evidence union S",
+            "original rank for deterministic ties",
+        ],
+        "forbidden_selection_inputs_used": [],
+        "split": "dev",
+        "test_rows_read": 0,
+        "generator_modified": False,
+        "gnn_retrained": False,
+        "checkpoint_modified": False,
+        "symbolic_weights_modified": False,
+        "production_outputs_modified": False,
+        "answer_generation_run": False,
     }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -685,7 +829,9 @@ def main() -> None:
     write_json(args.output_dir / "per_dataset.json", per_dataset)
     write_json(args.output_dir / "aggregation_failure_analysis.json", aggregation)
     write_json(args.output_dir / "selected_dev_configuration.json", selected_config)
-    (args.output_dir / "summary.md").write_text(build_summary_md(selected, metrics, aggregation), encoding="utf-8")
+    (args.output_dir / "summary.md").write_text(
+        build_summary_md(selected, metrics, aggregation), encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":

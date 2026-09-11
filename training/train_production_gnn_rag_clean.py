@@ -17,11 +17,19 @@ from data_processing.prepare_production_gnn_rag_clean import DATASETS, sha256_fi
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-root", type=Path, default=Path("checkpoints/production_generator_d_v1_gnn_rag_clean"))
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("checkpoints/production_generator_d_v1_gnn_rag_clean"),
+    )
     parser.add_argument("--datasets", nargs="*", choices=list(DATASETS), default=list(DATASETS))
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    output_root = (root / args.output_root).resolve() if not args.output_root.is_absolute() else args.output_root.resolve()
+    output_root = (
+        (root / args.output_root).resolve()
+        if not args.output_root.is_absolute()
+        else args.output_root.resolve()
+    )
     gnn_root = root / "third_party" / "GNN-RAG" / "gnn"
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
 
@@ -30,7 +38,9 @@ def main() -> None:
         adapter_dir = dataset_dir / "adapter"
         if (adapter_dir / "test.json").exists():
             raise RuntimeError(f"TEST seal violation: {adapter_dir / 'test.json'} exists")
-        invariance = json.loads((dataset_dir / "leakage_invariance.json").read_text(encoding="utf-8"))
+        invariance = json.loads(
+            (dataset_dir / "leakage_invariance.json").read_text(encoding="utf-8")
+        )
         if not invariance.get("pass"):
             raise RuntimeError(f"Leakage-invariance gate did not pass for {dataset}")
         experiment = f"rearev_lstm_clean_{dataset.lower()}"
@@ -62,21 +72,36 @@ def main() -> None:
             sys.executable,
             str(gnn_root / "main.py"),
             "ReaRev",
-            "--entity_dim", "50",
-            "--num_epoch", "3",
-            "--batch_size", "8",
-            "--eval_every", "1",
-            "--data_folder", str(adapter_dir) + "\\",
-            "--lm", "lstm",
-            "--num_iter", "2",
-            "--num_ins", "2",
-            "--num_gnn", "3",
-            "--relation_word_emb", "false",
-            "--checkpoint_dir", str(dataset_dir),
-            "--experiment_name", experiment,
-            "--name", f"sageqa-clean-{dataset.lower()}",
-            "--train_dev_only", "true",
-            "--dev_metrics_file", str(dev_metrics),
+            "--entity_dim",
+            "50",
+            "--num_epoch",
+            "3",
+            "--batch_size",
+            "8",
+            "--eval_every",
+            "1",
+            "--data_folder",
+            str(adapter_dir) + "\\",
+            "--lm",
+            "lstm",
+            "--num_iter",
+            "2",
+            "--num_ins",
+            "2",
+            "--num_gnn",
+            "3",
+            "--relation_word_emb",
+            "false",
+            "--checkpoint_dir",
+            str(dataset_dir),
+            "--experiment_name",
+            experiment,
+            "--name",
+            f"sageqa-clean-{dataset.lower()}",
+            "--train_dev_only",
+            "true",
+            "--dev_metrics_file",
+            str(dev_metrics),
         ]
         write_json(dataset_dir / "training_command.json", command)
         log_path = dataset_dir / "training.log"
@@ -84,7 +109,9 @@ def main() -> None:
         with log_path.open("x", encoding="utf-8", newline="\n") as log:
             log.write("COMMAND: " + subprocess.list2cmdline(command) + "\n\n")
             log.flush()
-            result = subprocess.run(command, cwd=gnn_root, stdout=log, stderr=subprocess.STDOUT, text=True)
+            result = subprocess.run(
+                command, cwd=gnn_root, stdout=log, stderr=subprocess.STDOUT, text=True
+            )
         if result.returncode:
             raise RuntimeError(f"Training failed for {dataset}; see {log_path}")
         metrics = json.loads(dev_metrics.read_text(encoding="utf-8"))

@@ -94,9 +94,7 @@ def group_by_example(rows: List[Dict]) -> Dict[str, List[Dict]]:
 
 
 def get_question_text(row: Dict, input_format: str = "hybrid") -> str:
-    question = (
-        row.get("question") or row.get("NL Question") or row.get("nl_question") or ""
-    )
+    question = row.get("question") or row.get("NL Question") or row.get("nl_question") or ""
     abs_question = row.get("abs_question") or row.get("ABS Question") or ""
     sparql = row.get("sparql_query") or row.get("SPARQL Query") or ""
 
@@ -179,9 +177,7 @@ def eval_group(rows: List[Dict], scoring_fn, input_format: str) -> Dict:
                 "gold_support_units": top1.get("gold_support_units", []),
                 "top1_best_jaccard_to_gold": as_float(top1, "best_jaccard_to_gold"),
                 "top1_best_set_f1_to_gold": as_float(top1, "best_set_f1_to_gold"),
-                "top1_best_precision_to_gold": as_float(
-                    top1, "best_set_precision_to_gold"
-                ),
+                "top1_best_precision_to_gold": as_float(top1, "best_set_precision_to_gold"),
                 "top1_best_recall_to_gold": as_float(top1, "best_set_recall_to_gold"),
                 "top5": [
                     {
@@ -194,12 +190,8 @@ def eval_group(rows: List[Dict], scoring_fn, input_format: str) -> Dict:
                         ),
                         "best_jaccard_to_gold": as_float(r, "best_jaccard_to_gold"),
                         "best_set_f1_to_gold": as_float(r, "best_set_f1_to_gold"),
-                        "best_set_precision_to_gold": as_float(
-                            r, "best_set_precision_to_gold"
-                        ),
-                        "best_set_recall_to_gold": as_float(
-                            r, "best_set_recall_to_gold"
-                        ),
+                        "best_set_precision_to_gold": as_float(r, "best_set_precision_to_gold"),
+                        "best_set_recall_to_gold": as_float(r, "best_set_recall_to_gold"),
                         "subgraph_units": r.get("subgraph_units", []),
                     }
                     for i, r in enumerate(top5)
@@ -215,16 +207,11 @@ def compute_metrics(details: List[Dict]) -> Dict:
 
     hit1 = sum(1 for d in details if int(d.get("top1_label", 0)) == 1) / n
     exact1 = sum(1 for d in details if d.get("top1_exact_match_any_gold", False)) / n
-    contains1 = (
-        sum(1 for d in details if d.get("top1_contains_any_gold_explanation", False))
-        / n
-    )
+    contains1 = sum(1 for d in details if d.get("top1_contains_any_gold_explanation", False)) / n
 
     jaccard1 = sum(float(d.get("top1_best_jaccard_to_gold", 0.0)) for d in details) / n
     f11 = sum(float(d.get("top1_best_set_f1_to_gold", 0.0)) for d in details) / n
-    precision1 = (
-        sum(float(d.get("top1_best_precision_to_gold", 0.0)) for d in details) / n
-    )
+    precision1 = sum(float(d.get("top1_best_precision_to_gold", 0.0)) for d in details) / n
     recall1 = sum(float(d.get("top1_best_recall_to_gold", 0.0)) for d in details) / n
 
     hit3 = 0
@@ -275,11 +262,7 @@ def compute_metrics(details: List[Dict]) -> Dict:
             inter = len(pred_set & gold_set)
             precision = inter / max(len(pred_set), 1)
             recall = inter / len(gold_set)
-            f1 = (
-                0.0
-                if precision + recall == 0
-                else (2 * precision * recall / (precision + recall))
-            )
+            f1 = 0.0 if precision + recall == 0 else (2 * precision * recall / (precision + recall))
             if f1 > best_f1:
                 best_precision = precision
                 best_recall = recall
@@ -293,15 +276,11 @@ def compute_metrics(details: List[Dict]) -> Dict:
 
         hit3 += int(any(int(r.get("label", 0)) == 1 for r in top3))
         exact3 += int(any(r.get("exact_match_any_gold", False) for r in top3))
-        contains3 += int(
-            any(r.get("contains_any_gold_explanation", False) for r in top3)
-        )
+        contains3 += int(any(r.get("contains_any_gold_explanation", False) for r in top3))
 
         hit5 += int(any(int(r.get("label", 0)) == 1 for r in top5))
         exact5 += int(any(r.get("exact_match_any_gold", False) for r in top5))
-        contains5 += int(
-            any(r.get("contains_any_gold_explanation", False) for r in top5)
-        )
+        contains5 += int(any(r.get("contains_any_gold_explanation", False) for r in top5))
 
         if top3:
             best3 = max(top3, key=lambda r: float(r.get("best_set_f1_to_gold", 0.0)))

@@ -49,15 +49,9 @@ class ReasonGNNLayer(BaseGNNLayer):
                 )
 
             if self.use_posemb:
-                self.add_module(
-                    "pos_emb" + str(i), nn.Embedding(self.num_relation, entity_dim)
-                )
-                self.add_module(
-                    "pos_emb_inv" + str(i), nn.Embedding(self.num_relation, entity_dim)
-                )
-        self.lin_m = nn.Linear(
-            in_features=(self.num_ins) * entity_dim, out_features=entity_dim
-        )
+                self.add_module("pos_emb" + str(i), nn.Embedding(self.num_relation, entity_dim))
+                self.add_module("pos_emb_inv" + str(i), nn.Embedding(self.num_relation, entity_dim))
+        self.lin_m = nn.Linear(in_features=(self.num_ins) * entity_dim, out_features=entity_dim)
 
     def init_reason(
         self,
@@ -185,9 +179,7 @@ class ReasonGNNLayer(BaseGNNLayer):
 
         next_local_entity_emb = torch.cat((self.local_entity_emb, neighbor_reps), dim=2)
         # print(next_local_entity_emb.size())
-        self.local_entity_emb = F.relu(
-            e2e_linear(self.linear_drop(next_local_entity_emb))
-        )
+        self.local_entity_emb = F.relu(e2e_linear(self.linear_drop(next_local_entity_emb)))
 
         score_tp = score_func(self.linear_drop(self.local_entity_emb)).squeeze(dim=2)
         answer_mask = self.local_entity_mask

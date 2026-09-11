@@ -82,9 +82,7 @@ def effective_score_scale(
 ) -> float:
     scores = [float(candidate[score_key]) for candidate in ranked_candidates]
     mean_score = sum(scores) / len(scores)
-    population_std = math.sqrt(
-        sum((score - mean_score) ** 2 for score in scores) / len(scores)
-    )
+    population_std = math.sqrt(sum((score - mean_score) ** 2 for score in scores) / len(scores))
     return max(population_std, epsilon)
 
 
@@ -99,25 +97,17 @@ def compute_decision_features(
 ) -> dict[str, float]:
     """Compute the fixed v2 feature set for STOP/CONTINUE after prefix ``k``."""
 
-    candidates = validate_ranked_candidates(
-        ranked_candidates, epsilon=epsilon, score_key=score_key
-    )
+    candidates = validate_ranked_candidates(ranked_candidates, epsilon=epsilon, score_key=score_key)
     if not 1 <= decision_rank < len(candidates):
-        raise ValueError(
-            "decision_rank must identify a prefix with an available next candidate"
-        )
+        raise ValueError("decision_rank must identify a prefix with an available next candidate")
 
     scores = [float(candidate[score_key]) for candidate in candidates]
-    score_scale = effective_score_scale(
-        candidates, epsilon=epsilon, score_key=score_key
-    )
+    score_scale = effective_score_scale(candidates, epsilon=epsilon, score_key=score_key)
 
     prefix_pairs: list[tuple[Hashable, Any]] = []
     prefix_keys: set[Hashable] = set()
     for candidate in candidates[:decision_rank]:
-        for key, unit in _unique_pairs(
-            list(candidate.get(units_key, []) or []), evidence_key
-        ):
+        for key, unit in _unique_pairs(list(candidate.get(units_key, []) or []), evidence_key):
             if key not in prefix_keys:
                 prefix_keys.add(key)
                 prefix_pairs.append((key, unit))
@@ -207,13 +197,9 @@ def adaptive_v2_support_aggregate(
         ranked_candidates, k_max=k_max, epsilon=epsilon, score_key=score_key
     )
     scores = [float(candidate[score_key]) for candidate in candidates]
-    score_scale = effective_score_scale(
-        candidates, epsilon=epsilon, score_key=score_key
-    )
+    score_scale = effective_score_scale(candidates, epsilon=epsilon, score_key=score_key)
 
-    selected_pairs = _unique_pairs(
-        list(candidates[0].get(units_key, []) or []), evidence_key
-    )
+    selected_pairs = _unique_pairs(list(candidates[0].get(units_key, []) or []), evidence_key)
     selected_keys = {key for key, _ in selected_pairs}
     support_units = [unit for _, unit in selected_pairs]
     decisions: list[dict[str, Any]] = []

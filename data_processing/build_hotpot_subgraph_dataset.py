@@ -779,9 +779,7 @@ def generate_candidates(
     example_id = f"HotpotQA__{split_name}__{ex_id}"
     question = str(retrieval_example.get("question", ""))
     sentence_records = flatten_context(retrieval_example)
-    sent_lookup = {
-        (rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records
-    }
+    sent_lookup = {(rec["title"], int(rec["sent_idx"])): rec["unit"] for rec in sentence_records}
     cached_kg = kg_cache.get(example_id) if kg_cache is not None else None
     if cached_kg:
         validate_clean_cache_row(cached_kg, expected_signature=kg_config.cache_signature)
@@ -885,9 +883,7 @@ def label_candidates(
             "graph_context_units": generated["graph_context_units"],
             # Model features.
             "symbolic_features": symbolic_features,
-            "candidate_pre_rank_score": candidate_pre_rank_score(
-                question, candidate_units
-            ),
+            "candidate_pre_rank_score": candidate_pre_rank_score(question, candidate_units),
             "generation_rank": cand_idx,
             "sentence_pool_size": len(generated["sentence_pool"]),
             "kg_construction_method": generated["kg_construction_method"],
@@ -899,16 +895,18 @@ def label_candidates(
             "builder_version": BUILDER_VERSION,
         }
         if attach_gold:
-            row.update({
-                "raw_supporting_facts": raw_supporting_facts,
-                "gold_support_units": gold_units,
-                "label": int(label),
-                "rank_target": float(best_f1),
-                "best_set_f1_to_gold": float(best_f1),
-                "best_jaccard_to_gold": float(best_jaccard),
-                "exact_match_any_gold": bool(exact),
-                "contains_any_gold_explanation": bool(contains),
-            })
+            row.update(
+                {
+                    "raw_supporting_facts": raw_supporting_facts,
+                    "gold_support_units": gold_units,
+                    "label": int(label),
+                    "rank_target": float(best_f1),
+                    "best_set_f1_to_gold": float(best_f1),
+                    "best_jaccard_to_gold": float(best_jaccard),
+                    "exact_match_any_gold": bool(exact),
+                    "contains_any_gold_explanation": bool(contains),
+                }
+            )
 
         rows.append(row)
 
@@ -996,9 +994,7 @@ def split_train_dev_from_train(
     if max_train_examples and max_train_examples > 0:
         # Keep enough examples for train + dev if possible.
         total = max_train_examples + (
-            max_dev_examples
-            if max_dev_examples > 0
-            else int(max_train_examples * dev_ratio)
+            max_dev_examples if max_dev_examples > 0 else int(max_train_examples * dev_ratio)
         )
         shuffled = shuffled[: min(total, len(shuffled))]
 
@@ -1091,9 +1087,7 @@ def build_split_rows(
             )
 
         with ThreadPoolExecutor(max_workers=kg_construction_workers) as pool:
-            futures = [
-                pool.submit(build_one, (idx, ex)) for idx, ex in enumerate(examples)
-            ]
+            futures = [pool.submit(build_one, (idx, ex)) for idx, ex in enumerate(examples)]
             for done_count, future in enumerate(as_completed(futures), start=1):
                 indexed_results.append(future.result())
                 if done_count % 5 == 0 or done_count == len(futures):
@@ -1154,24 +1148,28 @@ def main():
     parser.add_argument("--max-test-examples", type=int, default=300)
 
     parser.add_argument(
-        "--max-sentences-per-example", type=int, default=30,
+        "--max-sentences-per-example",
+        type=int,
+        default=30,
         help="Legacy compatibility option; Generator D adapts the full context.",
     )
     parser.add_argument(
-        "--max-subgraph-size", type=int, default=6,
+        "--max-subgraph-size",
+        type=int,
+        default=6,
         help="Legacy compatibility option; frozen Generator D always uses size 6.",
     )
     parser.add_argument(
-        "--max-candidates-per-question", type=int, default=512,
+        "--max-candidates-per-question",
+        type=int,
+        default=512,
         help="Legacy compatibility option; frozen Generator D always caps at 512.",
     )
     parser.add_argument(
         "--max-kg-bridge-triples",
         type=int,
         default=64,
-        help=(
-            "Maximum context-derived KG triples to attach per example."
-        ),
+        help=("Maximum context-derived KG triples to attach per example."),
     )
     parser.add_argument(
         "--kg-construction-backend",
@@ -1221,9 +1219,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     kg_cache_dir = args.kg_cache_dir or (out_dir / "kg_cache")
     kg_backend = (
-        "context_only"
-        if args.kg_construction_backend == "none"
-        else args.kg_construction_backend
+        "context_only" if args.kg_construction_backend == "none" else args.kg_construction_backend
     )
     validate_clean_kg_backend(kg_backend)
     kg_config = KGConstructionConfig(
@@ -1240,8 +1236,7 @@ def main():
         kg_config.max_triples = 0
     llm_kg_constructor = (
         LLMKGConstructor(kg_config)
-        if args.kg_construction_backend
-        in {"llm", "llm_with_title_bridges"}
+        if args.kg_construction_backend in {"llm", "llm_with_title_bridges"}
         else None
     )
 
@@ -1348,9 +1343,7 @@ def main():
         },
         seed=args.seed,
     )
-    assert_disjoint_split_ids(
-        {"train": train_examples, "dev": dev_examples, "test": test_examples}
-    )
+    assert_disjoint_split_ids({"train": train_examples, "dev": dev_examples, "test": test_examples})
     write_json(out_dir / "split_manifest.json", manifest)
 
     metadata = {

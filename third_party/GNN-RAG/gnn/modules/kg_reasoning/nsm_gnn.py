@@ -69,9 +69,7 @@ class NSMBaseLayer(BaseGNNLayer):
         # score_func = getattr(self, 'score_func' + str(step))
         score_func = self.score_func
         relational_ins = relational_ins.squeeze(1)
-        neighbor_rep, possible_tail = self.reason_layer(
-            current_dist, relational_ins, rel_linear
-        )
+        neighbor_rep, possible_tail = self.reason_layer(current_dist, relational_ins, rel_linear)
         next_local_entity_emb = torch.cat((self.local_entity_emb, neighbor_rep), dim=2)
         self.local_entity_emb = e2e_linear(self.linear_drop(next_local_entity_emb))
 
@@ -117,9 +115,7 @@ class NSMLayer(NSMBaseLayer):
         )  # batch_size * max_local_entity, 1
         # (batch_size *max_local_entity, num_fact) (num_fact, 1)
         possible_tail = (
-            (possible_tail > VERY_SMALL_NUMBER)
-            .float()
-            .view(batch_size, max_local_entity)
+            (possible_tail > VERY_SMALL_NUMBER).float().view(batch_size, max_local_entity)
         )
 
         fact_val = fact_val * fact_prior
@@ -153,9 +149,7 @@ class NSMLayer_back(NSMBaseLayer):
         possible_head = torch.sparse.mm(self.fact2head_mat, fact_prior)
         # (batch_size *max_local_entity, num_fact) (num_fact, 1)
         possible_head = (
-            (possible_head > VERY_SMALL_NUMBER)
-            .float()
-            .view(batch_size, max_local_entity)
+            (possible_head > VERY_SMALL_NUMBER).float().view(batch_size, max_local_entity)
         )
 
         fact_val = fact_val * fact_prior

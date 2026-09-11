@@ -15,9 +15,7 @@ class Llama(BaseLanguageModel):
             help="HUGGING FACE MODEL or model path",
             default="meta-llama/Llama-2-7b-chat-hf",
         )
-        parser.add_argument(
-            "--max_new_tokens", type=int, help="max length", default=512
-        )
+        parser.add_argument("--max_new_tokens", type=int, help="max length", default=512)
         parser.add_argument("--dtype", choices=["fp32", "fp16", "bf16"], default="fp16")
 
     def __init__(self, args):

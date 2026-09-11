@@ -30,9 +30,7 @@ def load_multiple_datasets(data_path_list, shuffle=False):
     Returns:
         _type_: _description_
     """
-    dataset_list = [
-        load_dataset("json", data_files=p, split="train") for p in data_path_list
-    ]
+    dataset_list = [load_dataset("json", data_files=p, split="train") for p in data_path_list]
     dataset = concatenate_datasets(dataset_list)
     if shuffle:
         dataset = dataset.shuffle()

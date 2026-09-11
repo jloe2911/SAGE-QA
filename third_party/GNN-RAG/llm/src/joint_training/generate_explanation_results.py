@@ -11,9 +11,7 @@ from collections import namedtuple
 import multiprocessing as mp
 from tqdm import tqdm
 
-N_CPUS = (
-    int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
-)
+N_CPUS = int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
 
 save_dir = "datasets/joint_training/ExplainQAData"
 split = "train"

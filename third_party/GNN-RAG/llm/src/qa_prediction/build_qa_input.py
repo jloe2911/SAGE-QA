@@ -131,9 +131,7 @@ class PromptBuilder(object):
         if question_dict["cand"] is not None:
             if not self.add_rule:
                 skip_ents = []
-                graph = utils.build_graph(
-                    question_dict["graph"], skip_ents, self.encrypt
-                )
+                graph = utils.build_graph(question_dict["graph"], skip_ents, self.encrypt)
             lists_of_paths2 = []
             # print(question_dict['cand'])
             reasoning_paths = utils.get_truth_paths(
@@ -177,9 +175,7 @@ class PromptBuilder(object):
                 instruction=instruction,
                 input=self.GRAPH_CONTEXT.format(context="") + input,
             )
-            context = self.check_prompt_length(
-                other_prompt, lists_of_paths, self.maximun_token
-            )
+            context = self.check_prompt_length(other_prompt, lists_of_paths, self.maximun_token)
 
             input = self.GRAPH_CONTEXT.format(context=context) + input
 

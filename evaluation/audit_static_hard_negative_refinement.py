@@ -23,11 +23,22 @@ ROOT = Path(__file__).resolve().parents[1]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
-    parser.add_argument("--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v1")
-    parser.add_argument("--output", type=Path, default=ROOT / "outputs/final_model_development/production_generator_d_static_hard_v1_gate/implementation_invariance_gate.json")
+    parser.add_argument(
+        "--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v1"
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT
+        / "outputs/final_model_development/production_generator_d_static_hard_v1_gate/implementation_invariance_gate.json",
+    )
     args = parser.parse_args()
     source = inspect.getsource(refinement)
-    prohibited = [token for token in ("load_jsonl(", "prepare_examples(", "score_candidate_rows(") if token in source]
+    prohibited = [
+        token
+        for token in ("load_jsonl(", "prepare_examples(", "score_candidate_rows(")
+        if token in source
+    ]
     if prohibited:
         raise AssertionError(f"Corpus/full-candidate training path found: {prohibited}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,18 +49,30 @@ def main() -> None:
             example = refinement.prepare_static_pair(raw_rows)
             if example is not None:
                 break
-        checkpoint, tokenizer, model = refinement.load_v1(args.checkpoint_root / slug / "best_model.pt", device)
+        checkpoint, tokenizer, model = refinement.load_v1(
+            args.checkpoint_root / slug / "best_model.pt", device
+        )
         model.eval()
-        encoded = encode_example_graph(model, tokenizer, example, device, max_length=refinement.FROZEN["max_length"])
+        encoded = encode_example_graph(
+            model, tokenizer, example, device, max_length=refinement.FROZEN["max_length"]
+        )
         with torch.no_grad():
-            production_logits = score_candidate_rows(model, encoded, example["candidate_rows"], device)["logits"]
-            representations = refinement.frozen_pair_representations(model, tokenizer, example, device)
+            production_logits = score_candidate_rows(
+                model, encoded, example["candidate_rows"], device
+            )["logits"]
+            representations = refinement.frozen_pair_representations(
+                model, tokenizer, example, device
+            )
             static_logits = model.classifier(representations).squeeze(-1)
         max_difference = float((production_logits - static_logits).abs().max().cpu())
         if max_difference > 1e-6:
-            raise AssertionError(f"Frozen representation/scoring mismatch for {dataset}: {max_difference}")
+            raise AssertionError(
+                f"Frozen representation/scoring mismatch for {dataset}: {max_difference}"
+            )
         refinement.freeze_except_classifier(model)
-        trainable = [name for name, parameter in model.named_parameters() if parameter.requires_grad]
+        trainable = [
+            name for name, parameter in model.named_parameters() if parameter.requires_grad
+        ]
         if not trainable or any(not name.startswith("classifier.") for name in trainable):
             raise AssertionError(f"Unexpected trainable parameters: {trainable}")
         datasets[dataset] = {

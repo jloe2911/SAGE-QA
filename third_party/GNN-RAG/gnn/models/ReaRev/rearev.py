@@ -54,12 +54,8 @@ class ReaRev(BaseModel):
         # self.lstm_dropout = args['lstm_dropout']
         self.linear_dropout = args["linear_dropout"]
 
-        self.entity_linear = nn.Linear(
-            in_features=self.ent_dim, out_features=entity_dim
-        )
-        self.relation_linear = nn.Linear(
-            in_features=self.rel_dim, out_features=entity_dim
-        )
+        self.entity_linear = nn.Linear(in_features=self.ent_dim, out_features=entity_dim)
+        self.relation_linear = nn.Linear(in_features=self.rel_dim, out_features=entity_dim)
         # self.relation_linear_inv = nn.Linear(in_features=self.rel_dim, out_features=entity_dim)
         # self.relation_linear = nn.Linear(in_features=self.rel_dim, out_features=entity_dim)
 
@@ -135,20 +131,14 @@ class ReaRev(BaseModel):
         word_dim = self.word_dim
         kg_dim = self.kg_dim
         entity_dim = self.entity_dim
-        self.reasoning = ReasonGNNLayer(
-            args, num_entity, num_relation, entity_dim, self.alg
-        )
+        self.reasoning = ReasonGNNLayer(args, num_entity, num_relation, entity_dim, self.alg)
         if args["lm"] == "lstm":
             self.instruction = LSTMInstruction(args, self.word_embedding, self.num_word)
-            self.relation_linear = nn.Linear(
-                in_features=self.rel_dim, out_features=entity_dim
-            )
+            self.relation_linear = nn.Linear(in_features=self.rel_dim, out_features=entity_dim)
         else:
             from modules.question_encoding.bert_encoder import BERTInstruction
 
-            self.instruction = BERTInstruction(
-                args, self.word_embedding, self.num_word, args["lm"]
-            )
+            self.instruction = BERTInstruction(args, self.word_embedding, self.num_word, args["lm"])
             # self.relation_linear = nn.Linear(in_features=self.instruction.word_dim, out_features=entity_dim)
         # self.relation_linear = nn.Linear(in_features=entity_dim, out_features=entity_dim)
         # self.relation_linear_inv = nn.Linear(in_features=entity_dim, out_features=entity_dim)
@@ -161,9 +151,7 @@ class ReaRev(BaseModel):
         self.local_entity = local_entity
         self.instruction_list, self.attn_list = self.instruction(q_input)
         rel_features, rel_features_inv = self.get_rel_feature()
-        self.local_entity_emb = self.get_ent_init(
-            local_entity, kb_adj_mat, rel_features
-        )
+        self.local_entity_emb = self.get_ent_init(local_entity, kb_adj_mat, rel_features)
         self.init_entity_emb = self.local_entity_emb
         self.curr_dist = curr_dist
         self.dist_history = []
@@ -180,9 +168,7 @@ class ReaRev(BaseModel):
         )
 
     def calc_loss_label(self, curr_dist, teacher_dist, label_valid):
-        tp_loss = self.get_loss(
-            pred_dist=curr_dist, answer_dist=teacher_dist, reduction="none"
-        )
+        tp_loss = self.get_loss(pred_dist=curr_dist, answer_dist=teacher_dist, reduction="none")
         tp_loss = tp_loss * label_valid
         cur_loss = torch.sum(tp_loss) / curr_dist.size(0)
         return cur_loss
@@ -202,19 +188,11 @@ class ReaRev(BaseModel):
             true_batch_id,
             answer_dist,
         ) = batch
-        local_entity = (
-            torch.from_numpy(local_entity).type("torch.LongTensor").to(self.device)
-        )
+        local_entity = torch.from_numpy(local_entity).type("torch.LongTensor").to(self.device)
         # local_entity_mask = (local_entity != self.num_entity).float()
-        query_entities = (
-            torch.from_numpy(query_entities).type("torch.FloatTensor").to(self.device)
-        )
-        answer_dist = (
-            torch.from_numpy(answer_dist).type("torch.FloatTensor").to(self.device)
-        )
-        seed_dist = (
-            torch.from_numpy(seed_dist).type("torch.FloatTensor").to(self.device)
-        )
+        query_entities = torch.from_numpy(query_entities).type("torch.FloatTensor").to(self.device)
+        answer_dist = torch.from_numpy(answer_dist).type("torch.FloatTensor").to(self.device)
+        seed_dist = torch.from_numpy(seed_dist).type("torch.FloatTensor").to(self.device)
         current_dist = Variable(seed_dist, requires_grad=True)
 
         q_input = torch.from_numpy(query_text).type("torch.LongTensor").to(self.device)
@@ -257,9 +235,7 @@ class ReaRev(BaseModel):
             relation_ins = torch.cat(self.instruction.instructions, dim=1)
             self.curr_dist = current_dist
             for j in range(self.num_gnn):
-                self.curr_dist, global_rep = self.reasoning(
-                    self.curr_dist, relation_ins, step=j
-                )
+                self.curr_dist, global_rep = self.reasoning(self.curr_dist, relation_ins, step=j)
             self.dist_history.append(self.curr_dist)
             qs = []
 

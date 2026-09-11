@@ -158,9 +158,7 @@ def build_sample(
         "entities": q_entities,
         "q_entity": q_entities,
         "answer": clean(seed.get("answer", "")),
-        "choices": ["TRUE", "FALSE"]
-        if is_boolean_answer(seed.get("answer", ""))
-        else [],
+        "choices": ["TRUE", "FALSE"] if is_boolean_answer(seed.get("answer", "")) else [],
         "graph": tuples,
         "answers": [{"kb_id": node, "text": node} for node in target_nodes],
         "subgraph": {
@@ -192,9 +190,7 @@ def build_vocab(
     words = {"__unk__"}
     for samples in samples_by_split.values():
         for sample in samples:
-            words.update(
-                token.lower() for token in TOKEN_RE.findall(sample["question"])
-            )
+            words.update(token.lower() for token in TOKEN_RE.findall(sample["question"]))
             entities.update(sample["entities"])
             entities.update(sample["subgraph"]["entities"])
             for answer in sample["answers"]:
@@ -219,9 +215,7 @@ def main() -> None:
     for split in ("train", "dev", "test"):
         grouped = group_examples(args.data_dir / f"{split}_subgraph_retrieval.jsonl")
         grouped.update(
-            answer_only_rows(
-                args.data_dir / f"{split}_answer_only_no_explanation.jsonl"
-            )
+            answer_only_rows(args.data_dir / f"{split}_answer_only_no_explanation.jsonl")
         )
         samples = []
         for example_id, rows in grouped.items():

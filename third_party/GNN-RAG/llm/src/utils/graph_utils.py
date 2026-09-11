@@ -43,9 +43,7 @@ def bfs_with_rule(graph, start_node, target_rule, max_p=10):
             for neighbor in graph.neighbors(current_node):
                 # 剪枝：如果当前边类型与规则中的对应位置不匹配，不继续探索该路径
                 rel = graph[current_node][neighbor]["relation"]
-                if rel != target_rule[len(current_path)] or len(current_path) > len(
-                    target_rule
-                ):
+                if rel != target_rule[len(current_path)] or len(current_path) > len(target_rule):
                     continue
                 queue.append((neighbor, current_path + [(current_node, rel, neighbor)]))
 
@@ -105,9 +103,7 @@ def get_simple_paths(q_entity: list, a_entity: list, graph: nx.Graph, hop=2) -> 
     return result_paths
 
 
-def get_negative_paths(
-    q_entity: list, a_entity: list, graph: nx.Graph, n_neg: int, hop=2
-) -> list:
+def get_negative_paths(q_entity: list, a_entity: list, graph: nx.Graph, n_neg: int, hop=2) -> list:
     """
     Get negative paths for question witin hop
     """
@@ -139,9 +135,7 @@ def get_negative_paths(
     return result_paths
 
 
-def get_random_paths(
-    q_entity: list, graph: nx.Graph, n=3, hop=2
-):  # -> tuple [list, list]:
+def get_random_paths(q_entity: list, graph: nx.Graph, n=3, hop=2):  # -> tuple [list, list]:
     """
     Get negative paths for question witin hop
     """

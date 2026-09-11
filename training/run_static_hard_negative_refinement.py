@@ -129,7 +129,13 @@ def materialize_selected_row(
     node_ids = [axiom_to_idx[unit] for unit in units if unit in axiom_to_idx]
     if not node_ids:
         raise ValueError("Selected candidate has no nodes in its production local graph")
-    question = str(raw.get("question") or raw.get("abs_question") or raw.get("task_id") or raw.get("sparql_query") or raw["example_id"])
+    question = str(
+        raw.get("question")
+        or raw.get("abs_question")
+        or raw.get("task_id")
+        or raw.get("sparql_query")
+        or raw["example_id"]
+    )
     sparql = str(raw.get("sparql_query") or "")
     target = ranking_target(raw)
     if _is_text_dataset(raw):
@@ -181,11 +187,19 @@ def prepare_static_pair(raw_rows: list[dict[str, Any]]) -> dict[str, Any] | None
     candidate_axioms = reconstruct_candidate_axioms(raw_rows)
     axiom_to_idx = {axiom: index for index, axiom in enumerate(candidate_axioms)}
     rows = [
-        materialize_selected_row(view["_raw"], order=int(view["materialization_order"]), axiom_to_idx=axiom_to_idx)
+        materialize_selected_row(
+            view["_raw"], order=int(view["materialization_order"]), axiom_to_idx=axiom_to_idx
+        )
         for view in selected
     ]
     example_id = str(first["example_id"])
-    question = str(first.get("question") or first.get("abs_question") or first.get("task_id") or first.get("sparql_query") or example_id)
+    question = str(
+        first.get("question")
+        or first.get("abs_question")
+        or first.get("task_id")
+        or first.get("sparql_query")
+        or example_id
+    )
     return {
         "example_id": example_id,
         "dataset": infer_dataset_name(example_id, first),
@@ -219,12 +233,16 @@ def frozen_pair_representations(model, tokenizer, example, device) -> torch.Tens
             max_length=FROZEN["max_length"],
         )
         query = model.encode_texts(
-            inputs["query_input_ids"], inputs["query_attention_mask"], inputs["query_token_type_ids"]
+            inputs["query_input_ids"],
+            inputs["query_attention_mask"],
+            inputs["query_token_type_ids"],
         ).squeeze(0)
         node_text = model.encode_texts(
             inputs["node_input_ids"], inputs["node_attention_mask"], inputs["node_token_type_ids"]
         )
-        nodes = model.encode_graph(node_text, inputs["node_symbolic_features"], inputs["edge_index"])
+        nodes = model.encode_graph(
+            node_text, inputs["node_symbolic_features"], inputs["edge_index"]
+        )
         representations = []
         for row in example["candidate_rows"]:
             ids = torch.tensor(row["subgraph_node_ids"], dtype=torch.long, device=device)
@@ -237,6 +255,7 @@ def frozen_pair_representations(model, tokenizer, example, device) -> torch.Tens
 
 def load_v1(checkpoint_path: Path, device):
     from transformers import AutoTokenizer
+
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     model_name = checkpoint["model_name"]
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -256,10 +275,16 @@ def load_v1(checkpoint_path: Path, device):
 
 
 def frozen_state(model) -> dict[str, torch.Tensor]:
-    return {name: value.detach().cpu().clone() for name, value in model.state_dict().items() if not name.startswith("classifier.")}
+    return {
+        name: value.detach().cpu().clone()
+        for name, value in model.state_dict().items()
+        if not name.startswith("classifier.")
+    }
 
 
-def train_dataset(train_path: Path, v1_path: Path, output_path: Path, expected_eligible: int) -> dict[str, Any]:
+def train_dataset(
+    train_path: Path, v1_path: Path, output_path: Path, expected_eligible: int
+) -> dict[str, Any]:
     random.seed(SEED)
     torch.manual_seed(SEED)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -267,6 +292,7 @@ def train_dataset(train_path: Path, v1_path: Path, output_path: Path, expected_e
     before = frozen_state(model)
     optimizer = AdamW(model.classifier.parameters(), lr=FROZEN["learning_rate"])
     from transformers import get_linear_schedule_with_warmup
+
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=max(1, expected_eligible // 10),
@@ -286,10 +312,15 @@ def train_dataset(train_path: Path, v1_path: Path, output_path: Path, expected_e
         representations = frozen_pair_representations(model, tokenizer, example, device)
         scores = model.classifier(representations).squeeze(-1)
         loss, stats = compute_example_loss(
-            scores, example["candidate_rows"], bce,
-            ranking_margin=FROZEN["ranking_margin"], ranking_weight=FROZEN["ranking_weight"],
-            bce_weight=FROZEN["bce_weight"], listwise_weight=FROZEN["listwise_weight"],
-            max_pairs=FROZEN["max_pairs"], hard_pair_reservation=False,
+            scores,
+            example["candidate_rows"],
+            bce,
+            ranking_margin=FROZEN["ranking_margin"],
+            ranking_weight=FROZEN["ranking_weight"],
+            bce_weight=FROZEN["bce_weight"],
+            listwise_weight=FROZEN["listwise_weight"],
+            max_pairs=FROZEN["max_pairs"],
+            hard_pair_reservation=False,
         )
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.classifier.parameters(), 1.0)
@@ -300,9 +331,13 @@ def train_dataset(train_path: Path, v1_path: Path, output_path: Path, expected_e
             loss_sums[key] += stats[key]
         del example, representations, scores, loss
     if totals["eligible"] != expected_eligible:
-        raise AssertionError(f"Eligible count {totals['eligible']} != frozen audit {expected_eligible}")
+        raise AssertionError(
+            f"Eligible count {totals['eligible']} != frozen audit {expected_eligible}"
+        )
     for name, value in model.state_dict().items():
-        if not name.startswith("classifier.") and not torch.equal(value.detach().cpu(), before[name]):
+        if not name.startswith("classifier.") and not torch.equal(
+            value.detach().cpu(), before[name]
+        ):
             raise AssertionError(f"Frozen parameter or buffer changed: {name}")
     result = {
         **totals,
@@ -315,14 +350,16 @@ def train_dataset(train_path: Path, v1_path: Path, output_path: Path, expected_e
     }
     refined = dict(checkpoint)
     refined["model_state_dict"] = model.state_dict()
-    refined.update({
-        "refinement": "one_pass_static_generator_d_hard_pair_head_only",
-        "refinement_hyperparameters": FROZEN,
-        "training_examples": totals["eligible"],
-        "source_checkpoint_sha256": result["v1_checkpoint_sha256"],
-        "dev_used_for_training_or_selection": False,
-        "test_accessed": False,
-    })
+    refined.update(
+        {
+            "refinement": "one_pass_static_generator_d_hard_pair_head_only",
+            "refinement_hyperparameters": FROZEN,
+            "training_examples": totals["eligible"],
+            "source_checkpoint_sha256": result["v1_checkpoint_sha256"],
+            "dev_used_for_training_or_selection": False,
+            "test_accessed": False,
+        }
+    )
     output_path.parent.mkdir(parents=True, exist_ok=False)
     torch.save(refined, output_path)
     result["checkpoint"] = str(output_path)
@@ -333,10 +370,25 @@ def train_dataset(train_path: Path, v1_path: Path, output_path: Path, expected_e
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
-    parser.add_argument("--v1-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v1")
-    parser.add_argument("--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_static_hard_v1")
-    parser.add_argument("--run-root", type=Path, default=ROOT / "outputs/final_model_development/production_generator_d_static_hard_v1")
-    parser.add_argument("--gate", type=Path, default=ROOT / "outputs/final_model_development/production_generator_d_static_hard_v1_gate/implementation_invariance_gate.json")
+    parser.add_argument(
+        "--v1-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v1"
+    )
+    parser.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        default=ROOT / "checkpoints/production_generator_d_static_hard_v1",
+    )
+    parser.add_argument(
+        "--run-root",
+        type=Path,
+        default=ROOT / "outputs/final_model_development/production_generator_d_static_hard_v1",
+    )
+    parser.add_argument(
+        "--gate",
+        type=Path,
+        default=ROOT
+        / "outputs/final_model_development/production_generator_d_static_hard_v1_gate/implementation_invariance_gate.json",
+    )
     args = parser.parse_args()
     for name in ("data_root", "v1_root", "checkpoint_root", "run_root", "gate"):
         setattr(args, name, getattr(args, name).resolve())
@@ -344,20 +396,39 @@ def main() -> None:
         raise FileExistsError("Refusing to resume or overwrite the frozen final refinement")
     implementation_path = Path(__file__).resolve()
     gate = json.loads(args.gate.read_text(encoding="utf-8"))
-    if gate.get("status") != "passed" or gate.get("implementation_sha256") != sha256(implementation_path):
-        raise RuntimeError("The static refinement implementation/invariance gate is missing or stale")
+    if gate.get("status") != "passed" or gate.get("implementation_sha256") != sha256(
+        implementation_path
+    ):
+        raise RuntimeError(
+            "The static refinement implementation/invariance gate is missing or stale"
+        )
     manifest = {
         "schema_version": "sageqa_static_hard_refinement_freeze_v1",
         "status": "frozen_before_training",
         "frozen_at_utc": datetime.now(timezone.utc).isoformat(),
-        "implementation": {"path": str(implementation_path.relative_to(ROOT)), "sha256": sha256(implementation_path)},
+        "implementation": {
+            "path": str(implementation_path.relative_to(ROOT)),
+            "sha256": sha256(implementation_path),
+        },
         "gate": {"path": str(args.gate.relative_to(ROOT)), "sha256": sha256(args.gate)},
-        "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "git_status": subprocess.check_output(["git", "status", "--short"], cwd=ROOT, text=True).splitlines(),
-        "python": platform.python_version(), "torch": torch.__version__,
-        "dataset_order": [name for name, _, _ in DATASETS], "hyperparameters": FROZEN,
-        "streaming_contract": {"corpus_materialized": False, "prepared_candidates_per_eligible_example": 2, "gnn_forwards_per_eligible_example": 1},
-        "dev_accessed_before_all_training_complete": False, "test_accessed": False, "answer_generation_run": False,
+        "git_commit": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
+        "git_status": subprocess.check_output(
+            ["git", "status", "--short"], cwd=ROOT, text=True
+        ).splitlines(),
+        "python": platform.python_version(),
+        "torch": torch.__version__,
+        "dataset_order": [name for name, _, _ in DATASETS],
+        "hyperparameters": FROZEN,
+        "streaming_contract": {
+            "corpus_materialized": False,
+            "prepared_candidates_per_eligible_example": 2,
+            "gnn_forwards_per_eligible_example": 1,
+        },
+        "dev_accessed_before_all_training_complete": False,
+        "test_accessed": False,
+        "answer_generation_run": False,
     }
     write_json(args.run_root / "frozen_protocol.json", manifest)
     frozen_hash = manifest["implementation"]["sha256"]
@@ -366,19 +437,31 @@ def main() -> None:
     for dataset, slug, expected in DATASETS:
         if sha256(implementation_path) != frozen_hash:
             raise RuntimeError("Frozen implementation changed after training began")
-        results.append(train_dataset(
-            args.data_root / dataset / "train_subgraph_retrieval.jsonl",
-            args.v1_root / slug / "best_model.pt",
-            args.checkpoint_root / slug / "best_model.pt",
-            expected,
-        ))
-        write_json(args.run_root / "training_progress.json", {"completed": len(results), "datasets": results, "test_accessed": False})
-    write_json(args.run_root / "all_training_complete.json", {
-        "schema_version": "sageqa_static_hard_refinement_completion_v1", "status": "all_ten_complete",
-        "completed_at_utc": datetime.now(timezone.utc).isoformat(), "datasets": results,
-        "implementation_hash_unchanged": sha256(implementation_path) == frozen_hash,
-        "dev_accessed": False, "test_accessed": False, "answer_generation_run": False,
-    })
+        results.append(
+            train_dataset(
+                args.data_root / dataset / "train_subgraph_retrieval.jsonl",
+                args.v1_root / slug / "best_model.pt",
+                args.checkpoint_root / slug / "best_model.pt",
+                expected,
+            )
+        )
+        write_json(
+            args.run_root / "training_progress.json",
+            {"completed": len(results), "datasets": results, "test_accessed": False},
+        )
+    write_json(
+        args.run_root / "all_training_complete.json",
+        {
+            "schema_version": "sageqa_static_hard_refinement_completion_v1",
+            "status": "all_ten_complete",
+            "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+            "datasets": results,
+            "implementation_hash_unchanged": sha256(implementation_path) == frozen_hash,
+            "dev_accessed": False,
+            "test_accessed": False,
+            "answer_generation_run": False,
+        },
+    )
 
 
 if __name__ == "__main__":

@@ -26,9 +26,16 @@ from evaluation.adaptive_support_aggregation_v2 import (
 WEIGHTS = (0.0, 0.025, 0.05, 0.1, 0.2)
 K_VALUES = (1, 2, 3, 5)
 DATASETS = (
-    "HotpotQA", "2WikiMultiHopQA", "FamilyOWL_1hop", "FamilyOWL_2hop",
-    "pizza_100_1hop", "pizza_100_2hop", "pizza_250_1hop", "pizza_250_2hop",
-    "OWL2Bench_1hop", "OWL2Bench_2hop",
+    "HotpotQA",
+    "2WikiMultiHopQA",
+    "FamilyOWL_1hop",
+    "FamilyOWL_2hop",
+    "pizza_100_1hop",
+    "pizza_100_2hop",
+    "pizza_250_1hop",
+    "pizza_250_2hop",
+    "OWL2Bench_1hop",
+    "OWL2Bench_2hop",
 )
 
 
@@ -55,7 +62,9 @@ def read_records(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def support_scores(predicted: Sequence[Any], alternatives: Sequence[Sequence[Any]]) -> dict[str, float]:
+def support_scores(
+    predicted: Sequence[Any], alternatives: Sequence[Sequence[Any]]
+) -> dict[str, float]:
     predicted_keys = {canonical_evidence_key(value) for value in predicted}
     rows = []
     containment = False
@@ -67,7 +76,9 @@ def support_scores(predicted: Sequence[Any], alternatives: Sequence[Sequence[Any
         f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
         rows.append({"precision": precision, "recall": recall, "f1": f1})
         containment = containment or bool(gold and gold <= predicted_keys)
-    best = max(rows, key=lambda row: row["f1"], default={"precision": 0.0, "recall": 0.0, "f1": 0.0})
+    best = max(
+        rows, key=lambda row: row["f1"], default={"precision": 0.0, "recall": 0.0, "f1": 0.0}
+    )
     return {**best, "complete_support_containment": float(containment)}
 
 
@@ -93,7 +104,9 @@ def evaluate_record(record: Mapping[str, Any], policy_dir: Path) -> dict[str, An
     return {"fixed": fixed, "adaptive": adaptive}
 
 
-def summarize_weight(records: Sequence[Mapping[str, Any]], policy_dirs: Mapping[str, Path]) -> dict[str, Any]:
+def summarize_weight(
+    records: Sequence[Mapping[str, Any]], policy_dirs: Mapping[str, Path]
+) -> dict[str, Any]:
     evaluated = []
     for record in records:
         result = evaluate_record(record, policy_dirs[record["method"]])
@@ -103,7 +116,9 @@ def summarize_weight(records: Sequence[Mapping[str, Any]], policy_dirs: Mapping[
     for dataset in DATASETS:
         per_dataset[dataset] = {}
         for method in ("gnn_only", "sageqa_final"):
-            rows = [row for row in evaluated if row["dataset"] == dataset and row["method"] == method]
+            rows = [
+                row for row in evaluated if row["dataset"] == dataset and row["method"] == method
+            ]
             fixed = {
                 str(k): mean_metrics([row["evaluation"]["fixed"][str(k)] for row in rows])
                 for k in K_VALUES
@@ -120,14 +135,24 @@ def summarize_weight(records: Sequence[Mapping[str, Any]], policy_dirs: Mapping[
         macro[method] = {
             "fixed": {
                 str(k): {
-                    metric: statistics.fmean(per_dataset[d][method]["fixed"][str(k)][metric] for d in DATASETS)
+                    metric: statistics.fmean(
+                        per_dataset[d][method]["fixed"][str(k)][metric] for d in DATASETS
+                    )
                     for metric in ("precision", "recall", "f1", "complete_support_containment")
                 }
                 for k in K_VALUES
             },
             "adaptive": {
-                metric: statistics.fmean(per_dataset[d][method]["adaptive"][metric] for d in DATASETS)
-                for metric in ("precision", "recall", "f1", "complete_support_containment", "mean_k")
+                metric: statistics.fmean(
+                    per_dataset[d][method]["adaptive"][metric] for d in DATASETS
+                )
+                for metric in (
+                    "precision",
+                    "recall",
+                    "f1",
+                    "complete_support_containment",
+                    "mean_k",
+                )
             },
         }
     return {"per_dataset": per_dataset, "macro": macro, "records": evaluated}
@@ -167,9 +192,7 @@ def cohort_analysis(by_weight: Mapping[float, Mapping[str, Any]]) -> dict[str, A
     }
     for weight, summary in by_weight.items():
         current = {
-            row["example_id"]: row
-            for row in summary["records"]
-            if row["method"] == "sageqa_final"
+            row["example_id"]: row for row in summary["records"] if row["method"] == "sageqa_final"
         }
         rows = []
         for example_id, base in cohort.items():
@@ -181,22 +204,28 @@ def cohort_analysis(by_weight: Mapping[float, Mapping[str, Any]]) -> dict[str, A
         ranks = [float(row[4]) for row in rows if row[4] is not None]
         gaps = [
             float(row[2]["ranking_diagnostic"]["top1_minus_best_complete_score_gap"])
-            for row in rows if row[4] is not None
+            for row in rows
+            if row[4] is not None
         ]
         result["weights"][str(weight)] = {
             "corrected_to_rank_1": sum(row[4] == 1 for row in rows),
             "best_complete_rank_le_2": sum(row[4] is not None and row[4] <= 2 for row in rows),
             "best_complete_rank_le_3": sum(row[4] is not None and row[4] <= 3 for row in rows),
             "best_complete_rank_le_5": sum(row[4] is not None and row[4] <= 5 for row in rows),
-            "newly_moved_into_top_2": sum(row[3] > 2 and row[4] is not None and row[4] <= 2 for row in rows),
-            "newly_moved_into_top_3": sum(row[3] > 3 and row[4] is not None and row[4] <= 3 for row in rows),
-            "newly_moved_into_top_5": sum(row[3] > 5 and row[4] is not None and row[4] <= 5 for row in rows),
+            "newly_moved_into_top_2": sum(
+                row[3] > 2 and row[4] is not None and row[4] <= 2 for row in rows
+            ),
+            "newly_moved_into_top_3": sum(
+                row[3] > 3 and row[4] is not None and row[4] <= 3 for row in rows
+            ),
+            "newly_moved_into_top_5": sum(
+                row[3] > 5 and row[4] is not None and row[4] <= 5 for row in rows
+            ),
             "made_worse": sum(row[4] is None or row[4] > row[3] for row in rows),
             "mean_best_complete_candidate_rank": statistics.fmean(ranks) if ranks else None,
             "mean_score_gap": statistics.fmean(gaps) if gaps else None,
             "near_ties_corrected_to_rank_1": sum(
-                example_id in near_ties and now_rank == 1
-                for example_id, _, _, _, now_rank in rows
+                example_id in near_ties and now_rank == 1 for example_id, _, _, _, now_rank in rows
             ),
             "near_ties_made_worse": sum(
                 example_id in near_ties and (now_rank is None or now_rank > base_rank)
@@ -227,18 +256,39 @@ def group_effects(summary: Mapping[str, Any], baseline: Mapping[str, Any]) -> di
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run-root", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_listwise_corrected_dev"))
-    parser.add_argument("--sageqa-policy-dir", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_adaptive_k"))
-    parser.add_argument("--gnn-policy-dir", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_gnn_adaptive_k"))
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev"))
+    parser.add_argument(
+        "--run-root",
+        type=Path,
+        default=Path("outputs/development_runs/production_generator_d_v1_listwise_corrected_dev"),
+    )
+    parser.add_argument(
+        "--sageqa-policy-dir",
+        type=Path,
+        default=Path("outputs/development_runs/production_generator_d_v1_adaptive_k"),
+    )
+    parser.add_argument(
+        "--gnn-policy-dir",
+        type=Path,
+        default=Path("outputs/development_runs/production_generator_d_v1_gnn_adaptive_k"),
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev"),
+    )
     args = parser.parse_args()
 
     reproduction_path = args.output_dir / "baseline_reproduction.json"
     if not reproduction_path.is_file():
         raise FileNotFoundError("Fresh weight-zero baseline reproduction gate has not been run")
     reproduction = read_json(reproduction_path)
-    if reproduction.get("status") != "passed" or reproduction.get("safe_to_interpret_nonzero_weights") is not True:
-        raise RuntimeError("Fresh weight-zero baseline did not reproduce production; stop before grid interpretation")
+    if (
+        reproduction.get("status") != "passed"
+        or reproduction.get("safe_to_interpret_nonzero_weights") is not True
+    ):
+        raise RuntimeError(
+            "Fresh weight-zero baseline did not reproduce production; stop before grid interpretation"
+        )
 
     policy_dirs = {"gnn_only": args.gnn_policy_dir, "sageqa_final": args.sageqa_policy_dir}
     by_weight = {}
@@ -263,7 +313,8 @@ def main() -> None:
         str(weight): {
             method: statistics.fmean(
                 row["ranking_diagnostic"]["candidate_size_score_pearson"]
-                for row in summary["records"] if row["method"] == method
+                for row in summary["records"]
+                if row["method"] == method
             )
             for method in ("gnn_only", "sageqa_final")
         }
@@ -277,15 +328,17 @@ def main() -> None:
             - baseline["per_dataset"][d]["sageqa_final"]["adaptive"]["f1"]
             for d in DATASETS
         ]
-        grid_rows.append({
-            "weight": weight,
-            "macro": summary["macro"],
-            "operational_selection_metrics": operational,
-            "datasets_improved_f1": sum(delta > 0 for delta in dataset_deltas),
-            "datasets_harmed_f1": sum(delta < 0 for delta in dataset_deltas),
-            "minimum_dataset_f1_delta": min(dataset_deltas),
-            "group_effects_vs_weight_0": group_effects(summary, baseline),
-        })
+        grid_rows.append(
+            {
+                "weight": weight,
+                "macro": summary["macro"],
+                "operational_selection_metrics": operational,
+                "datasets_improved_f1": sum(delta > 0 for delta in dataset_deltas),
+                "datasets_harmed_f1": sum(delta < 0 for delta in dataset_deltas),
+                "minimum_dataset_f1_delta": min(dataset_deltas),
+                "group_effects_vs_weight_0": group_effects(summary, baseline),
+            }
+        )
 
     selected = max(
         grid_rows,
@@ -299,7 +352,11 @@ def main() -> None:
         ),
     )
     selected_weight = float(selected["weight"])
-    replacement = selected_weight > 0.0 and selected["operational_selection_metrics"]["f1"] > grid_rows[0]["operational_selection_metrics"]["f1"]
+    replacement = (
+        selected_weight > 0.0
+        and selected["operational_selection_metrics"]["f1"]
+        > grid_rows[0]["operational_selection_metrics"]["f1"]
+    )
 
     metrics = {
         "schema_version": "production_generator_d_v1_corrected_listwise_dev_metrics_v1",
@@ -313,19 +370,34 @@ def main() -> None:
         "schema_version": "production_generator_d_v1_corrected_listwise_selected_dev_configuration_v1",
         "split": "dev",
         "selected_listwise_weight": selected_weight,
-        "selection_order": ["macro F1", "macro recall", "complete-support containment", "precision", "worst per-dataset F1 delta", "smaller weight"],
+        "selection_order": [
+            "macro F1",
+            "macro recall",
+            "complete-support containment",
+            "precision",
+            "worst per-dataset F1 delta",
+            "smaller weight",
+        ],
         "selected_metrics": selected["operational_selection_metrics"],
         "production_replacement_justified": replacement,
         "production_modified": False,
-        "next_justified_experiment_if_not_replaced": "512-candidate graph regime" if not replacement else None,
+        "next_justified_experiment_if_not_replaced": "512-candidate graph regime"
+        if not replacement
+        else None,
         "adaptive_thresholds_refit": False,
     }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
-    (args.output_dir / "per_dataset.json").write_text(json.dumps(per_dataset, indent=2), encoding="utf-8")
-    (args.output_dir / "ranking_failure_analysis.json").write_text(json.dumps(ranking, indent=2), encoding="utf-8")
-    (args.output_dir / "selected_dev_configuration.json").write_text(json.dumps(selected_config, indent=2), encoding="utf-8")
+    (args.output_dir / "per_dataset.json").write_text(
+        json.dumps(per_dataset, indent=2), encoding="utf-8"
+    )
+    (args.output_dir / "ranking_failure_analysis.json").write_text(
+        json.dumps(ranking, indent=2), encoding="utf-8"
+    )
+    (args.output_dir / "selected_dev_configuration.json").write_text(
+        json.dumps(selected_config, indent=2), encoding="utf-8"
+    )
 
     lines = [
         "# Corrected listwise DEV experiment",
@@ -344,12 +416,14 @@ def main() -> None:
             f"{value['complete_support_containment']:.6f} | {value['mean_k']:.4f} | "
             f"{row['datasets_improved_f1']} | {row['datasets_harmed_f1']} |"
         )
-    lines.extend([
-        "",
-        f"The fixed baseline diagnostic recovered {ranking['baseline_scoreable_complete_candidate_misrankings']} scoreable complete-candidate misrankings and {ranking['baseline_near_ties_gap_le_0_02']} near ties.",
-        "",
-        "No production checkpoint was replaced, no adaptive threshold was refit, and evaluation stopped at DEV.",
-    ])
+    lines.extend(
+        [
+            "",
+            f"The fixed baseline diagnostic recovered {ranking['baseline_scoreable_complete_candidate_misrankings']} scoreable complete-candidate misrankings and {ranking['baseline_near_ties_gap_le_0_02']} near ties.",
+            "",
+            "No production checkpoint was replaced, no adaptive threshold was refit, and evaluation stopped at DEV.",
+        ]
+    )
     (args.output_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(json.dumps(selected_config, indent=2))
 

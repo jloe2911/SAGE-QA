@@ -138,9 +138,7 @@ def get_topk_candidate_diagnostics(detail: Dict[str, Any], k: int) -> Dict[str, 
         "candidate_contained_at_k": float(contained_at_k),
         "candidate_best_support_set_f1_at_k": best_f1,
         "top1_size": len(top1_units),
-        "topk_union_size": len(
-            set(u for c in top for u in c.get("subgraph_units", []))
-        ),
+        "topk_union_size": len(set(u for c in top for u in c.get("subgraph_units", []))),
     }
 
 
@@ -373,16 +371,10 @@ def write_outputs(rows: List[Dict[str, Any]], output_csv: str, output_summary: s
         "examples": n,
         "category_counts": dict(counts),
         "category_rates": {k: v / n for k, v in counts.items()} if n else {},
-        "avg_pred_support_size": sum(r["pred_support_size"] for r in rows) / n
-        if n
-        else 0.0,
-        "avg_gold_support_size": sum(r["gold_support_size"] for r in rows) / n
-        if n
-        else 0.0,
+        "avg_pred_support_size": sum(r["pred_support_size"] for r in rows) / n if n else 0.0,
+        "avg_gold_support_size": sum(r["gold_support_size"] for r in rows) / n if n else 0.0,
         "avg_extra_support": sum(r["extra_support"] for r in rows) / n if n else 0.0,
-        "avg_missing_support": sum(r["missing_support"] for r in rows) / n
-        if n
-        else 0.0,
+        "avg_missing_support": sum(r["missing_support"] for r in rows) / n if n else 0.0,
     }
 
     with open(output_summary, "w", encoding="utf-8") as f:

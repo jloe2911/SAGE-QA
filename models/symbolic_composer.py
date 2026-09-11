@@ -518,9 +518,7 @@ class SymbolicComposer:
     # -----------------------------------------------------
     # Main compose
     # -----------------------------------------------------
-    def compose(
-        self, question: str, retrieved_units: List[Dict], sparql_query: str = ""
-    ) -> Dict:
+    def compose(self, question: str, retrieved_units: List[Dict], sparql_query: str = "") -> Dict:
         parsed_nodes = []
         for idx, item in enumerate(retrieved_units):
             parsed = parse_axiom(item["axiom"])
@@ -548,10 +546,7 @@ class SymbolicComposer:
             if self.top_k_subgraph <= 0
             else min(self.top_k_subgraph, len(parsed_nodes))
         )
-        if (
-            self._estimated_combination_count(len(parsed_nodes), max_size)
-            <= self.max_combinations
-        ):
+        if self._estimated_combination_count(len(parsed_nodes), max_size) <= self.max_combinations:
             candidates = [
                 self._score_nodes(
                     list(combo),

@@ -16,9 +16,7 @@ from peft import AutoPeftModelForCausalLM
 import torch
 import re
 
-N_CPUS = (
-    int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
-)
+N_CPUS = int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
 PATH_RE = r"<PATH>(.*)<\/PATH>"
 INSTRUCTION = """Please generate a valid relation path that can be helpful for answering the following question: """
 
@@ -69,9 +67,7 @@ def parse_prediction(prediction):
     return results
 
 
-def generate_seq(
-    model, input_text, tokenizer, num_beam=3, do_sample=False, max_new_tokens=100
-):
+def generate_seq(model, input_text, tokenizer, num_beam=3, do_sample=False, max_new_tokens=100):
     # tokenize the question
     input_ids = tokenizer.encode(input_text, return_tensors="pt").to("cuda")
     # generate sequences
@@ -128,9 +124,7 @@ def gen_prediction(args):
 
     def prepare_dataset(sample):
         # Prepare input prompt
-        sample["text"] = prompter.format(
-            instruction=INSTRUCTION, message=sample["question"]
-        )
+        sample["text"] = prompter.format(instruction=INSTRUCTION, message=sample["question"])
         # Find ground-truth paths for each Q-P pair
         graph = utils.build_graph(sample["graph"])
         paths = utils.get_truth_paths(sample["q_entity"], sample["a_entity"], graph)
@@ -149,9 +143,7 @@ def gen_prediction(args):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    prediction_file = os.path.join(
-        output_dir, f"predictions_{args.n_beam}_{args.do_sample}.jsonl"
-    )
+    prediction_file = os.path.join(output_dir, f"predictions_{args.n_beam}_{args.do_sample}.jsonl")
     f, processed_results = get_output_file(prediction_file, force=args.force)
     for data in tqdm(dataset):
         question = data["question"]
@@ -210,18 +202,14 @@ if __name__ == "__main__":
         help="model_name for save results",
         default="meta-llama/Llama-2-7b-chat-hf",
     )
-    parser.add_argument(
-        "--prompt_path", type=str, help="prompt_path", default="prompts/llama2.txt"
-    )
+    parser.add_argument("--prompt_path", type=str, help="prompt_path", default="prompts/llama2.txt")
     parser.add_argument(
         "--rel_dict",
         nargs="+",
         default=["datasets/KG/fbnet/relations.dict"],
         help="relation dictionary",
     )
-    parser.add_argument(
-        "--force", "-f", action="store_true", help="force to overwrite the results"
-    )
+    parser.add_argument("--force", "-f", action="store_true", help="force to overwrite the results")
     parser.add_argument("--debug", action="store_true", help="Debug")
     parser.add_argument("--lora", action="store_true", help="load lora weights")
     parser.add_argument("--max_new_tokens", type=int, default=100)

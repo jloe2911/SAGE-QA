@@ -109,9 +109,7 @@ class GraftLayer(BaseGNNLayer):
         fact2query_att = torch.sum(
             fact2query_sim.unsqueeze(dim=3) * query_hidden_emb.unsqueeze(dim=2), dim=1
         )  # batch_size, max_fact, entity_dim
-        W = (
-            torch.sum(fact2query_att * local_fact_emb, dim=2) / div
-        )  # batch_size, max_fact
+        W = torch.sum(fact2query_att * local_fact_emb, dim=2) / div  # batch_size, max_fact
         W_max = torch.max(W, dim=1, keepdim=True)[0]  # batch_size, 1
         self.W_tilde = torch.exp(W - W_max)  # batch_size, max_fact
         e2f_softmax = torch.bmm(
@@ -144,12 +142,9 @@ class GraftLayer(BaseGNNLayer):
             + torch.bmm(self.fact2entity_mat, kb_tail_linear(self.linear_drop(e2f_emb)))
         )
 
-        next_curr_dist = torch.bmm(
-            self.fact2entity_mat, e2f_softmax_normalized
-        ).squeeze(dim=2)
+        next_curr_dist = torch.bmm(self.fact2entity_mat, e2f_softmax_normalized).squeeze(dim=2)
         next_curr_dist = (
-            self.pagerank_lambda * next_curr_dist
-            + (1 - self.pagerank_lambda) * curr_dist
+            self.pagerank_lambda * next_curr_dist + (1 - self.pagerank_lambda) * curr_dist
         )  # batch_size, max_local_entity
 
         assert not torch.isnan(f2e_emb).any()
@@ -157,9 +152,7 @@ class GraftLayer(BaseGNNLayer):
 
         return neighbor_rep, next_curr_dist
 
-    def forward(
-        self, current_dist, query_hidden_emb, query_mask, step=0, return_score=True
-    ):
+    def forward(self, current_dist, query_hidden_emb, query_mask, step=0, return_score=True):
         # get linear transformation functions for each layer
         q2e_linear = getattr(self, "q2e_linear" + str(step))
         e2e_linear = getattr(self, "e2e_linear" + str(step))
@@ -199,9 +192,7 @@ class GraftLayer(BaseGNNLayer):
             e2q_linear(self.linear_drop(next_local_entity_emb)),
         )
 
-        self.local_entity_emb = F.relu(
-            e2e_linear(self.linear_drop(next_local_entity_emb))
-        )
+        self.local_entity_emb = F.relu(e2e_linear(self.linear_drop(next_local_entity_emb)))
 
         score_tp = score_func(self.linear_drop(self.local_entity_emb)).squeeze(dim=2)
         answer_mask = self.local_entity_mask

@@ -92,7 +92,9 @@ def score_rows(model, tokenizer, example, device, batch_size: int, max_length: i
     with torch.no_grad():
         for start in range(0, len(example["candidate_rows"]), batch_size):
             batch = example["candidate_rows"][start : start + batch_size]
-            scores = score_candidate_rows(model, encoded, batch, device)["probs"].detach().cpu().tolist()
+            scores = (
+                score_candidate_rows(model, encoded, batch, device)["probs"].detach().cpu().tolist()
+            )
             for row, score in zip(batch, scores):
                 shaped = dict(row)
                 shaped["score"] = float(score)
@@ -179,9 +181,16 @@ def feature_distance(left: Mapping[str, Any], right: Mapping[str, Any]) -> dict[
 
 
 def detail_row(dataset: str, example_id: str, rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    ranked = sorted(rows, key=lambda row: (-float(row["score"]), int(row.get("generation_rank", 2**31 - 1))))
+    ranked = sorted(
+        rows, key=lambda row: (-float(row["score"]), int(row.get("generation_rank", 2**31 - 1)))
+    )
     top = ranked[0]
-    complete = [row for row in ranked if bool(row.get("contains_any_gold_explanation")) or float(row.get("rank_target", 0.0)) >= 0.9]
+    complete = [
+        row
+        for row in ranked
+        if bool(row.get("contains_any_gold_explanation"))
+        or float(row.get("rank_target", 0.0)) >= 0.9
+    ]
     if not complete:
         raise AssertionError(f"Expected admitted complete candidate: {example_id}")
     best = complete[0]
@@ -189,9 +198,20 @@ def detail_row(dataset: str, example_id: str, rows: Sequence[Mapping[str, Any]])
 
     def shaped(row: Mapping[str, Any]) -> dict[str, Any]:
         exact = bool(row.get("exact_match_any_gold"))
-        sufficient = bool(row.get("contains_any_gold_explanation")) or float(row.get("rank_target", 0.0)) >= 0.9
+        sufficient = (
+            bool(row.get("contains_any_gold_explanation"))
+            or float(row.get("rank_target", 0.0)) >= 0.9
+        )
         target = float(row.get("rank_target", 0.0))
-        category = "exact" if exact else "complete-superset" if sufficient else "partial" if target > 0 else "irrelevant"
+        category = (
+            "exact"
+            if exact
+            else "complete-superset"
+            if sufficient
+            else "partial"
+            if target > 0
+            else "irrelevant"
+        )
         return {
             "score": float(row["score"]),
             "subgraph_units": row["subgraph_units"],
@@ -210,7 +230,8 @@ def detail_row(dataset: str, example_id: str, rows: Sequence[Mapping[str, Any]])
         "best_complete_candidate": shaped(best),
         "best_complete_gnn_rank": best_rank,
         "top1_minus_complete_score_gap": float(top["score"]) - float(best["score"]),
-        "complete_has_strictly_better_target": float(best.get("rank_target", 0.0)) > float(top.get("rank_target", 0.0)),
+        "complete_has_strictly_better_target": float(best.get("rank_target", 0.0))
+        > float(top.get("rank_target", 0.0)),
         "representation_comparison": feature_distance(top, best),
     }
 
@@ -218,7 +239,9 @@ def detail_row(dataset: str, example_id: str, rows: Sequence[Mapping[str, Any]])
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
-    parser.add_argument("--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v1")
+    parser.add_argument(
+        "--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v1"
+    )
     parser.add_argument(
         "--diagnosis-dir",
         type=Path,
@@ -227,7 +250,9 @@ def main() -> None:
     parser.add_argument("--candidate-batch-size", type=int, default=512)
     parser.add_argument("--max-length", type=int, default=128)
     args = parser.parse_args()
-    taxonomy = json.loads((args.diagnosis_dir / "causal_failure_taxonomy.json").read_text(encoding="utf-8"))
+    taxonomy = json.loads(
+        (args.diagnosis_dir / "causal_failure_taxonomy.json").read_text(encoding="utf-8")
+    )
     detail_ids = {
         row["example_id"]
         for row in taxonomy["assignments"]
@@ -237,28 +262,57 @@ def main() -> None:
     details = []
     by_split_dataset: dict[str, Any] = {split: {} for split in ("train", "dev")}
     pooled = {
-        split: defaultdict(lambda: {"examples_with_comparison": 0, "pairs": 0, "pair_credit": 0.0, "example_accuracy_sum": 0.0})
+        split: defaultdict(
+            lambda: {
+                "examples_with_comparison": 0,
+                "pairs": 0,
+                "pair_credit": 0.0,
+                "example_accuracy_sum": 0.0,
+            }
+        )
         for split in ("train", "dev")
     }
 
     for dataset, checkpoint_dir in DATASETS:
         print(f"{dataset}: loading frozen checkpoint", flush=True)
-        tokenizer, model = load_model(args.checkpoint_root / checkpoint_dir / "best_model.pt", device)
+        tokenizer, model = load_model(
+            args.checkpoint_root / checkpoint_dir / "best_model.pt", device
+        )
         for split in ("train", "dev"):
-            stats = defaultdict(lambda: {"examples_with_comparison": 0, "pairs": 0, "pair_credit": 0.0, "example_accuracy_sum": 0.0})
+            stats = defaultdict(
+                lambda: {
+                    "examples_with_comparison": 0,
+                    "pairs": 0,
+                    "pair_credit": 0.0,
+                    "example_accuracy_sum": 0.0,
+                }
+            )
             count = 0
-            for example_id, raw_rows in grouped_jsonl(args.data_root / dataset / f"{split}_subgraph_retrieval.jsonl"):
+            for example_id, raw_rows in grouped_jsonl(
+                args.data_root / dataset / f"{split}_subgraph_retrieval.jsonl"
+            ):
                 prepared = prepare_examples(raw_rows, candidate_selection="inference")
                 if len(prepared) != 1:
                     raise ValueError(f"Unexpected prepared example count: {example_id}")
-                scored = score_rows(model, tokenizer, prepared[0], device, args.candidate_batch_size, args.max_length)
+                scored = score_rows(
+                    model,
+                    tokenizer,
+                    prepared[0],
+                    device,
+                    args.candidate_batch_size,
+                    args.max_length,
+                )
                 admitted_lookup = {
                     tuple(sorted(str(unit) for unit in row.get("subgraph_units", []))): row
                     for row in cap_inference_candidate_rows(raw_rows, max_candidates=320)
                 }
                 for row in scored:
-                    source = admitted_lookup[tuple(sorted(str(unit) for unit in row.get("subgraph_units", [])))]
-                    row["candidate_pre_rank_score"] = float(source.get("candidate_pre_rank_score", 0.0))
+                    source = admitted_lookup[
+                        tuple(sorted(str(unit) for unit in row.get("subgraph_units", [])))
+                    ]
+                    row["candidate_pre_rank_score"] = float(
+                        source.get("candidate_pre_rank_score", 0.0)
+                    )
                     row["generation_rank"] = int(source.get("generation_rank", -1))
                 update_pair_stats(stats, scored)
                 update_pair_stats(pooled[split], scored)

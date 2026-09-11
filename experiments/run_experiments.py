@@ -227,9 +227,7 @@ def run_cmd(cmd: List[str], dry_run: bool = False) -> None:
     elapsed = time.time() - start
 
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Command failed with exit code {result.returncode}: {' '.join(cmd)}"
-        )
+        raise RuntimeError(f"Command failed with exit code {result.returncode}: {' '.join(cmd)}")
 
     log(f"Finished in {elapsed / 60:.1f} min")
 
@@ -252,9 +250,7 @@ def capture_cmd(cmd: List[str], dry_run: bool = False) -> str:
         print(result.stderr, file=sys.stderr, flush=True)
 
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Command failed with exit code {result.returncode}: {' '.join(cmd)}"
-        )
+        raise RuntimeError(f"Command failed with exit code {result.returncode}: {' '.join(cmd)}")
 
     log(f"Finished capture in {elapsed / 60:.1f} min")
     return result.stdout.strip()
@@ -366,9 +362,7 @@ def validate_retrieval_artifact(dataset_key: str, cfg: Dict) -> None:
     data_dir = Path(cfg["data_dir"])
     metadata_path = data_dir / "metadata.json"
     if not metadata_path.exists():
-        raise ValueError(
-            f"Retrieval metadata is required for {dataset_key}: {metadata_path}"
-        )
+        raise ValueError(f"Retrieval metadata is required for {dataset_key}: {metadata_path}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     expected_schema = (
         "gold_free_text_retrieval_v1"
@@ -451,9 +445,7 @@ def train_gnn_if_needed(
     run_cmd(cmd, dry_run=dry_run)
 
 
-def run_lexical_details(
-    dataset_key: str, cfg: Dict, dry_run: bool, resume: bool
-) -> Path:
+def run_lexical_details(dataset_key: str, cfg: Dict, dry_run: bool, resume: bool) -> Path:
     test_path = str(Path(cfg["data_dir"]) / "test_subgraph_retrieval.jsonl")
     out_dir = Path(cfg["output_dir"]) / "lexical_subgraph"
     details_path = out_dir / "test_details.json"
@@ -574,9 +566,7 @@ def run_llm_generation(
     max_llm_examples: int,
     answer_only_paths: List[Path] | None = None,
 ) -> None:
-    existing_answer_only = [
-        str(path) for path in answer_only_paths or [] if path.exists()
-    ]
+    existing_answer_only = [str(path) for path in answer_only_paths or [] if path.exists()]
 
     if output_jsonl.exists() and skip_llm_if_exists:
         needed_ids = details_example_ids(details_path)
@@ -659,9 +649,7 @@ def run_gnn_rag_generation(
     gnn_root = gnn_rag_repo / "gnn"
     llm_root = gnn_rag_repo / "llm"
     ensure_file(gnn_root / "main.py", "GNN-RAG retriever")
-    ensure_file(
-        llm_root / "src" / "qa_prediction" / "predict_answer.py", "GNN-RAG predictor"
-    )
+    ensure_file(llm_root / "src" / "qa_prediction" / "predict_answer.py", "GNN-RAG predictor")
 
     adapter_dataset = f"sageqa-{dataset_key}"
     gnn_data_dir = gnn_root / "data" / adapter_dataset
@@ -796,10 +784,7 @@ def run_gnn_rag_generation(
             encoding="utf-8",
         )
 
-    log(
-        f"Running upstream GNN-RAG predictor: dataset={cfg['display']}, "
-        f"model={reader_model}"
-    )
+    log(f"Running upstream GNN-RAG predictor: dataset={cfg['display']}, model={reader_model}")
     predict_cmd = [
         sys.executable,
         "src/qa_prediction/predict_answer.py",
@@ -935,9 +920,7 @@ def evaluate_owl_predictions(
     if resume and metrics_path.exists():
         metrics = load_metrics_json(metrics_path)
         expected_answer_only = sum(
-            len(jsonl_example_ids(path))
-            for path in answer_only_paths or []
-            if path.exists()
+            len(jsonl_example_ids(path)) for path in answer_only_paths or [] if path.exists()
         )
         saved_answer_only = int(metrics.get("answer_only_examples", 0))
 
@@ -963,9 +946,7 @@ def evaluate_owl_predictions(
         str(metrics_path),
     ]
 
-    existing_answer_only = [
-        str(path) for path in answer_only_paths or [] if path.exists()
-    ]
+    existing_answer_only = [str(path) for path in answer_only_paths or [] if path.exists()]
     if existing_answer_only:
         cmd.extend(["--answer-only", *existing_answer_only])
 
@@ -982,11 +963,7 @@ def evaluate_owl_predictions(
     # Fallback: parse JSON printed to stdout.
     obj = json.loads(stdout)
     if "metrics" in obj:
-        return {
-            k: float(v)
-            for k, v in obj["metrics"].items()
-            if isinstance(v, (int, float))
-        }
+        return {k: float(v) for k, v in obj["metrics"].items() if isinstance(v, (int, float))}
     return {k: float(v) for k, v in obj.items() if isinstance(v, (int, float))}
 
 
@@ -1002,9 +979,7 @@ def count_llm_answers(path: Path) -> Dict[str, int]:
 
     return {
         "llm_rows": len(rows),
-        "llm_empty": sum(
-            1 for r in rows if not str(r.get("predicted_answer", "")).strip()
-        ),
+        "llm_empty": sum(1 for r in rows if not str(r.get("predicted_answer", "")).strip()),
         "llm_errors": sum(1 for r in rows if r.get("error")),
     }
 
@@ -1037,9 +1012,7 @@ def load_retrieval_metrics(method_out_dir: Path, top_k: int) -> Dict[str, float]
             m.get(f"gold_contained@{top_k}", m.get(f"contains@{top_k}")),
         )
         support_f1 = m.get(f"set_f1@{top_k}", m.get(f"support_f1@{top_k}"))
-        support_precision = m.get(
-            f"precision@{top_k}", m.get(f"support_precision@{top_k}")
-        )
+        support_precision = m.get(f"precision@{top_k}", m.get(f"support_precision@{top_k}"))
         support_recall = m.get(f"recall@{top_k}", m.get(f"support_recall@{top_k}"))
 
         if exact is not None and contained is not None and support_f1 is not None:
@@ -1101,11 +1074,7 @@ def load_retrieval_metrics(method_out_dir: Path, top_k: int) -> Dict[str, float]
             inter = len(union_set & gold_set)
             precision = inter / max(len(union_set), 1)
             recall = inter / len(gold_set)
-            f1 = (
-                0.0
-                if precision + recall == 0
-                else (2 * precision * recall / (precision + recall))
-            )
+            f1 = 0.0 if precision + recall == 0 else (2 * precision * recall / (precision + recall))
 
             if union_set == gold_set:
                 best_union["exact"] = 1.0
@@ -1204,8 +1173,7 @@ def run_experiment(args) -> None:
 
     if args.methods == "auto":
         methods_by_dataset = {
-            ds: default_methods_for_dataset(DATASETS[ds]["type"])
-            for ds in selected_datasets
+            ds: default_methods_for_dataset(DATASETS[ds]["type"]) for ds in selected_datasets
         }
     else:
         requested = args.methods.split(",")
@@ -1218,9 +1186,7 @@ def run_experiment(args) -> None:
             valid = [m for m in requested if validate_method_for_dataset(ds, m)]
             skipped = [m for m in requested if m not in valid]
             if skipped:
-                log(
-                    f"Skipping invalid methods for {DATASETS[ds]['display']}: {skipped}"
-                )
+                log(f"Skipping invalid methods for {DATASETS[ds]['display']}: {skipped}")
             methods_by_dataset[ds] = valid
 
     log(f"Selected datasets: {', '.join(selected_datasets)}")
@@ -1284,9 +1250,7 @@ def run_experiment(args) -> None:
             details_by_method[method_key] = details_path
 
             if not args.dry_run:
-                ensure_file(
-                    str(details_path), f"{dataset_key}/{method_key} test details"
-                )
+                ensure_file(str(details_path), f"{dataset_key}/{method_key} test details")
 
         gold_path = None
         if cfg["type"] == "text":
@@ -1312,15 +1276,9 @@ def run_experiment(args) -> None:
             reader_top_k = args.reader_top_k or args.top_k
             reader_fallback_top_k = args.reader_fallback_top_k or 0
             support_top_k = args.support_top_k or args.top_k
-            reader_tag = (
-                f"_reader_top{reader_top_k}" if reader_top_k != args.top_k else ""
-            )
-            fallback_tag = (
-                f"_fallback_top{reader_fallback_top_k}" if reader_fallback_top_k else ""
-            )
-            support_tag = (
-                f"_support_top{support_top_k}" if support_top_k != args.top_k else ""
-            )
+            reader_tag = f"_reader_top{reader_top_k}" if reader_top_k != args.top_k else ""
+            fallback_tag = f"_fallback_top{reader_fallback_top_k}" if reader_fallback_top_k else ""
+            support_tag = f"_support_top{support_top_k}" if support_top_k != args.top_k else ""
             llm_answers_path = (
                 method_out_dir
                 / f"llm_answers_top{args.top_k}{reader_tag}{fallback_tag}_{model_tag}.jsonl"
@@ -1335,9 +1293,7 @@ def run_experiment(args) -> None:
             )
             answer_only_paths: List[Path] = []
             if cfg["type"] == "owl":
-                answer_only_path = (
-                    Path(cfg["data_dir"]) / "test_answer_only_no_explanation.jsonl"
-                )
+                answer_only_path = Path(cfg["data_dir"]) / "test_answer_only_no_explanation.jsonl"
                 if answer_only_path.exists():
                     answer_only_paths.append(answer_only_path)
 
@@ -1402,9 +1358,7 @@ def run_experiment(args) -> None:
                         answer_only_paths=[],
                     )
 
-                llm_stats = (
-                    count_llm_answers(llm_answers_path) if not args.dry_run else {}
-                )
+                llm_stats = count_llm_answers(llm_answers_path) if not args.dry_run else {}
                 retrieval_metrics = load_retrieval_metrics(
                     method_out_dir=method_out_dir,
                     top_k=args.top_k,
@@ -1553,9 +1507,7 @@ def main():
         ),
     )
     parser.add_argument("--reader-model", type=str, default="gpt-4.1-mini")
-    parser.add_argument(
-        "--encoder-model", type=str, default="google/bert_uncased_L-2_H-128_A-2"
-    )
+    parser.add_argument("--encoder-model", type=str, default="google/bert_uncased_L-2_H-128_A-2")
 
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--candidate-batch-size", type=int, default=512)

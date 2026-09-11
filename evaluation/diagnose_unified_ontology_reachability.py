@@ -4,6 +4,7 @@ The current-clean and unified generators are run unchanged with the fixed
 comparison configuration.  Gold explanations are read only after both outputs
 and the instrumented unified search trace are frozen.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,7 +55,9 @@ COHORTS = ("Family_2hop", "Pizza_100_2hop", "Pizza_250_2hop", "OWL2Bench_2hop")
 SEARCH_EDGE_DEPTH = UNIFIED_CONFIG.max_support_size - 1
 
 
-def _distances(graph: EvidenceGraph, sources: Iterable[int]) -> tuple[list[int | None], list[int | None]]:
+def _distances(
+    graph: EvidenceGraph, sources: Iterable[int]
+) -> tuple[list[int | None], list[int | None]]:
     distance: list[int | None] = [None] * len(graph.units)
     parent: list[int | None] = [None] * len(graph.units)
     queue = collections.deque()
@@ -111,25 +114,34 @@ def _trace_search(graph: EvidenceGraph) -> dict[str, Any]:
             for neighbor in ranked:
                 indices = tuple(sorted((*state.indices, neighbor)))
                 branch = neighbor if len(state.indices) == 1 else state.branch
-                expanded = _State(indices, state.seed, branch, _state_score(indices, graph, state.seed))
+                expanded = _State(
+                    indices, state.seed, branch, _state_score(indices, graph, state.seed)
+                )
                 lane = (expanded.seed, expanded.branch)
                 prior = by_lane.setdefault(lane, {}).get(indices)
-                if prior is None or (-expanded.score, expanded.indices) < (-prior.score, prior.indices):
+                if prior is None or (-expanded.score, expanded.indices) < (
+                    -prior.score,
+                    prior.indices,
+                ):
                     by_lane[lane][indices] = expanded
-                generated.append({
-                    "state": expanded,
-                    "parent": state,
-                    "added": neighbor,
-                    "neighbor_rank": all_ranked.index(neighbor) + 1,
-                    "neighbor_cap": cap,
-                })
+                generated.append(
+                    {
+                        "state": expanded,
+                        "parent": state,
+                        "added": neighbor,
+                        "neighbor_rank": all_ranked.index(neighbor) + 1,
+                        "neighbor_cap": cap,
+                    }
+                )
                 explored.add(neighbor)
         generated_by_size[target_size] = generated
         frontier = []
-        for lane in sorted(by_lane, key=lambda x: (graph.units[x[0]].unit_id, graph.units[x[1]].unit_id)):
-            retained = sorted(by_lane[lane].values(), key=lambda state: (-state.score, state.indices))[
-                : config.per_branch_width
-            ]
+        for lane in sorted(
+            by_lane, key=lambda x: (graph.units[x[0]].unit_id, graph.units[x[1]].unit_id)
+        ):
+            retained = sorted(
+                by_lane[lane].values(), key=lambda state: (-state.score, state.indices)
+            )[: config.per_branch_width]
             frontier.extend(retained)
         retained_by_size[target_size] = list(frontier)
         all_states.extend(frontier)
@@ -139,7 +151,9 @@ def _trace_search(graph: EvidenceGraph) -> dict[str, Any]:
     selected = _select_diverse_candidates(all_states, graph, config)
     replay = tuple(tuple(graph.units[i].unit_id for i in state.indices) for state in selected)
     actual = progressive_connected_supports(graph, config)
-    if replay != actual.candidates or explored != {i for i, u in enumerate(graph.units) if u.unit_id in actual.explored_unit_ids}:
+    if replay != actual.candidates or explored != {
+        i for i, u in enumerate(graph.units) if u.unit_id in actual.explored_unit_ids
+    }:
         raise AssertionError("Instrumented unified search does not reproduce the generator")
     return {
         "seeds": seeds,
@@ -158,7 +172,8 @@ def _query_matches(graph: EvidenceGraph, question: str, sparql: str) -> list[int
     return [
         index
         for index, unit in enumerate(graph.units)
-        if (unit_signature(unit.unit_id)[0] & entities) or (unit_signature(unit.unit_id)[1] & properties)
+        if (unit_signature(unit.unit_id)[0] & entities)
+        or (unit_signature(unit.unit_id)[1] & properties)
     ]
 
 
@@ -174,7 +189,10 @@ def _structural_kinds(unit: str) -> set[str]:
         kinds.add("inverse")
     if unit.startswith("ObjectPropertyChain("):
         kinds.add("property chain")
-    if any(token in unit for token in ("Restriction", " rdf:first ", " rdf:rest ", "someValuesFrom", "allValuesFrom")):
+    if any(
+        token in unit
+        for token in ("Restriction", " rdf:first ", " rdf:rest ", "someValuesFrom", "allValuesFrom")
+    ):
         kinds.add("RDF-list/restriction structure")
     return kinds
 
@@ -209,7 +227,9 @@ def _edge_mechanisms(left: str, right: str) -> list[str]:
     return sorted(mechanisms or {"other"})
 
 
-def _current_selection_trace(context: Sequence[str], question: str, sparql: str) -> dict[str, dict[str, Any]]:
+def _current_selection_trace(
+    context: Sequence[str], question: str, sparql: str
+) -> dict[str, dict[str, Any]]:
     """Replay only the current clean gold-free atomic selection stages."""
     signature = extract_query_signature(question=question, sparql_query=sparql)
     query_entities = set(signature.get("query_entities", []))
@@ -234,7 +254,11 @@ def _current_selection_trace(context: Sequence[str], question: str, sparql: str)
             selected.append(index)
             selected_set.add(index)
             frontier.append(index)
-            trace[context[index]] = {"stage": "formal-query seed", "round": 0, "direct_score": score}
+            trace[context[index]] = {
+                "stage": "formal-query seed",
+                "round": 0,
+                "direct_score": score,
+            }
     round_number = 0
     while frontier and len(selected) < ONTO_BASE["atomic_budget"]:
         round_number += 1
@@ -247,7 +271,14 @@ def _current_selection_trace(context: Sequence[str], question: str, sparql: str)
                         overlap[neighbor] += 1
         if not overlap:
             break
-        ranked = sorted(overlap, key=lambda index: (-overlap[index], -len(tokens[index] & (query_entities | query_properties)), context[index]))
+        ranked = sorted(
+            overlap,
+            key=lambda index: (
+                -overlap[index],
+                -len(tokens[index] & (query_entities | query_properties)),
+                context[index],
+            ),
+        )
         frontier = []
         for index in ranked:
             if len(selected) >= ONTO_BASE["atomic_budget"]:
@@ -261,12 +292,16 @@ def _current_selection_trace(context: Sequence[str], question: str, sparql: str)
                 "round": round_number,
                 "shared_terms": sorted(set().union(*(tokens[p] & tokens[index] for p in parents))),
                 "parent_units": [context[p] for p in parents[:8]],
-                "edge_mechanisms": sorted(set().union(*(_edge_mechanisms(context[p], context[index]) for p in parents))),
+                "edge_mechanisms": sorted(
+                    set().union(*(_edge_mechanisms(context[p], context[index]) for p in parents))
+                ),
             }
     return trace
 
 
-def _diagnose_path_loss(graph: EvidenceGraph, trace: Mapping[str, Any], path: Sequence[int]) -> dict[str, Any]:
+def _diagnose_path_loss(
+    graph: EvidenceGraph, trace: Mapping[str, Any], path: Sequence[int]
+) -> dict[str, Any]:
     if len(path) < 2:
         return {"stage": "none", "detail": "target is itself a retained seed"}
     branch = path[1]
@@ -274,31 +309,48 @@ def _diagnose_path_loss(graph: EvidenceGraph, trace: Mapping[str, Any], path: Se
         parent_indices = tuple(sorted(path[:step]))
         next_index = path[step]
         parent_states = [
-            state for state in trace["retained_by_size"].get(step, [])
-            if state.indices == parent_indices and state.seed == path[0] and (step == 1 or state.branch == branch)
+            state
+            for state in trace["retained_by_size"].get(step, [])
+            if state.indices == parent_indices
+            and state.seed == path[0]
+            and (step == 1 or state.branch == branch)
         ]
         if not parent_states:
             generated = [
-                record for record in trace["generated_by_size"].get(step, [])
+                record
+                for record in trace["generated_by_size"].get(step, [])
                 if record["state"].indices == parent_indices and record["state"].seed == path[0]
             ]
             return {
                 "stage": "per_branch_width",
                 "path_step": step,
-                "detail": "required prefix was generated but not retained" if generated else "required prefix was absent from the retained frontier",
+                "detail": "required prefix was generated but not retained"
+                if generated
+                else "required prefix was absent from the retained frontier",
             }
         state = parent_states[0]
         selected = set(state.indices)
-        ranked = _rank_indices(set().union(*(graph.adjacency[i] for i in state.indices)) - selected, graph)
-        cap = UNIFIED_CONFIG.max_first_hops_per_seed if step == 1 else UNIFIED_CONFIG.max_neighbors_per_state
+        ranked = _rank_indices(
+            set().union(*(graph.adjacency[i] for i in state.indices)) - selected, graph
+        )
+        cap = (
+            UNIFIED_CONFIG.max_first_hops_per_seed
+            if step == 1
+            else UNIFIED_CONFIG.max_neighbors_per_state
+        )
         if next_index not in ranked[:cap]:
             return {
                 "stage": "max_first_hops_per_seed" if step == 1 else "max_neighbors_per_state",
                 "path_step": step,
-                "required_neighbor_rank": ranked.index(next_index) + 1 if next_index in ranked else None,
+                "required_neighbor_rank": ranked.index(next_index) + 1
+                if next_index in ranked
+                else None,
                 "limit": cap,
             }
-    return {"stage": "other", "detail": "shortest prefix survived; another connected-state ordering caused the loss"}
+    return {
+        "stage": "other",
+        "detail": "shortest prefix survived; another connected-state ordering caused the loss",
+    }
 
 
 def _unit_diagnosis(
@@ -331,24 +383,56 @@ def _unit_diagnosis(
         "retained_as_seed": index in trace["seeds"],
         "distance_from_query_matching_unit": query_distance[index],
         "distance_from_retained_seed": seed_distance[index],
-        "shortest_path_from_query_matching_unit": [graph.units[i].unit_id for i in _path_to(index, query_distance, query_parent)],
-        "shortest_path_from_retained_seed": [graph.units[i].unit_id for i in _path_to(index, seed_distance, seed_parent)],
+        "shortest_path_from_query_matching_unit": [
+            graph.units[i].unit_id for i in _path_to(index, query_distance, query_parent)
+        ],
+        "shortest_path_from_retained_seed": [
+            graph.units[i].unit_id for i in _path_to(index, seed_distance, seed_parent)
+        ],
         "current_clean_signal": current_trace.get(unit),
         "structural_kinds": sorted(_structural_kinds(unit)),
     }
     if query_distance[index] is None:
-        return {**base, "classification": "B", "reason": "disconnected from every query-matching EvidenceUnit"}
+        return {
+            **base,
+            "classification": "B",
+            "reason": "disconnected from every query-matching EvidenceUnit",
+        }
     if index in trace["explored"] and index not in output_union:
-        retained_with_target = [state for states in trace["retained_by_size"].values() for state in states if index in state.indices]
+        retained_with_target = [
+            state
+            for states in trace["retained_by_size"].values()
+            for state in states
+            if index in state.indices
+        ]
         stage = "final_candidate_selection" if retained_with_target else "per_branch_width"
-        return {**base, "classification": "F", "reason": "reached during search but absent from every output candidate", "loss": {"stage": stage}}
+        return {
+            **base,
+            "classification": "F",
+            "reason": "reached during search but absent from every output candidate",
+            "loss": {"stage": stage},
+        }
     if seed_distance[index] is not None and seed_distance[index] > SEARCH_EDGE_DEPTH:
-        return {**base, "classification": "C", "reason": "nearest retained seed is beyond the configured expansion depth"}
+        return {
+            **base,
+            "classification": "C",
+            "reason": "nearest retained seed is beyond the configured expansion depth",
+        }
     if seed_distance[index] is None:
-        return {**base, "classification": "D", "reason": "query-connected component has no retained seed", "loss": {"stage": "max_seeds", "limit": UNIFIED_CONFIG.max_seeds}}
+        return {
+            **base,
+            "classification": "D",
+            "reason": "query-connected component has no retained seed",
+            "loss": {"stage": "max_seeds", "limit": UNIFIED_CONFIG.max_seeds},
+        }
     if index not in trace["explored"] and seed_distance[index] <= SEARCH_EDGE_DEPTH:
         path = _path_to(index, seed_distance, seed_parent)
-        return {**base, "classification": "E", "reason": "reachable from a retained seed within depth but pruned", "loss": _diagnose_path_loss(graph, trace, path)}
+        return {
+            **base,
+            "classification": "E",
+            "reason": "reachable from a retained seed within depth but pruned",
+            "loss": _diagnose_path_loss(graph, trace, path),
+        }
     return {**base, "classification": "G", "reason": "other unit-level loss"}
 
 
@@ -386,7 +470,9 @@ def run(output_dir: Path) -> dict[str, Any]:
         dev_count = 0
         for group_index, qa_index, item, qa in onto_rows(name):
             dev_count += 1
-            question = str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or "")
+            question = str(
+                qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or ""
+            )
             sparql = str(qa.get("SPARQL Query") or "")
             owl_context = str(item.get("OWL Context") or "")
             current_generated = generate_ontology_candidates(
@@ -412,11 +498,15 @@ def run(output_dir: Path) -> dict[str, Any]:
                 for candidate in current
                 if set(gold) <= set(candidate)
             ]
-            unified_complete = any(set(gold) <= set(candidate) for gold in golds for candidate in unified)
+            unified_complete = any(
+                set(gold) <= set(candidate) for gold in golds for candidate in unified
+            )
             if not current_covering or unified_complete:
                 continue
             example_id = f"{name}__g{group_index}__q{qa_index}"
-            unified_union = set().union(*(set(candidate) for candidate in unified)) if unified else set()
+            unified_union = (
+                set().union(*(set(candidate) for candidate in unified)) if unified else set()
+            )
             query_indices = _query_matches(graph, question, sparql)
             current_trace = _current_selection_trace(context, question, sparql)
             explanation_records = []
@@ -424,28 +514,45 @@ def run(output_dir: Path) -> dict[str, Any]:
             for gold_index, gold, _ in current_covering:
                 unique_gold[gold_index] = gold
             for gold_index, gold in sorted(unique_gold.items()):
-                covering_candidates = [candidate for candidate in current if set(gold) <= set(candidate)]
-                chosen_candidate = min(covering_candidates, key=lambda candidate: (len(candidate), candidate))
+                covering_candidates = [
+                    candidate for candidate in current if set(gold) <= set(candidate)
+                ]
+                chosen_candidate = min(
+                    covering_candidates, key=lambda candidate: (len(candidate), candidate)
+                )
                 missing = [unit for unit in gold if unit not in unified_union]
                 diagnoses = [
                     _unit_diagnosis(unit, graph, search_trace, query_indices, current_trace)
                     for unit in missing
                 ]
-                explanation_records.append({
-                    "gold_explanation_index": gold_index,
-                    "gold_explanation": list(gold),
-                    "current_covering_candidate": list(chosen_candidate),
-                    "missing_from_unified_candidate_union": missing,
-                    "unit_diagnoses": diagnoses,
-                    "support_level_classification": None if missing else "G",
-                    "support_level_reason": None if missing else "all required units were preserved individually but never co-composed in one output candidate",
-                    "current_clean_mechanisms": sorted(set().union(*(
-                        set((current_trace.get(unit) or {}).get("edge_mechanisms", []))
-                        | ({"formal-query seed expansion"} if (current_trace.get(unit) or {}).get("stage") == "formal-query seed expansion" else set())
-                        | _structural_kinds(unit)
-                        for unit in gold
-                    ))),
-                })
+                explanation_records.append(
+                    {
+                        "gold_explanation_index": gold_index,
+                        "gold_explanation": list(gold),
+                        "current_covering_candidate": list(chosen_candidate),
+                        "missing_from_unified_candidate_union": missing,
+                        "unit_diagnoses": diagnoses,
+                        "support_level_classification": None if missing else "G",
+                        "support_level_reason": None
+                        if missing
+                        else "all required units were preserved individually but never co-composed in one output candidate",
+                        "current_clean_mechanisms": sorted(
+                            set().union(
+                                *(
+                                    set((current_trace.get(unit) or {}).get("edge_mechanisms", []))
+                                    | (
+                                        {"formal-query seed expansion"}
+                                        if (current_trace.get(unit) or {}).get("stage")
+                                        == "formal-query seed expansion"
+                                        else set()
+                                    )
+                                    | _structural_kinds(unit)
+                                    for unit in gold
+                                )
+                            )
+                        ),
+                    }
+                )
             detail = {
                 "dataset": DISPLAY_NAMES[name],
                 "example_id": example_id,
@@ -457,7 +564,9 @@ def run(output_dir: Path) -> dict[str, Any]:
                 "current_candidate_count": len(current),
                 "unified_candidate_count": len(unified),
                 "unified_explored_unit_count": len(search_trace["explored"]),
-                "unified_output_union_unit_count": len({i for state in search_trace["selected"] for i in state.indices}),
+                "unified_output_union_unit_count": len(
+                    {i for state in search_trace["selected"] for i in state.indices}
+                ),
                 "current_covered_gold_explanations": explanation_records,
             }
             dataset_details.append(detail)
@@ -474,7 +583,9 @@ def run(output_dir: Path) -> dict[str, Any]:
                 if explanation["support_level_classification"] == "G":
                     support_g_cases.add(detail["example_id"])
                 for diagnosis in explanation["unit_diagnoses"]:
-                    classification_events[(detail["example_id"], diagnosis["gold_unit"])] = diagnosis["classification"]
+                    classification_events[(detail["example_id"], diagnosis["gold_unit"])] = (
+                        diagnosis["classification"]
+                    )
                     if diagnosis.get("loss"):
                         loss_stages[str(diagnosis["loss"].get("stage"))] += 1
                     signal = diagnosis.get("current_clean_signal") or {}
@@ -493,7 +604,13 @@ def run(output_dir: Path) -> dict[str, Any]:
             "support_composition_G_examples": len(support_g_cases),
             "classification_counts": dict(sorted(classifications.items())),
             "classification_case_counts": {
-                label: len({example_id for (example_id, _), value in classification_events.items() if value == label})
+                label: len(
+                    {
+                        example_id
+                        for (example_id, _), value in classification_events.items()
+                        if value == label
+                    }
+                )
                 + (len(support_g_cases) if label == "G" else 0)
                 for label in "ABCDEFG"
             },

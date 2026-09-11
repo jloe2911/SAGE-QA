@@ -59,9 +59,7 @@ def openai_compatible_client(model: str):
                 base_url="https://openrouter.ai/api/v1",
                 api_key=key,
                 default_headers={
-                    "HTTP-Referer": os.getenv(
-                        "OPENROUTER_HTTP_REFERER", "https://github.com"
-                    ),
+                    "HTTP-Referer": os.getenv("OPENROUTER_HTTP_REFERER", "https://github.com"),
                     "X-Title": os.getenv("OPENROUTER_APP_TITLE", "SAGE-QA"),
                 },
             ),
@@ -71,7 +69,5 @@ def openai_compatible_client(model: str):
 
     key = os.getenv("OPENAI_API_KEY")
     if not key:
-        raise EnvironmentError(
-            "Model provider is openai, but OPENAI_API_KEY is not set."
-        )
+        raise EnvironmentError("Model provider is openai, but OPENAI_API_KEY is not set.")
     return OpenAI(api_key=key), ref.model, provider

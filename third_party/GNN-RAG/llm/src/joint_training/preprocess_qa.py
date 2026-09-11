@@ -7,9 +7,7 @@ from transformers import AutoTokenizer
 import datasets
 from qa_prediction.build_qa_input import PromptBuilder
 
-N_CPUS = (
-    int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
-)
+N_CPUS = int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
 
 save_dir = "datasets/joint_training/qa"
 prompt_path = "prompts/llama2_predict.txt"
@@ -46,9 +44,7 @@ def formatting_prompts_func(example):
     for path in paths:
         ground_paths.add(tuple([p[1] for p in path]))  # extract relation path
     example["ground_paths"] = list(ground_paths)
-    output_text = (
-        input_builder.process_input(example) + " " + output_label + tokenizer.eos_token
-    )
+    output_text = input_builder.process_input(example) + " " + output_label + tokenizer.eos_token
     return {"text": output_text}
 
 

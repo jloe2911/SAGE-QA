@@ -178,9 +178,7 @@ def main():
 
     score_mode = args.score_mode or checkpoint.get("score_mode", "neural")
     size_penalty = (
-        args.size_penalty
-        if args.size_penalty is not None
-        else checkpoint.get("size_penalty", 0.01)
+        args.size_penalty if args.size_penalty is not None else checkpoint.get("size_penalty", 0.01)
     )
 
     print(f"Model name: {model_name}")

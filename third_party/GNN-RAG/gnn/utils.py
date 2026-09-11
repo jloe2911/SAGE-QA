@@ -8,9 +8,7 @@ def create_logger(args):
     log_level = logging.DEBUG if args.log_level == "debug" else logging.INFO
     logger.setLevel(level=log_level)
     # Formatter
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     # FileHandler
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)

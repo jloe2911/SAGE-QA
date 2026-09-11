@@ -43,6 +43,7 @@ from evaluation.compare_unified_evidence_graph_candidates import (
     build_text_evidence_graph,
 )
 from evaluation.validate_gold_free_candidate_pools import ONTO, ROOT, TEXT, onto_rows, text_rows
+
 FROZEN_DIR = ROOT / "outputs/development_runs/query_local_candidate_closure_v1"
 DATASET_ORDER = ["2WikiMultiHopQA", "HotpotQA", *ONTO]
 TRAINER_PATH = ROOT / "training/train_gnn_subgraph_retriever.py"
@@ -60,7 +61,10 @@ def _load_target_functions() -> tuple[Any, Any]:
     if {node.name for node in definitions} != wanted:
         raise AssertionError("Could not locate active trainer target definitions")
     module = ast.Module(
-        body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), *definitions],
+        body=[
+            ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+            *definitions,
+        ],
         type_ignores=[],
     )
     namespace: dict[str, Any] = {}
@@ -167,7 +171,9 @@ def _pair_detail(
             "precision_to_covered_gold": precision,
             "recall_to_covered_gold": recall,
             "f1_to_covered_gold": f1,
-            "best_set_f1_to_any_gold": float(set_scores(list(union), [list(g) for g in golds])["best_set_f1_to_gold"]),
+            "best_set_f1_to_any_gold": float(
+                set_scores(list(union), [list(g) for g in golds])["best_set_f1_to_gold"]
+            ),
         },
     }
 
@@ -200,14 +206,26 @@ def _summary(details: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "percentage_examples_with_at_least_one_pair_both_nonzero": pct(both, count),
         "percentage_examples_where_one_or_both_necessary_candidates_zero": pct(count - both, count),
         "near_zero_diagnostics": {
-            "percentage_members_rank_target_le_0_05": pct(sum(0 < value <= 0.05 for value in targets), len(targets)),
-            "percentage_members_rank_target_le_0_10": pct(sum(0 < value <= 0.10 for value in targets), len(targets)),
+            "percentage_members_rank_target_le_0_05": pct(
+                sum(0 < value <= 0.05 for value in targets), len(targets)
+            ),
+            "percentage_members_rank_target_le_0_10": pct(
+                sum(0 < value <= 0.10 for value in targets), len(targets)
+            ),
         },
         "selected_pair_union_overlap_distribution": {
-            "precision_to_covered_gold": _distribution(detail["union"]["precision_to_covered_gold"] for detail in details),
-            "recall_to_covered_gold": _distribution(detail["union"]["recall_to_covered_gold"] for detail in details),
-            "f1_to_covered_gold": _distribution(detail["union"]["f1_to_covered_gold"] for detail in details),
-            "best_set_f1_to_any_gold": _distribution(detail["union"]["best_set_f1_to_any_gold"] for detail in details),
+            "precision_to_covered_gold": _distribution(
+                detail["union"]["precision_to_covered_gold"] for detail in details
+            ),
+            "recall_to_covered_gold": _distribution(
+                detail["union"]["recall_to_covered_gold"] for detail in details
+            ),
+            "f1_to_covered_gold": _distribution(
+                detail["union"]["f1_to_covered_gold"] for detail in details
+            ),
+            "best_set_f1_to_any_gold": _distribution(
+                detail["union"]["best_set_f1_to_any_gold"] for detail in details
+            ),
         },
     }
 
@@ -252,7 +270,9 @@ def _audit_dataset(name: str, frozen_rows: Mapping[str, Mapping[str, Any]]) -> l
     for group_index, qa_index, item, qa in onto_rows(name):
         question = str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or "")
         sparql = str(qa.get("SPARQL Query") or "")
-        graph = build_ontology_evidence_graph(parse_owl_context(str(item.get("OWL Context") or "")), question, sparql)
+        graph = build_ontology_evidence_graph(
+            parse_owl_context(str(item.get("OWL Context") or "")), question, sparql
+        )
         candidates = _canonical(query_local_candidate_closure(graph, D_CONFIG).candidates)
         example_id = f"{name}__g{group_index}__q{qa_index}"
         frozen = frozen_rows[example_id]
@@ -271,7 +291,10 @@ def run(output_dir: Path) -> dict[str, Any]:
         raise FileExistsError(f"Refusing to overwrite existing diagnostic: {output_dir}")
     frozen_report_path = FROZEN_DIR / "comparison.json"
     frozen_report = json.loads(frozen_report_path.read_text(encoding="utf-8"))
-    if frozen_report.get("experiment") != "D: query-local candidate closure + progressive expansion":
+    if (
+        frozen_report.get("experiment")
+        != "D: query-local candidate closure + progressive expansion"
+    ):
         raise AssertionError("Unexpected frozen Generator D experiment")
     for gate in ("test_data_used", "training_run", "adaptive_k_run", "answer_generation_run"):
         if frozen_report.get(gate):
@@ -301,8 +324,7 @@ def run(output_dir: Path) -> dict[str, Any]:
     }
     for name in DATASET_ORDER:
         frozen_rows = {
-            row["example_id"]: row
-            for row in _read_jsonl(FROZEN_DIR / name / "details.jsonl")
+            row["example_id"]: row for row in _read_jsonl(FROZEN_DIR / name / "details.jsonl")
         }
         details = _audit_dataset(name, frozen_rows)
         display_name = DISPLAY_NAMES[name]

@@ -101,7 +101,9 @@ def write_json(path: Path, value: Any) -> None:
 
 def write_lines(path: Path, values: Iterable[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(f"{value}\n" for value in sorted(set(values))), encoding="utf-8", newline="\n")
+    path.write_text(
+        "".join(f"{value}\n" for value in sorted(set(values))), encoding="utf-8", newline="\n"
+    )
 
 
 def grouped_rows(path: Path) -> Iterator[tuple[str, list[dict[str, Any]]]]:
@@ -142,7 +144,9 @@ def deduplicated_units(rows: Sequence[Mapping[str, Any]], row_cap: int | None) -
     return result
 
 
-def text_inference_sample(rows: Sequence[dict[str, Any]], max_candidates: int) -> tuple[dict[str, Any], list[str]]:
+def text_inference_sample(
+    rows: Sequence[dict[str, Any]], max_candidates: int
+) -> tuple[dict[str, Any], list[str]]:
     seed = rows[0]
     example_id = str(seed["example_id"])
     q_node = question_node(example_id)
@@ -182,9 +186,19 @@ def text_inference_sample(rows: Sequence[dict[str, Any]], max_candidates: int) -
             ev_node = evidence_node(sentence_unit)
             haystack = f"{title} {sentence}"
             if text_mentions_entity(haystack, subject):
-                tuples.extend(([ev_node, "mentions_kg_entity", subj_node], [subj_node, "mentioned_in_sentence", ev_node]))
+                tuples.extend(
+                    (
+                        [ev_node, "mentions_kg_entity", subj_node],
+                        [subj_node, "mentioned_in_sentence", ev_node],
+                    )
+                )
             if text_mentions_entity(haystack, obj):
-                tuples.extend(([ev_node, "mentions_kg_entity", obj_node], [obj_node, "mentioned_in_sentence", ev_node]))
+                tuples.extend(
+                    (
+                        [ev_node, "mentions_kg_entity", obj_node],
+                        [obj_node, "mentioned_in_sentence", ev_node],
+                    )
+                )
 
     sample = {
         "id": example_id,
@@ -228,7 +242,9 @@ def ontology_inference_sample(rows: Sequence[dict[str, Any]]) -> tuple[dict[str,
     return sample, candidate_units
 
 
-def inference_sample(rows: Sequence[dict[str, Any]], domain: str, text_max_candidates: int) -> tuple[dict[str, Any], list[str]]:
+def inference_sample(
+    rows: Sequence[dict[str, Any]], domain: str, text_max_candidates: int
+) -> tuple[dict[str, Any], list[str]]:
     if domain == "text":
         return text_inference_sample(rows, text_max_candidates)
     return ontology_inference_sample(rows)
@@ -253,7 +269,12 @@ def supervision_units(rows: Sequence[Mapping[str, Any]], domain: str) -> list[st
     return result
 
 
-def attach_supervision(sample: dict[str, Any], candidate_units: Sequence[str], rows: Sequence[dict[str, Any]], domain: str) -> int:
+def attach_supervision(
+    sample: dict[str, Any],
+    candidate_units: Sequence[str],
+    rows: Sequence[dict[str, Any]],
+    domain: str,
+) -> int:
     candidate_set = set(candidate_units)
     targets = [unit for unit in supervision_units(rows, domain) if unit in candidate_set]
     node = evidence_node if domain == "text" else unit_node
@@ -261,7 +282,9 @@ def attach_supervision(sample: dict[str, Any], candidate_units: Sequence[str], r
     return len(targets)
 
 
-def structure_signature(sample: Mapping[str, Any], candidate_units: Sequence[str]) -> dict[str, Any]:
+def structure_signature(
+    sample: Mapping[str, Any], candidate_units: Sequence[str]
+) -> dict[str, Any]:
     return {
         "nodes": sample["subgraph"]["entities"],
         "edges": sample["subgraph"]["tuples"],
@@ -272,7 +295,9 @@ def structure_signature(sample: Mapping[str, Any], candidate_units: Sequence[str
     }
 
 
-def invariance_check(rows: Sequence[dict[str, Any]], domain: str, text_max_candidates: int) -> dict[str, Any]:
+def invariance_check(
+    rows: Sequence[dict[str, Any]], domain: str, text_max_candidates: int
+) -> dict[str, Any]:
     baseline, candidates = inference_sample(rows, domain, text_max_candidates)
     baseline_signature = structure_signature(baseline, candidates)
     mutated = copy.deepcopy(list(rows))
@@ -345,7 +370,14 @@ def git_commit(root: Path) -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
 
 
-def prepare_dataset(root: Path, source_root: Path, output_root: Path, name: str, cfg: Mapping[str, str], text_max_candidates: int) -> dict[str, Any]:
+def prepare_dataset(
+    root: Path,
+    source_root: Path,
+    output_root: Path,
+    name: str,
+    cfg: Mapping[str, str],
+    text_max_candidates: int,
+) -> dict[str, Any]:
     dataset_dir = output_root / name
     adapter_dir = dataset_dir / "adapter"
     if dataset_dir.exists():
@@ -376,17 +408,25 @@ def prepare_dataset(root: Path, source_root: Path, output_root: Path, name: str,
         else:
             dev_relations.update(relations)
 
-    declared_schema = TEXT_SCHEMA_RELATIONS if cfg["domain"] == "text" else ONTOLOGY_SCHEMA_RELATIONS
+    declared_schema = (
+        TEXT_SCHEMA_RELATIONS if cfg["domain"] == "text" else ONTOLOGY_SCHEMA_RELATIONS
+    )
     relation_vocab = train_relations | declared_schema
     missing_dev_relations = sorted(dev_relations - relation_vocab)
     if missing_dev_relations:
-        raise ValueError(f"{name}: DEV relations absent from TRAIN plus schema: {missing_dev_relations[:20]}")
+        raise ValueError(
+            f"{name}: DEV relations absent from TRAIN plus schema: {missing_dev_relations[:20]}"
+        )
     if not all(item["pass"] for item in checks):
         raise RuntimeError(f"{name}: leakage-invariance gate failed")
 
     write_lines(adapter_dir / "entities.txt", all_entities)
     write_lines(adapter_dir / "relations.txt", relation_vocab)
-    write_lines(adapter_dir / "vocab.txt", train_words | {token.lower() for rel in relation_vocab for token in TEXT_TOKEN_RE.findall(rel)})
+    write_lines(
+        adapter_dir / "vocab.txt",
+        train_words
+        | {token.lower() for rel in relation_vocab for token in TEXT_TOKEN_RE.findall(rel)},
+    )
     relation_hash = sha256_file(adapter_dir / "relations.txt")
     config = {
         "adapter_contract": "production_generator_d_v1_gnn_rag_clean_v1",
@@ -423,18 +463,39 @@ def prepare_dataset(root: Path, source_root: Path, output_root: Path, name: str,
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, default=Path("data/production_generator_d_v1"))
-    parser.add_argument("--output-root", type=Path, default=Path("checkpoints/production_generator_d_v1_gnn_rag_clean"))
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("checkpoints/production_generator_d_v1_gnn_rag_clean"),
+    )
     parser.add_argument("--datasets", nargs="*", choices=list(DATASETS), default=list(DATASETS))
     parser.add_argument("--text-max-candidates", type=int, default=5)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    source_root = (root / args.source_root).resolve() if not args.source_root.is_absolute() else args.source_root.resolve()
-    output_root = (root / args.output_root).resolve() if not args.output_root.is_absolute() else args.output_root.resolve()
+    source_root = (
+        (root / args.source_root).resolve()
+        if not args.source_root.is_absolute()
+        else args.source_root.resolve()
+    )
+    output_root = (
+        (root / args.output_root).resolve()
+        if not args.output_root.is_absolute()
+        else args.output_root.resolve()
+    )
     output_root.mkdir(parents=True, exist_ok=True)
     summaries = []
     for name in args.datasets:
         print(f"Preparing clean GNN-RAG adapter: {name}", flush=True)
-        summaries.append(prepare_dataset(root, source_root, output_root, name, DATASETS[name], max(1, args.text_max_candidates)))
+        summaries.append(
+            prepare_dataset(
+                root,
+                source_root,
+                output_root,
+                name,
+                DATASETS[name],
+                max(1, args.text_max_candidates),
+            )
+        )
         print(json.dumps(summaries[-1], ensure_ascii=False), flush=True)
     write_json(output_root / "adapter_run_summary.json", summaries)
 

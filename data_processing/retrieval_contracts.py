@@ -93,17 +93,14 @@ def validate_clean_cache_row(
         or ""
     ).lower()
     if any(marker in method for marker in CONTAMINATED_KG_MARKERS):
-        raise ValueError(
-            f"Contaminated KG cache provenance {method!r} cannot be reused."
-        )
+        raise ValueError(f"Contaminated KG cache provenance {method!r} cannot be reused.")
     if row.get("gold_available_during_candidate_generation") is True:
         raise ValueError("KG cache reports gold access during candidate generation.")
     if expected_signature is not None:
         actual = row.get("cache_signature")
         if actual != expected_signature:
             raise ValueError(
-                "KG cache signature mismatch: "
-                f"expected {expected_signature!r}, found {actual!r}."
+                f"KG cache signature mismatch: expected {expected_signature!r}, found {actual!r}."
             )
 
 
@@ -200,9 +197,7 @@ def split_manifest(
         "dataset": dataset,
         "seed": seed,
         "source_files": {
-            split: [
-                {"path": str(path), "sha256": sha256_file(path)} for path in paths
-            ]
+            split: [{"path": str(path), "sha256": sha256_file(path)} for path in paths]
             for split, paths in source_paths.items()
         },
         "splits": {
@@ -216,6 +211,4 @@ def split_manifest(
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

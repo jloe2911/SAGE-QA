@@ -42,9 +42,7 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
@@ -105,17 +103,14 @@ def summarize_decisions(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     distribution = Counter(int(row["selected_k"]) for row in rows)
     return {
         "examples": len(rows),
-        "support_precision": sum(float(row["support_precision"]) for row in rows)
-        / len(rows),
+        "support_precision": sum(float(row["support_precision"]) for row in rows) / len(rows),
         "support_recall": sum(float(row["support_recall"]) for row in rows) / len(rows),
         "support_f1": sum(float(row["support_f1"]) for row in rows) / len(rows),
         "average_selected_k": sum(int(row["selected_k"]) for row in rows) / len(rows),
         "selected_k_distribution": {
             str(k): distribution.get(k, 0) for k in range(1, MAX_ADAPTIVE_K + 1)
         },
-        "average_unique_evidence_units": sum(
-            int(row["final_support_size"]) for row in rows
-        )
+        "average_unique_evidence_units": sum(int(row["final_support_size"]) for row in rows)
         / len(rows),
     }
 
@@ -196,9 +191,7 @@ def tune_common_tau(
     return float(selected["tau"]), table
 
 
-def legacy_best_candidate_metrics(
-    items: Sequence[Mapping[str, Any]], k: int
-) -> dict[str, float]:
+def legacy_best_candidate_metrics(items: Sequence[Mapping[str, Any]], k: int) -> dict[str, float]:
     per_example = []
     for item in items:
         candidates = final_candidates(item)[:k]
@@ -211,8 +204,7 @@ def legacy_best_candidate_metrics(
     return {
         "support_precision": sum(row["support_precision"] for row in per_example)
         / len(per_example),
-        "support_recall": sum(row["support_recall"] for row in per_example)
-        / len(per_example),
+        "support_recall": sum(row["support_recall"] for row in per_example) / len(per_example),
         "support_f1": sum(row["support_f1"] for row in per_example) / len(per_example),
     }
 
@@ -282,7 +274,7 @@ def build_regression_report(
 
 
 def compact_tradeoff_summary(
-    aggregate: Mapping[str, Mapping[str, Mapping[str, Any]]]
+    aggregate: Mapping[str, Mapping[str, Mapping[str, Any]]],
 ) -> dict[str, Any]:
     summary = {}
     for condition, systems in aggregate.items():
@@ -293,21 +285,18 @@ def compact_tradeoff_summary(
             summary[condition][f"adaptive_vs_{baseline}"] = {
                 "support_precision_delta": adaptive["support_precision"]
                 - fixed["support_precision"],
-                "support_recall_delta": adaptive["support_recall"]
-                - fixed["support_recall"],
+                "support_recall_delta": adaptive["support_recall"] - fixed["support_recall"],
                 "support_f1_delta": adaptive["support_f1"] - fixed["support_f1"],
                 "average_selected_k_delta": adaptive["average_selected_k"]
                 - fixed["average_selected_k"],
-                "average_unique_evidence_units_delta": adaptive[
-                    "average_unique_evidence_units"
-                ]
+                "average_unique_evidence_units_delta": adaptive["average_unique_evidence_units"]
                 - fixed["average_unique_evidence_units"],
             }
     return summary
 
 
 def pooled_system_metrics(
-    aggregate: Mapping[str, Mapping[str, Mapping[str, Any]]]
+    aggregate: Mapping[str, Mapping[str, Mapping[str, Any]]],
 ) -> dict[str, dict[str, Any]]:
     pooled = {}
     system_names = next(iter(aggregate.values())).keys()
@@ -316,8 +305,7 @@ def pooled_system_metrics(
         total_examples = sum(int(metrics["examples"]) for metrics in condition_metrics)
         distribution = {
             str(k): sum(
-                int(metrics["selected_k_distribution"][str(k)])
-                for metrics in condition_metrics
+                int(metrics["selected_k_distribution"][str(k)]) for metrics in condition_metrics
             )
             for k in range(1, MAX_ADAPTIVE_K + 1)
         }
@@ -391,9 +379,7 @@ def main() -> None:
             "policy": tuning_artifact["policy"],
             "dev_tuning_table": str(tuning_path),
             "dev_tuning_table_sha256": sha256(tuning_path),
-            "dev_input_sha256": {
-                condition: sha256(path) for condition, path in dev_paths.items()
-            },
+            "dev_input_sha256": {condition: sha256(path) for condition, path in dev_paths.items()},
         },
     )
 

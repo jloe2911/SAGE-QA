@@ -57,7 +57,12 @@ def run_logged(command: list[str], log_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--weights", nargs="*", type=float, default=list(WEIGHTS), choices=WEIGHTS)
-    parser.add_argument("--datasets", nargs="*", default=[name for name, _ in DATASETS], choices=[name for name, _ in DATASETS])
+    parser.add_argument(
+        "--datasets",
+        nargs="*",
+        default=[name for name, _ in DATASETS],
+        choices=[name for name, _ in DATASETS],
+    )
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
     parser.add_argument(
         "--checkpoint-root",
@@ -87,21 +92,35 @@ def main() -> None:
             command = [
                 sys.executable,
                 "training/train_gnn_subgraph_retriever.py",
-                "--train-path", str(train_path),
-                "--dev-path", str(dev_path),
-                "--save-dir", str(save_dir),
-                "--model-name", "google/bert_uncased_L-2_H-128_A-2",
-                "--epochs", "3",
-                "--max-length", "128",
-                "--candidate-batch-size", "512",
+                "--train-path",
+                str(train_path),
+                "--dev-path",
+                str(dev_path),
+                "--save-dir",
+                str(save_dir),
+                "--model-name",
+                "google/bert_uncased_L-2_H-128_A-2",
+                "--epochs",
+                "3",
+                "--max-length",
+                "128",
+                "--candidate-batch-size",
+                "512",
                 "--freeze-encoder",
-                "--ranking-margin", "0.2",
-                "--ranking-weight", "2.0",
-                "--bce-weight", "0.2",
-                "--listwise-weight", str(weight),
-                "--max-pairs", "512",
-                "--score-mode", "neural",
-                "--size-penalty", "0.01",
+                "--ranking-margin",
+                "0.2",
+                "--ranking-weight",
+                "2.0",
+                "--bce-weight",
+                "0.2",
+                "--listwise-weight",
+                str(weight),
+                "--max-pairs",
+                "512",
+                "--score-mode",
+                "neural",
+                "--size-penalty",
+                "0.01",
             ]
             print(f"train {dataset} listwise_weight={weight}", flush=True)
             run_logged(command, weight_run_root / "training_logs" / f"{checkpoint_dir}.log")
@@ -114,23 +133,34 @@ def main() -> None:
                     [
                         sys.executable,
                         "evaluation/run_production_dev_k_sensitivity.py",
-                        "--data-root", str(args.data_root),
-                        "--checkpoint-root", str(weight_checkpoint_root),
-                        "--output-dir", str(weight_run_root),
-                        "--max-length", "128",
-                        "--candidate-batch-size", "512",
+                        "--data-root",
+                        str(args.data_root),
+                        "--checkpoint-root",
+                        str(weight_checkpoint_root),
+                        "--output-dir",
+                        str(weight_run_root),
+                        "--max-length",
+                        "128",
+                        "--candidate-batch-size",
+                        "512",
                     ],
                     weight_run_root / "evaluation.log",
                 )
             if weight == 0.0:
-                gate_output = ROOT / "outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev/baseline_reproduction.json"
+                gate_output = (
+                    ROOT
+                    / "outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev/baseline_reproduction.json"
+                )
                 run_logged(
                     [
                         sys.executable,
                         "evaluation/verify_listwise_zero_baseline.py",
-                        "--fresh-run", str(weight_run_root),
-                        "--fresh-checkpoints", str(weight_checkpoint_root),
-                        "--output", str(gate_output),
+                        "--fresh-run",
+                        str(weight_run_root),
+                        "--fresh-checkpoints",
+                        str(weight_checkpoint_root),
+                        "--output",
+                        str(gate_output),
                     ],
                     weight_run_root / "baseline_reproduction.log",
                 )

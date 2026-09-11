@@ -369,9 +369,7 @@ def write_latex(path: Path, rows: List[Dict], columns: List[str]) -> None:
     ]
 
     for row in rows:
-        lines.append(
-            " & ".join(escape_latex(row.get(col, "")) for col in columns) + r" \\"
-        )
+        lines.append(" & ".join(escape_latex(row.get(col, "")) for col in columns) + r" \\")
 
     lines.extend([r"\bottomrule", r"\end{tabular}", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -433,12 +431,8 @@ def main():
             "directories under --results-root except logs."
         ),
     )
-    parser.add_argument(
-        "--output-csv", default="outputs/final_results/final_summary.csv"
-    )
-    parser.add_argument(
-        "--output-latex", default="outputs/final_results/final_summary.tex"
-    )
+    parser.add_argument("--output-csv", default="outputs/final_results/final_summary.csv")
+    parser.add_argument("--output-latex", default="outputs/final_results/final_summary.tex")
     args = parser.parse_args()
 
     root = Path(args.results_root)
@@ -450,9 +444,7 @@ def main():
         if not root.exists():
             raise RuntimeError(f"Results root does not exist: {root}")
         dataset_names = [
-            path.name
-            for path in sorted(root.iterdir())
-            if path.is_dir() and path.name != "logs"
+            path.name for path in sorted(root.iterdir()) if path.is_dir() and path.name != "logs"
         ]
 
     for dataset_name in dataset_names:

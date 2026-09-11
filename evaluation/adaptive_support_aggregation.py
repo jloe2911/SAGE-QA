@@ -85,32 +85,24 @@ def adaptive_support_aggregate(
         raise ValueError("Candidates must be ordered by non-increasing final score")
 
     mean_score = sum(scores) / len(scores)
-    score_scale = math.sqrt(
-        sum((score - mean_score) ** 2 for score in scores) / len(scores)
-    )
+    score_scale = math.sqrt(sum((score - mean_score) ** 2 for score in scores) / len(scores))
     identical_scores = score_scale <= epsilon
 
-    first_units = _deduplicated_units(
-        list(candidates[0].get(units_key, []) or []), evidence_key
-    )
+    first_units = _deduplicated_units(list(candidates[0].get(units_key, []) or []), evidence_key)
     selected_keys = {key for key, _ in first_units}
     selected_support = [unit for _, unit in first_units]
     selected_indices = [1]
     decisions: list[dict[str, Any]] = []
     stopping_point: int | None = None
 
-    for candidate_index, (candidate, score) in enumerate(
-        zip(candidates[1:], scores[1:]), start=2
-    ):
+    for candidate_index, (candidate, score) in enumerate(zip(candidates[1:], scores[1:]), start=2):
         candidate_units = _deduplicated_units(
             list(candidate.get(units_key, []) or []), evidence_key
         )
         new_units = [(key, unit) for key, unit in candidate_units if key not in selected_keys]
         novelty = len(new_units) / len(candidate_units) if candidate_units else 0.0
         relative_strength = (
-            1.0
-            if identical_scores
-            else math.exp((score - scores[0]) / max(score_scale, epsilon))
+            1.0 if identical_scores else math.exp((score - scores[0]) / max(score_scale, epsilon))
         )
         utility = relative_strength * novelty
         include = utility >= tau

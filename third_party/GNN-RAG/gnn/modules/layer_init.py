@@ -68,8 +68,7 @@ class TypeLayer(nn.Module):
 
         # neighbor_rep = torch.sparse.mm(fact2tail_mat, self.kb_tail_linear(self.linear_drop(fact_val)))
         f2e_emb = F.relu(
-            torch.sparse.mm(fact2tail_mat, fact_val)
-            + torch.sparse.mm(fact2head_mat, fact_val)
+            torch.sparse.mm(fact2tail_mat, fact_val) + torch.sparse.mm(fact2head_mat, fact_val)
         )
         assert not torch.isnan(f2e_emb).any()
 

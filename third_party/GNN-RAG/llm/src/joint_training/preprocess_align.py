@@ -6,9 +6,7 @@ from utils import *
 from transformers import AutoTokenizer
 import datasets
 
-N_CPUS = (
-    int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
-)
+N_CPUS = int(os.environ["SLURM_CPUS_PER_TASK"]) if "SLURM_CPUS_PER_TASK" in os.environ else 1
 
 save_dir = "datasets/joint_training/align"
 prompt_path = "prompts/llama2.txt"

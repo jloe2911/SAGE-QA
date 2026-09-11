@@ -173,9 +173,7 @@ def text_graph(
     dataset: str, example_id: str, question: str, raw_index: Mapping[str, Mapping[str, Any]]
 ) -> EvidenceGraph:
     raw = raw_index[raw_text_id(example_id)]
-    records = (
-        flatten_hotpot_context(raw) if dataset == "HotpotQA" else flatten_2wiki_context(raw)
-    )
+    records = flatten_hotpot_context(raw) if dataset == "HotpotQA" else flatten_2wiki_context(raw)
     return build_text_evidence_graph(records, question)
 
 
@@ -257,7 +255,9 @@ def exact_steiner_size(graph: EvidenceGraph, terminals: Sequence[int]) -> int | 
     return None if edges >= INF else edges + 1
 
 
-def structural_alternatives(graph: EvidenceGraph, gold: Sequence[Sequence[str]]) -> list[dict[str, Any]]:
+def structural_alternatives(
+    graph: EvidenceGraph, gold: Sequence[Sequence[str]]
+) -> list[dict[str, Any]]:
     index = {unit.unit_id: position for position, unit in enumerate(graph.units)}
     components = connected_components(graph)
     output = []
@@ -274,8 +274,11 @@ def structural_alternatives(graph: EvidenceGraph, gold: Sequence[Sequence[str]])
                 "all_units_present": not missing,
                 "same_connected_component": same_component if not missing else False,
                 "minimum_connected_superset_size": minimum,
-                "bridge_units_needed": None if minimum is None else max(0, minimum - len(unit_set(alt))),
-                "representable_with_max_support_6": minimum is not None and minimum <= MAX_SUPPORT_SIZE,
+                "bridge_units_needed": None
+                if minimum is None
+                else max(0, minimum - len(unit_set(alt))),
+                "representable_with_max_support_6": minimum is not None
+                and minimum <= MAX_SUPPORT_SIZE,
             }
         )
     return output
@@ -317,7 +320,8 @@ def pair_feature_distance(left: Mapping[str, Any], right: Mapping[str, Any]) -> 
     b += [0.0] * (length - len(b))
     l1 = sum(abs(x - y) for x, y in zip(a, b))
     return {
-        "same_subgraph_size": len(left.get("subgraph_units", [])) == len(right.get("subgraph_units", [])),
+        "same_subgraph_size": len(left.get("subgraph_units", []))
+        == len(right.get("subgraph_units", [])),
         "symbolic_feature_l1": l1,
         "same_symbolic_features": l1 <= 1e-12,
         "same_pre_rank_score": math.isclose(
@@ -357,7 +361,9 @@ def minimum_candidate_cover(
                 "support_in_top5": max(ranks) <= 5,
             }
             if best is None or (count, max(ranks), ranks) < (
-                best["minimum_candidates_needed"], best["minimum_achievable_k"], tuple(best["candidate_ranks"])
+                best["minimum_candidates_needed"],
+                best["minimum_achievable_k"],
+                tuple(best["candidate_ranks"]),
             ):
                 best = record
     return best or {
@@ -382,7 +388,10 @@ def search_failure_reason(
     anchors = set(generated.query_anchor_unit_ids)
     explored = set(generated.explored_unit_ids)
     viable = [row for row in structural if row["representable_with_max_support_6"]]
-    best = min(viable, key=lambda row: (row["minimum_connected_superset_size"], row["gold_explanation_index"]))
+    best = min(
+        viable,
+        key=lambda row: (row["minimum_connected_superset_size"], row["gold_explanation_index"]),
+    )
     alt = gold[int(best["gold_explanation_index"])]
     missing_explored = [unit for unit in alt if unit not in explored]
     gold_anchors = sorted(set(alt) & anchors)
@@ -426,7 +435,9 @@ def overlap_redundancy(rows: Sequence[Mapping[str, Any]], ranks: Sequence[int]) 
     for left in range(len(selected)):
         for right in range(left + 1, len(selected)):
             union = selected[left] | selected[right]
-            similarities.append(len(selected[left] & selected[right]) / len(union) if union else 0.0)
+            similarities.append(
+                len(selected[left] & selected[right]) / len(union) if union else 0.0
+            )
     return {
         "pairwise_jaccard_mean": statistics.mean(similarities),
         "redundant_unit_count": sum(count - 1 for count in counts.values() if count > 1),
@@ -439,12 +450,14 @@ def main() -> None:
     parser.add_argument(
         "--rankings",
         type=Path,
-        default=ROOT / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl",
+        default=ROOT
+        / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl",
     )
     parser.add_argument(
         "--adaptive",
         type=Path,
-        default=ROOT / "outputs/development_runs/production_generator_d_v1_adaptive_k/per_example_adaptive_dev.jsonl",
+        default=ROOT
+        / "outputs/development_runs/production_generator_d_v1_adaptive_k/per_example_adaptive_dev.jsonl",
     )
     parser.add_argument(
         "--output-dir",
@@ -493,7 +506,9 @@ def main() -> None:
                 continue
 
             if domain == "text":
-                graph = text_graph(dataset, example_id, str(rows[0].get("question", "")), raw_text or {})
+                graph = text_graph(
+                    dataset, example_id, str(rows[0].get("question", "")), raw_text or {}
+                )
             else:
                 group_index = int(rows[0]["group_index"])
                 qa_index = int(rows[0]["qa_index"])
@@ -509,19 +524,31 @@ def main() -> None:
             generated = generate_generator_d_candidates(graph)
             persisted_candidates = [row["subgraph_units"] for row in rows]
             replay_digest = hashlib.sha256(
-                json.dumps([list(candidate) for candidate in generated.candidates], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                json.dumps(
+                    [list(candidate) for candidate in generated.candidates],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
             ).hexdigest()
             persisted_digest = hashlib.sha256(
-                json.dumps(persisted_candidates, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                json.dumps(persisted_candidates, ensure_ascii=False, separators=(",", ":")).encode(
+                    "utf-8"
+                )
             ).hexdigest()
-            replay_matches = [list(candidate) for candidate in generated.candidates] == persisted_candidates
+            replay_matches = [
+                list(candidate) for candidate in generated.candidates
+            ] == persisted_candidates
             if not replay_matches:
                 raise AssertionError(f"Generator-D replay mismatch: {example_id}")
 
-            complete_indices = [i for i, row in enumerate(rows) if contains(row["subgraph_units"], gold)]
+            complete_indices = [
+                i for i, row in enumerate(rows) if contains(row["subgraph_units"], gold)
+            ]
             admitted = list(cap_inference_candidate_rows(rows, max_candidates=ADMISSION_CAP))
             admitted_complete = [row for row in admitted if contains(row["subgraph_units"], gold)]
-            full_union_complete = contains((unit for row in rows for unit in row["subgraph_units"]), gold)
+            full_union_complete = contains(
+                (unit for row in rows for unit in row["subgraph_units"]), gold
+            )
             admitted_union_complete = contains(
                 (unit for row in admitted for unit in row["subgraph_units"]), gold
             )
@@ -567,12 +594,19 @@ def main() -> None:
             constructability.append({**base, "alternatives": structural})
 
             if taxonomy == "3_generator_d_search_composition_failure":
-                search_failures.append({**base, **search_failure_reason(graph, generated, structural, gold)})
+                search_failures.append(
+                    {**base, **search_failure_reason(graph, generated, structural, gold)}
+                )
 
             if complete_indices:
                 complete_rows = [rows[index] for index in complete_indices]
-                complete_generation_ranks = [int(row.get("generation_rank", index)) for index, row in zip(complete_indices, complete_rows)]
-                complete_pre_scores = [float(row.get("candidate_pre_rank_score", 0.0)) for row in complete_rows]
+                complete_generation_ranks = [
+                    int(row.get("generation_rank", index))
+                    for index, row in zip(complete_indices, complete_rows)
+                ]
+                complete_pre_scores = [
+                    float(row.get("candidate_pre_rank_score", 0.0)) for row in complete_rows
+                ]
                 admitted_positions = {
                     candidate_id(row): position for position, row in enumerate(admitted, start=1)
                 }
@@ -581,21 +615,32 @@ def main() -> None:
                     "complete_candidate_count": len(complete_rows),
                     "best_complete_generation_rank_zero_based": min(complete_generation_ranks),
                     "complete_generation_ranks_zero_based": complete_generation_ranks,
-                    "complete_candidate_sizes": [len(row["subgraph_units"]) for row in complete_rows],
+                    "complete_candidate_sizes": [
+                        len(row["subgraph_units"]) for row in complete_rows
+                    ],
                     "complete_candidate_pre_rank_scores": complete_pre_scores,
                     "best_complete_admission_position": min(
-                        (admitted_positions[candidate_id(row)] for row in complete_rows if candidate_id(row) in admitted_positions),
+                        (
+                            admitted_positions[candidate_id(row)]
+                            for row in complete_rows
+                            if candidate_id(row) in admitted_positions
+                        ),
                         default=None,
                     ),
                     "complete_only_after_admission_320": not admitted_complete,
-                    "admission_cutoff_pre_rank_score": float(admitted[-1].get("candidate_pre_rank_score", 0.0)),
-                    "best_complete_pre_rank_minus_cutoff": max(complete_pre_scores) - float(admitted[-1].get("candidate_pre_rank_score", 0.0)),
+                    "admission_cutoff_pre_rank_score": float(
+                        admitted[-1].get("candidate_pre_rank_score", 0.0)
+                    ),
+                    "best_complete_pre_rank_minus_cutoff": max(complete_pre_scores)
+                    - float(admitted[-1].get("candidate_pre_rank_score", 0.0)),
                     "complete_query_anchor_coverage": [
                         len(set(row["subgraph_units"]) & set(generated.query_anchor_unit_ids))
                         / max(len(set(generated.query_anchor_unit_ids)), 1)
                         for row in complete_rows
                     ],
-                    "complete_symbolic_features": [row.get("symbolic_features", []) for row in complete_rows],
+                    "complete_symbolic_features": [
+                        row.get("symbolic_features", []) for row in complete_rows
+                    ],
                 }
                 cap_analysis.append(cap_row)
 
@@ -606,16 +651,23 @@ def main() -> None:
                 # Pick the highest-ranked complete candidate visible there; the
                 # full-score supplement can later replace this conservative view.
                 visible_complete = [
-                    candidate for candidate in gnn_record["ranked_candidates"]
+                    candidate
+                    for candidate in gnn_record["ranked_candidates"]
                     if contains(candidate["subgraph_units"], gold)
                 ]
                 complete_source = visible_complete[0] if visible_complete else None
-                top_row = next(row for row in admitted if unit_set(row["subgraph_units"]) == unit_set(gnn_top["subgraph_units"]))
+                top_row = next(
+                    row
+                    for row in admitted
+                    if unit_set(row["subgraph_units"]) == unit_set(gnn_top["subgraph_units"])
+                )
                 complete_row = None
                 if complete_source is not None:
                     complete_row = next(
-                        row for row in admitted
-                        if unit_set(row["subgraph_units"]) == unit_set(complete_source["subgraph_units"])
+                        row
+                        for row in admitted
+                        if unit_set(row["subgraph_units"])
+                        == unit_set(complete_source["subgraph_units"])
                     )
                 pair = {
                     **base,
@@ -624,7 +676,9 @@ def main() -> None:
                         "score": float(gnn_top["score"]),
                         "subgraph_units": gnn_top["subgraph_units"],
                         "candidate_size": len(gnn_top["subgraph_units"]),
-                        "generator_pre_rank_score": float(top_row.get("candidate_pre_rank_score", 0.0)),
+                        "generator_pre_rank_score": float(
+                            top_row.get("candidate_pre_rank_score", 0.0)
+                        ),
                         "rank_target": float(top_row.get("rank_target", 0.0)),
                         "category": candidate_category(top_row, gold),
                         "symbolic_features": top_row.get("symbolic_features", []),
@@ -637,13 +691,19 @@ def main() -> None:
                         "score": float(complete_source["score"]),
                         "subgraph_units": complete_source["subgraph_units"],
                         "candidate_size": len(complete_source["subgraph_units"]),
-                        "generator_pre_rank_score": float(complete_row.get("candidate_pre_rank_score", 0.0)),
+                        "generator_pre_rank_score": float(
+                            complete_row.get("candidate_pre_rank_score", 0.0)
+                        ),
                         "rank_target": float(complete_row.get("rank_target", 0.0)),
                         "category": candidate_category(complete_row, gold),
                         "symbolic_features": complete_row.get("symbolic_features", []),
                     }
-                    pair["top1_minus_complete_score_gap"] = float(gnn_top["score"]) - float(complete_source["score"])
-                    pair["complete_has_strictly_better_target"] = float(complete_row.get("rank_target", 0.0)) > float(top_row.get("rank_target", 0.0))
+                    pair["top1_minus_complete_score_gap"] = float(gnn_top["score"]) - float(
+                        complete_source["score"]
+                    )
+                    pair["complete_has_strictly_better_target"] = float(
+                        complete_row.get("rank_target", 0.0)
+                    ) > float(top_row.get("rank_target", 0.0))
                     pair["representation_comparison"] = pair_feature_distance(top_row, complete_row)
                 gnn_analysis.append(pair)
 
@@ -652,8 +712,16 @@ def main() -> None:
             else:
                 effect = "unchanged"
             if effect != "unchanged" or taxonomy == "6_symbolic_reranking_degradation":
-                gnn_top_row = next(row for row in admitted if unit_set(row["subgraph_units"]) == unit_set(gnn_top["subgraph_units"]))
-                final_top_row = next(row for row in admitted if unit_set(row["subgraph_units"]) == unit_set(final_top["subgraph_units"]))
+                gnn_top_row = next(
+                    row
+                    for row in admitted
+                    if unit_set(row["subgraph_units"]) == unit_set(gnn_top["subgraph_units"])
+                )
+                final_top_row = next(
+                    row
+                    for row in admitted
+                    if unit_set(row["subgraph_units"]) == unit_set(final_top["subgraph_units"])
+                )
                 symbolic_analysis.append(
                     {
                         **base,
@@ -663,7 +731,12 @@ def main() -> None:
                             "complete": gnn_complete,
                             "neural_score": float(gnn_top["score"]),
                             "final_score": next(
-                                (float(c["adjusted_score"]) for c in final_record["ranked_candidates"] if unit_set(c["subgraph_units"]) == unit_set(gnn_top["subgraph_units"])),
+                                (
+                                    float(c["adjusted_score"])
+                                    for c in final_record["ranked_candidates"]
+                                    if unit_set(c["subgraph_units"])
+                                    == unit_set(gnn_top["subgraph_units"])
+                                ),
                                 None,
                             ),
                             "symbolic_terms": symbolic_terms(gnn_top_row, final_mode),
@@ -672,7 +745,12 @@ def main() -> None:
                         "final_top1": {
                             "complete": final_complete,
                             "neural_score": next(
-                                (float(c["score"]) for c in gnn_record["ranked_candidates"] if unit_set(c["subgraph_units"]) == unit_set(final_top["subgraph_units"])),
+                                (
+                                    float(c["score"])
+                                    for c in gnn_record["ranked_candidates"]
+                                    if unit_set(c["subgraph_units"])
+                                    == unit_set(final_top["subgraph_units"])
+                                ),
                                 None,
                             ),
                             "final_score": float(final_top["adjusted_score"]),
@@ -685,11 +763,17 @@ def main() -> None:
             if admitted_union_complete and not admitted_complete:
                 final_ranked_rows = []
                 for candidate in final_record["ranked_candidates"]:
-                    match = next(row for row in admitted if unit_set(row["subgraph_units"]) == unit_set(candidate["subgraph_units"]))
+                    match = next(
+                        row
+                        for row in admitted
+                        if unit_set(row["subgraph_units"]) == unit_set(candidate["subgraph_units"])
+                    )
                     final_ranked_rows.append(match)
                 cover = minimum_candidate_cover(final_ranked_rows, gold, max_k=5)
                 adaptive_row = adaptive.get(example_id, {})
-                selected_k = adaptive_row.get("selected_k") or adaptive_row.get("prediction", {}).get("selected_k")
+                selected_k = adaptive_row.get("selected_k") or adaptive_row.get(
+                    "prediction", {}
+                ).get("selected_k")
                 ranks = cover.get("candidate_ranks", [])
                 aggregation_analysis.append(
                     {
@@ -697,7 +781,11 @@ def main() -> None:
                         **cover,
                         **overlap_redundancy(final_ranked_rows, ranks),
                         "adaptive_selected_k": selected_k,
-                        "stops_too_early": bool(selected_k and cover.get("minimum_achievable_k") and int(selected_k) < int(cover["minimum_achievable_k"])),
+                        "stops_too_early": bool(
+                            selected_k
+                            and cover.get("minimum_achievable_k")
+                            and int(selected_k) < int(cover["minimum_achievable_k"])
+                        ),
                         "aggregation_subtype": (
                             "G1_inherent_multi_candidate_requirement"
                             if not representable
@@ -717,7 +805,9 @@ def main() -> None:
         per_dataset[dataset] = {
             "failures": len(subset),
             "counts": dict(sorted(counts.items())),
-            "percentages": {key: 100.0 * value / len(subset) for key, value in sorted(counts.items())},
+            "percentages": {
+                key: 100.0 * value / len(subset) for key, value in sorted(counts.items())
+            },
         }
     taxonomy_output = {
         "schema_version": "production_generator_d_v1_causal_failure_taxonomy_v1",
@@ -725,16 +815,26 @@ def main() -> None:
         "failure_definition": "frozen SAGE-QA final rank-1 does not contain a complete gold explanation",
         "failures": len(all_details),
         "counts": dict(sorted(taxonomy_counts.items())),
-        "percentages": {key: 100.0 * value / len(all_details) for key, value in sorted(taxonomy_counts.items())},
+        "percentages": {
+            key: 100.0 * value / len(all_details) for key, value in sorted(taxonomy_counts.items())
+        },
         "assignments": all_details,
         "taxonomy_disambiguation": "Structurally non-singleton-representable cases are assigned to stage 7 when the admitted candidate union can assemble a gold explanation (G1); otherwise they remain stage 2. This preserves the requested true-aggregation class while avoiding double counting.",
     }
 
     write_json(args.output_dir / "causal_failure_taxonomy.json", taxonomy_output)
     write_json(args.output_dir / "per_dataset_taxonomy.json", per_dataset)
-    write_json(args.output_dir / "constructability_analysis.json", {"split": "dev", "examples": constructability})
-    write_json(args.output_dir / "generator_search_failures.json", {"split": "dev", "examples": search_failures})
-    write_json(args.output_dir / "cap_admission_analysis.json", {"split": "dev", "examples": cap_analysis})
+    write_json(
+        args.output_dir / "constructability_analysis.json",
+        {"split": "dev", "examples": constructability},
+    )
+    write_json(
+        args.output_dir / "generator_search_failures.json",
+        {"split": "dev", "examples": search_failures},
+    )
+    write_json(
+        args.output_dir / "cap_admission_analysis.json", {"split": "dev", "examples": cap_analysis}
+    )
     write_json(
         args.output_dir / "gnn_ranking_analysis.json",
         {
@@ -743,10 +843,18 @@ def main() -> None:
             "limitation": "Scores come from the frozen persisted top-five artifact in this structural pass. A complete candidate below rank five is marked unavailable in the pair detail and is not treated as evidence about target alignment.",
         },
     )
-    write_json(args.output_dir / "symbolic_reranking_analysis.json", {"split": "dev", "examples": symbolic_analysis})
-    write_json(args.output_dir / "true_aggregation_analysis.json", {"split": "dev", "examples": aggregation_analysis})
+    write_json(
+        args.output_dir / "symbolic_reranking_analysis.json",
+        {"split": "dev", "examples": symbolic_analysis},
+    )
+    write_json(
+        args.output_dir / "true_aggregation_analysis.json",
+        {"split": "dev", "examples": aggregation_analysis},
+    )
 
-    inputs = [args.rankings, args.adaptive] + [args.data_root / dataset / "dev_subgraph_retrieval.jsonl" for dataset, _, _ in DATASETS]
+    inputs = [args.rankings, args.adaptive] + [
+        args.data_root / dataset / "dev_subgraph_retrieval.jsonl" for dataset, _, _ in DATASETS
+    ]
     summary_lines = [
         "# Production Generator D causal retrieval diagnosis",
         "",

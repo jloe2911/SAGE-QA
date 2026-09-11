@@ -74,14 +74,18 @@ def distribution(values: list[float]) -> dict[str, float]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
-    parser.add_argument("--checkpoint-root", type=Path, default=Path("checkpoints/production_generator_d_v1"))
+    parser.add_argument(
+        "--checkpoint-root", type=Path, default=Path("checkpoints/production_generator_d_v1")
+    )
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--candidate-batch-size", type=int, default=256)
     parser.add_argument("--max-dev-examples-per-dataset", type=int, default=25)
     parser.add_argument(
         "--output-path",
         type=Path,
-        default=Path("outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev/loss_scale_audit.json"),
+        default=Path(
+            "outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev/loss_scale_audit.json"
+        ),
     )
     args = parser.parse_args()
 
@@ -157,7 +161,10 @@ def main() -> None:
     }
     result = {
         "schema_version": "production_generator_d_v1_corrected_listwise_loss_scale_v1",
-        "split_inputs": ["train labels for BCE class weight", "dev candidate scores and supervision"],
+        "split_inputs": [
+            "train labels for BCE class weight",
+            "dev candidate scores and supervision",
+        ],
         "temperature": 0.1,
         "ranking_margin": 0.2,
         "max_pairs": 512,
@@ -174,7 +181,11 @@ def main() -> None:
     }
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     args.output_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    print(json.dumps({"output": str(args.output_path), "weighted_reference": weighted_reference}, indent=2))
+    print(
+        json.dumps(
+            {"output": str(args.output_path), "weighted_reference": weighted_reference}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":

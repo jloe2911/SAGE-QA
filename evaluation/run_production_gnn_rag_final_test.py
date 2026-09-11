@@ -37,24 +37,67 @@ from data_processing.prepare_production_gnn_rag_clean import (
 
 DATASETS = OrderedDict(
     (
-        ("HotpotQA", {"domain": "text", "gold": "data/raw/hotpot_qa/distractor/validation-00000-of-00001.parquet"}),
-        ("2WikiMultiHopQA", {"domain": "text", "gold": "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet"}),
+        (
+            "HotpotQA",
+            {
+                "domain": "text",
+                "gold": "data/raw/hotpot_qa/distractor/validation-00000-of-00001.parquet",
+            },
+        ),
+        (
+            "2WikiMultiHopQA",
+            {
+                "domain": "text",
+                "gold": "data/raw/2WikiMultihopQA/data/validation-00000-of-00001.parquet",
+            },
+        ),
         ("FamilyOWL_1hop", {"domain": "ontology", "gold": "data/raw/family/FamilyOWL_1hop.json"}),
         ("FamilyOWL_2hop", {"domain": "ontology", "gold": "data/raw/family/FamilyOWL_2hop.json"}),
-        ("pizza_100_1hop", {"domain": "ontology", "gold": "data/raw/pizza_100/pizza_100_1hop.json"}),
-        ("pizza_100_2hop", {"domain": "ontology", "gold": "data/raw/pizza_100/pizza_100_2hop.json"}),
-        ("pizza_250_1hop", {"domain": "ontology", "gold": "data/raw/pizza_250/pizza_250_1hop.json"}),
-        ("pizza_250_2hop", {"domain": "ontology", "gold": "data/raw/pizza_250/pizza_250_2hop.json"}),
-        ("OWL2Bench_1hop", {"domain": "ontology", "gold": "data/raw/owl2bench/OWL2Bench_1hop.json"}),
-        ("OWL2Bench_2hop", {"domain": "ontology", "gold": "data/raw/owl2bench/OWL2Bench_2hop.json"}),
+        (
+            "pizza_100_1hop",
+            {"domain": "ontology", "gold": "data/raw/pizza_100/pizza_100_1hop.json"},
+        ),
+        (
+            "pizza_100_2hop",
+            {"domain": "ontology", "gold": "data/raw/pizza_100/pizza_100_2hop.json"},
+        ),
+        (
+            "pizza_250_1hop",
+            {"domain": "ontology", "gold": "data/raw/pizza_250/pizza_250_1hop.json"},
+        ),
+        (
+            "pizza_250_2hop",
+            {"domain": "ontology", "gold": "data/raw/pizza_250/pizza_250_2hop.json"},
+        ),
+        (
+            "OWL2Bench_1hop",
+            {"domain": "ontology", "gold": "data/raw/owl2bench/OWL2Bench_1hop.json"},
+        ),
+        (
+            "OWL2Bench_2hop",
+            {"domain": "ontology", "gold": "data/raw/owl2bench/OWL2Bench_2hop.json"},
+        ),
     )
 )
 PROHIBITED_TEST_FIELDS = {
-    "answer", "answers", "supporting_facts", "raw_supporting_facts", "evidences",
-    "gold_support_units", "gold_units", "gold_explanations", "Minimum Explanation",
-    "minimum_explanation", "Explanations", "label", "rank_target",
-    "best_set_f1_to_gold", "best_set_precision_to_gold", "best_set_recall_to_gold",
-    "exact_match_any_gold", "contains_any_gold_explanation",
+    "answer",
+    "answers",
+    "supporting_facts",
+    "raw_supporting_facts",
+    "evidences",
+    "gold_support_units",
+    "gold_units",
+    "gold_explanations",
+    "Minimum Explanation",
+    "minimum_explanation",
+    "Explanations",
+    "label",
+    "rank_target",
+    "best_set_f1_to_gold",
+    "best_set_precision_to_gold",
+    "best_set_recall_to_gold",
+    "exact_match_any_gold",
+    "contains_any_gold_explanation",
 }
 CODE_FILES = (
     "evaluation/run_production_gnn_rag_final_test.py",
@@ -117,7 +160,9 @@ def checked_groups(path: Path) -> Iterable[tuple[str, list[dict[str, Any]]]]:
         for row in rows:
             forbidden = PROHIBITED_TEST_FIELDS.intersection(row)
             if forbidden:
-                raise ValueError(f"{path}: prohibited TEST fields for {example_id}: {sorted(forbidden)}")
+                raise ValueError(
+                    f"{path}: prohibited TEST fields for {example_id}: {sorted(forbidden)}"
+                )
             if row.get("gold_available_during_candidate_generation") is not False:
                 raise ValueError(f"{path}: missing gold-free generation assertion for {example_id}")
             if row.get("gold_used_during_labeling") not in {None, False}:
@@ -128,7 +173,9 @@ def checked_groups(path: Path) -> Iterable[tuple[str, list[dict[str, Any]]]]:
 def code_state(root: Path) -> dict[str, Any]:
     files = [{"path": name, "sha256": sha256(root / name)} for name in CODE_FILES]
     state = {
-        "base_git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
+        "base_git_commit": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=root, text=True
+        ).strip(),
         "files": files,
     }
     state["code_state_sha256"] = canonical_hash(state)
@@ -138,7 +185,10 @@ def code_state(root: Path) -> dict[str, Any]:
 def checkpoint_lock(root: Path, checkpoint_root: Path) -> dict[str, Any]:
     report_path = checkpoint_root / "final_report.json"
     report = read_json(report_path)
-    if report.get("checkpoint_selection_rule") != "final epoch 3, preserving the historical production runner's explicit final-checkpoint semantics":
+    if (
+        report.get("checkpoint_selection_rule")
+        != "final epoch 3, preserving the historical production runner's explicit final-checkpoint semantics"
+    ):
         raise ValueError("Unexpected clean checkpoint selection rule")
     rows = {row["dataset"]: row for row in report["datasets"]}
     if set(rows) != set(DATASETS):
@@ -153,11 +203,19 @@ def checkpoint_lock(root: Path, checkpoint_root: Path) -> dict[str, Any]:
         if row["selected_checkpoint"] != frozen["selected_checkpoint"]:
             raise ValueError(f"Selected checkpoint disagreement for {dataset}")
         if not row["selected_checkpoint"].endswith("-final.ckpt"):
-            raise ValueError(f"Selected checkpoint is not the frozen final epoch-3 checkpoint: {dataset}")
-        if sha256(selected) != row["checkpoint_sha256"] or sha256(selected) != frozen["selected_checkpoint_sha256"]:
+            raise ValueError(
+                f"Selected checkpoint is not the frozen final epoch-3 checkpoint: {dataset}"
+            )
+        if (
+            sha256(selected) != row["checkpoint_sha256"]
+            or sha256(selected) != frozen["selected_checkpoint_sha256"]
+        ):
             raise ValueError(f"Checkpoint hash mismatch for {dataset}")
         relation_hash = sha256(adapter / "relations.txt")
-        if relation_hash != row["relation_vocabulary_sha256"] or relation_hash != frozen["relation_vocabulary_sha256"]:
+        if (
+            relation_hash != row["relation_vocabulary_sha256"]
+            or relation_hash != frozen["relation_vocabulary_sha256"]
+        ):
             raise ValueError(f"Relation vocabulary hash mismatch for {dataset}")
         result[dataset] = {
             "checkpoint_path": selected.relative_to(root).as_posix(),
@@ -172,7 +230,11 @@ def checkpoint_lock(root: Path, checkpoint_root: Path) -> dict[str, Any]:
             "clean_train_manifest_sha256": sha256(dataset_dir / "train_manifest.json"),
             "clean_dev_manifest_sha256": sha256(dataset_dir / "dev_manifest.json"),
         }
-    return {"final_report_path": report_path.relative_to(root).as_posix(), "final_report_sha256": sha256(report_path), "datasets": result}
+    return {
+        "final_report_path": report_path.relative_to(root).as_posix(),
+        "final_report_sha256": sha256(report_path),
+        "datasets": result,
+    }
 
 
 def test_cohort_lock(root: Path, data_root: Path) -> dict[str, Any]:
@@ -180,12 +242,14 @@ def test_cohort_lock(root: Path, data_root: Path) -> dict[str, Any]:
     for dataset in DATASETS:
         path = data_root / dataset / "test_subgraph_retrieval.jsonl"
         count = sum(1 for _ in checked_groups(path))
-        rows.append({
-            "dataset": dataset,
-            "path": path.relative_to(root).as_posix(),
-            "sha256": sha256(path),
-            "examples": count,
-        })
+        rows.append(
+            {
+                "dataset": dataset,
+                "path": path.relative_to(root).as_posix(),
+                "sha256": sha256(path),
+                "examples": count,
+            }
+        )
     return {"datasets": rows, "test_cohort_sha256": canonical_hash(rows)}
 
 
@@ -218,24 +282,32 @@ def prepare_native_test(
             unit_node_fn = evidence_node if domain == "text" else unit_node
             unit_map = {unit_node_fn(unit): unit for unit in candidate_units}
             unseen.update(set(sample["subgraph"]["entities"]) - frozen_entities)
-            missing_relations.update(edge[1] for edge in sample["graph"] if edge[1] not in frozen_relations)
+            missing_relations.update(
+                edge[1] for edge in sample["graph"] if edge[1] not in frozen_relations
+            )
             samples.append(sample)
             unit_maps.append(unit_map)
             handle.write(json.dumps(sample, ensure_ascii=False, separators=(",", ":")) + "\n")
             if index % 100 == 0:
                 print(f"{source.parent.name}: prepared {index} clean TEST examples", flush=True)
     if missing_relations:
-        raise ValueError(f"TEST graph uses relations absent from frozen mapping: {sorted(missing_relations)}")
-    return samples, unit_maps, {
-        "examples": len(samples),
-        "dictionary_copy_sha256": copied_hashes,
-        "frozen_entity_dictionary_unchanged": True,
-        "unseen_nodes_using_transient_local_indices": len(unseen),
-        "relation_mapping_unchanged": True,
-        "word_vocabulary_unchanged": True,
-        "test_entity_vocabulary_persisted": False,
-        "answers_array_empty": True,
-    }
+        raise ValueError(
+            f"TEST graph uses relations absent from frozen mapping: {sorted(missing_relations)}"
+        )
+    return (
+        samples,
+        unit_maps,
+        {
+            "examples": len(samples),
+            "dictionary_copy_sha256": copied_hashes,
+            "frozen_entity_dictionary_unchanged": True,
+            "unseen_nodes_using_transient_local_indices": len(unseen),
+            "relation_mapping_unchanged": True,
+            "word_vocabulary_unchanged": True,
+            "test_entity_vocabulary_persisted": False,
+            "answers_array_empty": True,
+        },
+    )
 
 
 def run_native(
@@ -254,19 +326,44 @@ def run_native(
     experiment = f"production_generator_d_v1_final_test_{dataset.lower()}"
     gnn_root = root / "third_party" / "GNN-RAG" / "gnn"
     command = [
-        sys.executable, str(gnn_root / "main.py"), "ReaRev",
-        "--entity_dim", "50", "--data_folder", str(native_data.resolve()) + "\\",
-        "--lm", "lstm", "--num_iter", "2", "--num_ins", "2", "--num_gnn", "3",
-        "--relation_word_emb", "false", "--checkpoint_dir", str(checkpoint_dir.resolve()),
-        "--experiment_name", experiment, "--load_experiment", checkpoint_copy.name,
-        "--is_eval", "--name", f"sageqa-clean-{dataset.lower()}",
-        "--frozen_entity_dictionary", "true", "--test_only_inference", "true",
+        sys.executable,
+        str(gnn_root / "main.py"),
+        "ReaRev",
+        "--entity_dim",
+        "50",
+        "--data_folder",
+        str(native_data.resolve()) + "\\",
+        "--lm",
+        "lstm",
+        "--num_iter",
+        "2",
+        "--num_ins",
+        "2",
+        "--num_gnn",
+        "3",
+        "--relation_word_emb",
+        "false",
+        "--checkpoint_dir",
+        str(checkpoint_dir.resolve()),
+        "--experiment_name",
+        experiment,
+        "--load_experiment",
+        checkpoint_copy.name,
+        "--is_eval",
+        "--name",
+        f"sageqa-clean-{dataset.lower()}",
+        "--frozen_entity_dictionary",
+        "true",
+        "--test_only_inference",
+        "true",
     ]
     log_path = run_dir / "native_retriever.stdout_stderr.log"
     with log_path.open("x", encoding="utf-8", newline="\n") as log:
         log.write("COMMAND: " + subprocess.list2cmdline(command) + "\n\n")
         log.flush()
-        result = subprocess.run(command, cwd=gnn_root, stdout=log, stderr=subprocess.STDOUT, text=True)
+        result = subprocess.run(
+            command, cwd=gnn_root, stdout=log, stderr=subprocess.STDOUT, text=True
+        )
     if result.returncode:
         raise RuntimeError(f"ReaRev TEST inference failed for {dataset}; see {log_path}")
     info_path = checkpoint_dir / f"{experiment}_test.info"
@@ -284,7 +381,9 @@ def path_string(path: Sequence[Sequence[str]]) -> str:
     return text
 
 
-def native_paths(sample: Mapping[str, Any], ranked_entities: Sequence[Mapping[str, Any]]) -> tuple[list[list[list[str]]], list[str]]:
+def native_paths(
+    sample: Mapping[str, Any], ranked_entities: Sequence[Mapping[str, Any]]
+) -> tuple[list[list[list[str]]], list[str]]:
     graph = nx.Graph()
     for head, relation, tail in sample["graph"]:
         graph.add_edge(str(head), str(tail), relation=str(relation))
@@ -298,10 +397,12 @@ def native_paths(sample: Mapping[str, Any], ranked_entities: Sequence[Mapping[st
                 continue
             try:
                 for nodes in nx.all_shortest_paths(graph, head, tail):
-                    result.append([
-                        [nodes[i], graph[nodes[i]][nodes[i + 1]]["relation"], nodes[i + 1]]
-                        for i in range(len(nodes) - 1)
-                    ])
+                    result.append(
+                        [
+                            [nodes[i], graph[nodes[i]][nodes[i + 1]]["relation"], nodes[i + 1]]
+                            for i in range(len(nodes) - 1)
+                        ]
+                    )
             except nx.NetworkXException:
                 continue
     return result, [path_string(path) for path in result]
@@ -315,7 +416,9 @@ def freeze_dataset(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     info_rows = read_jsonl(info_path)
     if len(info_rows) != len(samples):
-        raise ValueError(f"Native output count mismatch for {dataset}: {len(info_rows)} != {len(samples)}")
+        raise ValueError(
+            f"Native output count mismatch for {dataset}: {len(info_rows)} != {len(samples)}"
+        )
     records = []
     for sample, unit_map, info in zip(samples, unit_maps, info_rows):
         if str(info.get("example_id")) != str(sample["id"]):
@@ -325,12 +428,14 @@ def freeze_dataset(
         for rank, raw in enumerate(info.get("cand", []) or [], start=1):
             probability = float(raw[1])
             cumulative += probability
-            ranked.append({
-                "rank": rank,
-                "entity": str(raw[0]),
-                "probability": probability,
-                "cumulative_probability": cumulative,
-            })
+            ranked.append(
+                {
+                    "rank": rank,
+                    "entity": str(raw[0]),
+                    "probability": probability,
+                    "cumulative_probability": cumulative,
+                }
+            )
         paths, contexts = native_paths(sample, ranked)
         retrieved_units: list[str] = []
         seen_units: set[str] = set()
@@ -345,20 +450,22 @@ def freeze_dataset(
         while str(step) in info:
             trace.append({"iteration": step, **info[str(step)]})
             step += 1
-        records.append({
-            "dataset": dataset,
-            "split": "test",
-            "example_id": sample["id"],
-            "native_ranked_entities": ranked,
-            "native_relation_action_trace": trace,
-            "retrieved_paths": paths,
-            "retrieved_evidence_units": retrieved_units,
-            "reader_context_representation": "newline-joined ReaRev shortest-path strings",
-            "reader_context_paths": contexts,
-            "reader_context_text": "\n".join(contexts),
-            "native_graph_nodes": len(sample["subgraph"]["entities"]),
-            "native_graph_edges": len(sample["graph"]),
-        })
+        records.append(
+            {
+                "dataset": dataset,
+                "split": "test",
+                "example_id": sample["id"],
+                "native_ranked_entities": ranked,
+                "native_relation_action_trace": trace,
+                "retrieved_paths": paths,
+                "retrieved_evidence_units": retrieved_units,
+                "reader_context_representation": "newline-joined ReaRev shortest-path strings",
+                "reader_context_paths": contexts,
+                "reader_context_text": "\n".join(contexts),
+                "native_graph_nodes": len(sample["subgraph"]["entities"]),
+                "native_graph_edges": len(sample["graph"]),
+            }
+        )
     lengths = [len(row["native_ranked_entities"]) for row in records]
     path_lengths = [len(row["retrieved_paths"]) for row in records]
     unit_lengths = [len(row["retrieved_evidence_units"]) for row in records]
@@ -376,7 +483,9 @@ def freeze_dataset(
     return records, diagnostics
 
 
-def prediction_phase(args: argparse.Namespace, root: Path, data_root: Path, checkpoint_root: Path, output_dir: Path) -> None:
+def prediction_phase(
+    args: argparse.Namespace, root: Path, data_root: Path, checkpoint_root: Path, output_dir: Path
+) -> None:
     if output_dir.exists():
         raise FileExistsError(f"Refusing to overwrite or mix final TEST output: {output_dir}")
     output_dir.mkdir(parents=True)
@@ -413,8 +522,17 @@ def prediction_phase(args: argparse.Namespace, root: Path, data_root: Path, chec
         }
         write_json(run_dir / "lineage_metadata.json", dataset_lineage)
         all_records.extend(records)
-        dataset_rows.append({"dataset": dataset, **diagnostics, "frozen_retrieval_sha256": dataset_lineage["frozen_retrieval_sha256"]})
-        print(f"Completed frozen ReaRev TEST inference: {dataset} ({len(records)} examples)", flush=True)
+        dataset_rows.append(
+            {
+                "dataset": dataset,
+                **diagnostics,
+                "frozen_retrieval_sha256": dataset_lineage["frozen_retrieval_sha256"],
+            }
+        )
+        print(
+            f"Completed frozen ReaRev TEST inference: {dataset} ({len(records)} examples)",
+            flush=True,
+        )
     frozen_path = output_dir / "predictions_frozen.jsonl"
     write_jsonl(frozen_path, all_records)
     frozen_at = utc_now()
@@ -439,25 +557,37 @@ def prediction_phase(args: argparse.Namespace, root: Path, data_root: Path, chec
         "test_entity_vocabulary_constructed_or_persisted": False,
     }
     write_json(output_dir / "prediction_freeze_manifest.json", freeze_manifest)
-    write_json(output_dir / "phase1_lineage.json", {
-        "checkpoint_lock": locks,
-        "test_cohort_lock": cohorts,
-        "code_state": code,
-        "environment": {"python": platform.python_version(), "platform": platform.platform()},
-        "protocol": {
-            "permitted_test_fields_only": True,
-            "test_answers_or_gold_in_native_adapter": False,
-            "two_wiki_evidences_read": False,
-            "predictions_frozen_before_gold_access": True,
-            "checkpoint_selection_changed": False,
-            "relation_mapping_changed": False,
-            "word_vocabulary_changed": False,
-            "entity_dictionary_changed": False,
-            "graph_topology_changed_after_adapter_construction": False,
-            "answer_generation_run": False,
+    write_json(
+        output_dir / "phase1_lineage.json",
+        {
+            "checkpoint_lock": locks,
+            "test_cohort_lock": cohorts,
+            "code_state": code,
+            "environment": {"python": platform.python_version(), "platform": platform.platform()},
+            "protocol": {
+                "permitted_test_fields_only": True,
+                "test_answers_or_gold_in_native_adapter": False,
+                "two_wiki_evidences_read": False,
+                "predictions_frozen_before_gold_access": True,
+                "checkpoint_selection_changed": False,
+                "relation_mapping_changed": False,
+                "word_vocabulary_changed": False,
+                "entity_dictionary_changed": False,
+                "graph_topology_changed_after_adapter_construction": False,
+                "answer_generation_run": False,
+            },
         },
-    })
-    print(json.dumps({"status": "predictions_frozen_gold_unopened", "examples": len(all_records), "prediction_freeze_sha256": freeze_manifest["prediction_freeze_sha256"]}), flush=True)
+    )
+    print(
+        json.dumps(
+            {
+                "status": "predictions_frozen_gold_unopened",
+                "examples": len(all_records),
+                "prediction_freeze_sha256": freeze_manifest["prediction_freeze_sha256"],
+            }
+        ),
+        flush=True,
+    )
 
 
 def text_gold(source: Path, dataset: str, example_ids: set[str]) -> dict[str, list[list[str]]]:
@@ -504,7 +634,14 @@ def ontology_gold(source: Path, example_ids: set[str]) -> dict[str, list[list[st
 
 def best_overlap(predicted: Sequence[str], golds: Sequence[Sequence[str]]) -> dict[str, Any]:
     predicted_set = set(map(str, predicted))
-    best = {"precision": 0.0, "recall": 0.0, "f1": 0.0, "exact_match": False, "contains_complete_gold": False, "gold_size": 0}
+    best = {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "exact_match": False,
+        "contains_complete_gold": False,
+        "gold_size": 0,
+    }
     for gold in golds:
         gold_set = set(map(str, gold))
         if not gold_set:
@@ -521,7 +658,11 @@ def best_overlap(predicted: Sequence[str], golds: Sequence[Sequence[str]]) -> di
             "contains_complete_gold": gold_set <= predicted_set,
             "gold_size": len(gold_set),
         }
-        if (candidate["f1"], candidate["recall"], candidate["precision"]) > (best["f1"], best["recall"], best["precision"]):
+        if (candidate["f1"], candidate["recall"], candidate["precision"]) > (
+            best["f1"],
+            best["recall"],
+            best["precision"],
+        ):
             best = candidate
     return best
 
@@ -533,18 +674,30 @@ def aggregate(rows: Sequence[Mapping[str, Any]], key: str) -> dict[str, Any]:
         "precision": statistics.fmean(row["precision"] for row in eligible) if eligible else 0.0,
         "recall": statistics.fmean(row["recall"] for row in eligible) if eligible else 0.0,
         "f1": statistics.fmean(row["f1"] for row in eligible) if eligible else 0.0,
-        "exact_match_rate": statistics.fmean(float(row["exact_match"]) for row in eligible) if eligible else 0.0,
-        "complete_gold_recall_rate": statistics.fmean(float(row["contains_complete_gold"]) for row in eligible) if eligible else 0.0,
-        "any_overlap_rate": statistics.fmean(float(row["recall"] > 0.0) for row in eligible) if eligible else 0.0,
+        "exact_match_rate": statistics.fmean(float(row["exact_match"]) for row in eligible)
+        if eligible
+        else 0.0,
+        "complete_gold_recall_rate": statistics.fmean(
+            float(row["contains_complete_gold"]) for row in eligible
+        )
+        if eligible
+        else 0.0,
+        "any_overlap_rate": statistics.fmean(float(row["recall"] > 0.0) for row in eligible)
+        if eligible
+        else 0.0,
     }
 
 
 def summary_markdown(metrics: Mapping[str, Any], freeze_hash: str) -> str:
     lines = [
-        "# Frozen clean GNN-RAG/ReaRev TEST retrieval", "",
-        f"Prediction freeze SHA-256: `{freeze_hash}`", "",
-        "All ten prediction cohorts were frozen before any TEST support/explanation gold was opened. No answer generation was run.", "",
-        "| Dataset | Inference | Failures | Ranked entities | Reader context | Native entity F1 | Path-support F1 |", "|---|---:|---:|---:|---:|---:|---:|",
+        "# Frozen clean GNN-RAG/ReaRev TEST retrieval",
+        "",
+        f"Prediction freeze SHA-256: `{freeze_hash}`",
+        "",
+        "All ten prediction cohorts were frozen before any TEST support/explanation gold was opened. No answer generation was run.",
+        "",
+        "| Dataset | Inference | Failures | Ranked entities | Reader context | Native entity F1 | Path-support F1 |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in metrics["datasets"]:
         native = row["native_ranked_entity_support_overlap"]
@@ -554,11 +707,17 @@ def summary_markdown(metrics: Mapping[str, Any], freeze_hash: str) -> str:
             f"{row['examples_with_ranked_entities']} | {row['examples_with_nonempty_reader_context']} | "
             f"{native['f1']:.6f} | {common['f1']:.6f} |"
         )
-    lines.extend([
-        "", "## Saved reader context", "",
-        "Each example preserves ordered ReaRev entities with native probabilities/ranks, the relation-action trace, all derived shortest paths, mapped source evidence units, `reader_context_paths`, and the exact newline-joined `reader_context_text` that can later be passed to a reader.",
-        "", "The upstream evaluator's answer-label F1/Hits/EM are not reported because the gold-blind native TEST adapter intentionally contains an empty `answers` array. Post-freeze entity-support and path-support overlap are reported instead.", "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Saved reader context",
+            "",
+            "Each example preserves ordered ReaRev entities with native probabilities/ranks, the relation-action trace, all derived shortest paths, mapped source evidence units, `reader_context_paths`, and the exact newline-joined `reader_context_text` that can later be passed to a reader.",
+            "",
+            "The upstream evaluator's answer-label F1/Hits/EM are not reported because the gold-blind native TEST adapter intentionally contains an empty `answers` array. Post-freeze entity-support and path-support overlap are reported instead.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -566,26 +725,39 @@ def artifact_manifest(output_dir: Path) -> None:
     files = {}
     for path in sorted(output_dir.rglob("*")):
         if path.is_file() and path.name != "artifact_manifest.json":
-            files[path.relative_to(output_dir).as_posix()] = {"size_bytes": path.stat().st_size, "sha256": sha256(path)}
-    write_json(output_dir / "artifact_manifest.json", {"self_excluded_from_hashes": True, "files": files})
+            files[path.relative_to(output_dir).as_posix()] = {
+                "size_bytes": path.stat().st_size,
+                "sha256": sha256(path),
+            }
+    write_json(
+        output_dir / "artifact_manifest.json", {"self_excluded_from_hashes": True, "files": files}
+    )
 
 
 def evaluation_phase(args: argparse.Namespace, root: Path, output_dir: Path) -> None:
     freeze_path = output_dir / "prediction_freeze_manifest.json"
     predictions_path = output_dir / "predictions_frozen.jsonl"
     if not freeze_path.is_file() or not predictions_path.is_file():
-        raise FileNotFoundError("Global prediction freeze is incomplete; refusing to open TEST gold")
+        raise FileNotFoundError(
+            "Global prediction freeze is incomplete; refusing to open TEST gold"
+        )
     freeze = read_json(freeze_path)
-    if freeze.get("status") != "predictions_frozen_gold_unopened" or sha256(predictions_path) != freeze.get("prediction_freeze_sha256"):
+    if freeze.get("status") != "predictions_frozen_gold_unopened" or sha256(
+        predictions_path
+    ) != freeze.get("prediction_freeze_sha256"):
         raise ValueError("Prediction freeze validation failed; refusing to open TEST gold")
     records = read_jsonl(predictions_path)
-    if len(records) != freeze.get("prediction_examples") or canonical_hash(records) != freeze.get("prediction_payload_canonical_sha256"):
+    if len(records) != freeze.get("prediction_examples") or canonical_hash(records) != freeze.get(
+        "prediction_payload_canonical_sha256"
+    ):
         raise ValueError("Prediction payload validation failed; refusing to open TEST gold")
     if set(row["dataset"] for row in records) != set(DATASETS):
         raise ValueError("Prediction freeze does not contain all ten datasets")
     phase1 = read_json(output_dir / "phase1_lineage.json")
     if code_state(root)["code_state_sha256"] != phase1["code_state"]["code_state_sha256"]:
-        raise ValueError("Inference code state changed after prediction freeze; refusing evaluation")
+        raise ValueError(
+            "Inference code state changed after prediction freeze; refusing evaluation"
+        )
 
     evaluated = []
     metric_rows = []
@@ -594,40 +766,72 @@ def evaluation_phase(args: argparse.Namespace, root: Path, output_dir: Path) -> 
         dataset_records = [row for row in records if row["dataset"] == dataset]
         ids = {row["example_id"] for row in dataset_records}
         gold_path = root / cfg["gold"]
-        golds = text_gold(gold_path, dataset, ids) if cfg["domain"] == "text" else ontology_gold(gold_path, ids)
+        golds = (
+            text_gold(gold_path, dataset, ids)
+            if cfg["domain"] == "text"
+            else ontology_gold(gold_path, ids)
+        )
         if set(golds) != ids:
-            raise ValueError(f"Incomplete post-freeze gold join for {dataset}: {len(ids - set(golds))} missing")
+            raise ValueError(
+                f"Incomplete post-freeze gold join for {dataset}: {len(ids - set(golds))} missing"
+            )
         for row in dataset_records:
             references = [gold for gold in golds[row["example_id"]] if gold]
             row = dict(row)
             row["evaluation_eligible"] = bool(references)
-            row["evaluation_exclusion_reason"] = None if references else "no_gold_support_or_explanation"
+            row["evaluation_exclusion_reason"] = (
+                None if references else "no_gold_support_or_explanation"
+            )
             entity_units = []
-            node_to_unit = {(evidence_node(unit) if cfg["domain"] == "text" else unit_node(unit)): unit for gold in references for unit in gold}
+            node_to_unit = {
+                (evidence_node(unit) if cfg["domain"] == "text" else unit_node(unit)): unit
+                for gold in references
+                for unit in gold
+            }
             for candidate in row["native_ranked_entities"]:
                 unit = node_to_unit.get(candidate["entity"])
                 if unit is not None and unit not in entity_units:
                     entity_units.append(unit)
-            row["native_ranked_entity_support_overlap"] = best_overlap(entity_units, references) if references else None
-            row["retrieved_path_support_overlap"] = best_overlap(row["retrieved_evidence_units"], references) if references else None
+            row["native_ranked_entity_support_overlap"] = (
+                best_overlap(entity_units, references) if references else None
+            )
+            row["retrieved_path_support_overlap"] = (
+                best_overlap(row["retrieved_evidence_units"], references) if references else None
+            )
             evaluated.append(row)
         diagnostics = next(item for item in freeze["datasets"] if item["dataset"] == dataset)
         dataset_eval = [row for row in evaluated if row["dataset"] == dataset]
-        metric_rows.append({
-            "dataset": dataset,
-            "inference_examples": diagnostics["examples"],
-            "inference_failures": diagnostics["inference_failures"],
-            "examples_with_ranked_entities": diagnostics["examples_with_ranked_entities"],
-            "examples_with_nonempty_reader_context": diagnostics["examples_with_nonempty_reader_context"],
-            "mean_ranked_entities": diagnostics["mean_ranked_entities"],
-            "median_ranked_entities": diagnostics["median_ranked_entities"],
-            "mean_retrieved_paths": diagnostics["mean_retrieved_paths"],
-            "mean_mapped_evidence_units": diagnostics["mean_mapped_evidence_units"],
-            "excluded_no_gold_support_or_explanation": sum(not row["evaluation_eligible"] for row in dataset_eval),
-            "native_ranked_entity_support_overlap": aggregate(dataset_eval, "native_ranked_entity_support_overlap"),
-            "retrieved_path_support_overlap": aggregate(dataset_eval, "retrieved_path_support_overlap"),
-        })
-        gold_lineage[dataset] = {"path": cfg["gold"], "sha256": sha256(gold_path), "fields": ["context", "supporting_facts"] if cfg["domain"] == "text" else ["gold explanations"]}
+        metric_rows.append(
+            {
+                "dataset": dataset,
+                "inference_examples": diagnostics["examples"],
+                "inference_failures": diagnostics["inference_failures"],
+                "examples_with_ranked_entities": diagnostics["examples_with_ranked_entities"],
+                "examples_with_nonempty_reader_context": diagnostics[
+                    "examples_with_nonempty_reader_context"
+                ],
+                "mean_ranked_entities": diagnostics["mean_ranked_entities"],
+                "median_ranked_entities": diagnostics["median_ranked_entities"],
+                "mean_retrieved_paths": diagnostics["mean_retrieved_paths"],
+                "mean_mapped_evidence_units": diagnostics["mean_mapped_evidence_units"],
+                "excluded_no_gold_support_or_explanation": sum(
+                    not row["evaluation_eligible"] for row in dataset_eval
+                ),
+                "native_ranked_entity_support_overlap": aggregate(
+                    dataset_eval, "native_ranked_entity_support_overlap"
+                ),
+                "retrieved_path_support_overlap": aggregate(
+                    dataset_eval, "retrieved_path_support_overlap"
+                ),
+            }
+        )
+        gold_lineage[dataset] = {
+            "path": cfg["gold"],
+            "sha256": sha256(gold_path),
+            "fields": ["context", "supporting_facts"]
+            if cfg["domain"] == "text"
+            else ["gold explanations"],
+        }
 
     metrics = {
         "schema_version": "production_generator_d_v1_clean_gnn_rag_final_test_metrics_v1",
@@ -640,7 +844,11 @@ def evaluation_phase(args: argparse.Namespace, root: Path, output_dir: Path) -> 
     }
     write_jsonl(output_dir / "per_example_retrieval.jsonl", evaluated)
     write_json(output_dir / "metrics.json", metrics)
-    (output_dir / "summary.md").write_text(summary_markdown(metrics, freeze["prediction_freeze_sha256"]), encoding="utf-8", newline="\n")
+    (output_dir / "summary.md").write_text(
+        summary_markdown(metrics, freeze["prediction_freeze_sha256"]),
+        encoding="utf-8",
+        newline="\n",
+    )
     lineage = {
         "schema_version": "production_generator_d_v1_clean_gnn_rag_final_test_lineage_v1",
         "completed_at_utc": utc_now(),
@@ -671,24 +879,53 @@ def evaluation_phase(args: argparse.Namespace, root: Path, output_dir: Path) -> 
     }
     write_json(output_dir / "lineage_metadata.json", lineage)
     artifact_manifest(output_dir)
-    print(json.dumps({"status": "complete", "examples": len(evaluated), "prediction_freeze_sha256": freeze["prediction_freeze_sha256"]}), flush=True)
+    print(
+        json.dumps(
+            {
+                "status": "complete",
+                "examples": len(evaluated),
+                "prediction_freeze_sha256": freeze["prediction_freeze_sha256"],
+            }
+        ),
+        flush=True,
+    )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("predict", "evaluate"))
     parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
-    parser.add_argument("--checkpoint-root", type=Path, default=Path("checkpoints/production_generator_d_v1_gnn_rag_clean"))
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/final_results/production_generator_d_v1_test_baselines/gnn_rag"))
+    parser.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        default=Path("checkpoints/production_generator_d_v1_gnn_rag_clean"),
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("outputs/final_results/production_generator_d_v1_test_baselines/gnn_rag"),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     root = Path(__file__).resolve().parents[1]
-    data_root = (root / args.data_root).resolve() if not args.data_root.is_absolute() else args.data_root.resolve()
-    checkpoint_root = (root / args.checkpoint_root).resolve() if not args.checkpoint_root.is_absolute() else args.checkpoint_root.resolve()
-    output_dir = (root / args.output_dir).resolve() if not args.output_dir.is_absolute() else args.output_dir.resolve()
+    data_root = (
+        (root / args.data_root).resolve()
+        if not args.data_root.is_absolute()
+        else args.data_root.resolve()
+    )
+    checkpoint_root = (
+        (root / args.checkpoint_root).resolve()
+        if not args.checkpoint_root.is_absolute()
+        else args.checkpoint_root.resolve()
+    )
+    output_dir = (
+        (root / args.output_dir).resolve()
+        if not args.output_dir.is_absolute()
+        else args.output_dir.resolve()
+    )
     if tuple(DATASETS) != tuple(CLEAN_DATASETS):
         raise ValueError("Dataset order disagrees with the frozen clean adapter protocol")
     if args.stage == "predict":

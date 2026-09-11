@@ -27,10 +27,21 @@ SCORE_ATOL = 1e-7
 STATE_ATOL = 1e-7
 STATE_RTOL = 1e-6
 CONFIG_KEYS = (
-    "model_name", "node_symbolic_dim", "subgraph_symbolic_dim", "gnn_hidden_dim",
-    "gnn_layers", "classifier_hidden_dim", "freeze_encoder", "training_objective",
-    "ranking_margin", "ranking_weight", "bce_weight", "listwise_weight", "max_pairs",
-    "score_mode", "size_penalty",
+    "model_name",
+    "node_symbolic_dim",
+    "subgraph_symbolic_dim",
+    "gnn_hidden_dim",
+    "gnn_layers",
+    "classifier_hidden_dim",
+    "freeze_encoder",
+    "training_objective",
+    "ranking_margin",
+    "ranking_weight",
+    "bce_weight",
+    "listwise_weight",
+    "max_pairs",
+    "score_mode",
+    "size_penalty",
 )
 
 
@@ -68,7 +79,9 @@ def numeric_differences(original: Any, fresh: Any, path: str = "") -> list[dict[
     elif isinstance(original, (int, float)) and isinstance(fresh, (int, float)):
         difference = abs(float(original) - float(fresh))
         if difference > METRIC_ATOL:
-            failures.append({"path": path, "original": original, "fresh": fresh, "abs_diff": difference})
+            failures.append(
+                {"path": path, "original": original, "fresh": fresh, "abs_diff": difference}
+            )
     elif original != fresh:
         failures.append({"path": path, "original": original, "fresh": fresh})
     return failures
@@ -88,11 +101,35 @@ def metric_view(metrics: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--original-run", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_k_sensitivity"))
-    parser.add_argument("--fresh-run", type=Path, default=Path("outputs/development_runs/production_generator_d_v1_listwise_corrected_dev/w_0p0"))
-    parser.add_argument("--original-checkpoints", type=Path, default=Path("checkpoints/production_generator_d_v1"))
-    parser.add_argument("--fresh-checkpoints", type=Path, default=Path("checkpoints/development/production_generator_d_v1_listwise_corrected_dev/w_0p0"))
-    parser.add_argument("--output", type=Path, default=Path("outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev/baseline_reproduction.json"))
+    parser.add_argument(
+        "--original-run",
+        type=Path,
+        default=Path("outputs/development_runs/production_generator_d_v1_k_sensitivity"),
+    )
+    parser.add_argument(
+        "--fresh-run",
+        type=Path,
+        default=Path(
+            "outputs/development_runs/production_generator_d_v1_listwise_corrected_dev/w_0p0"
+        ),
+    )
+    parser.add_argument(
+        "--original-checkpoints", type=Path, default=Path("checkpoints/production_generator_d_v1")
+    )
+    parser.add_argument(
+        "--fresh-checkpoints",
+        type=Path,
+        default=Path(
+            "checkpoints/development/production_generator_d_v1_listwise_corrected_dev/w_0p0"
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(
+            "outputs/diagnostics/production_generator_d_v1_listwise_corrected_dev/baseline_reproduction.json"
+        ),
+    )
     args = parser.parse_args()
 
     metric_failures = numeric_differences(
@@ -114,26 +151,43 @@ def main() -> None:
             if len(original_candidates) != len(fresh_candidates):
                 ranking_failures.append({"key": key, "reason": "top5_lengths_differ"})
                 continue
-            for rank, (original, fresh) in enumerate(zip(original_candidates, fresh_candidates), start=1):
+            for rank, (original, fresh) in enumerate(
+                zip(original_candidates, fresh_candidates), start=1
+            ):
                 if original["subgraph_units"] != fresh["subgraph_units"]:
-                    ranking_failures.append({"key": key, "rank": rank, "reason": "candidate_identity_differs"})
+                    ranking_failures.append(
+                        {"key": key, "rank": rank, "reason": "candidate_identity_differs"}
+                    )
                     break
                 for score_key in ("score", "adjusted_score"):
                     difference = abs(float(original[score_key]) - float(fresh[score_key]))
                     maximum_score_difference = max(maximum_score_difference, difference)
                     if difference > SCORE_ATOL:
-                        ranking_failures.append({
-                            "key": key, "rank": rank, "score_key": score_key,
-                            "abs_diff": difference, "reason": "score_tolerance_exceeded",
-                        })
+                        ranking_failures.append(
+                            {
+                                "key": key,
+                                "rank": rank,
+                                "score_key": score_key,
+                                "abs_diff": difference,
+                                "reason": "score_tolerance_exceeded",
+                            }
+                        )
                         break
 
     checkpoint_rows = []
     checkpoint_failures = []
     maximum_state_difference = 0.0
     for dataset, directory in DATASETS:
-        original = torch.load(args.original_checkpoints / directory / "best_model.pt", map_location="cpu", weights_only=False)
-        fresh = torch.load(args.fresh_checkpoints / directory / "best_model.pt", map_location="cpu", weights_only=False)
+        original = torch.load(
+            args.original_checkpoints / directory / "best_model.pt",
+            map_location="cpu",
+            weights_only=False,
+        )
+        fresh = torch.load(
+            args.fresh_checkpoints / directory / "best_model.pt",
+            map_location="cpu",
+            weights_only=False,
+        )
         config_equal = all(original.get(key) == fresh.get(key) for key in CONFIG_KEYS)
         if not config_equal:
             checkpoint_failures.append({"dataset": dataset, "reason": "checkpoint_config_differs"})
@@ -152,8 +206,21 @@ def main() -> None:
             all_close = all_close and torch.allclose(left, right, atol=STATE_ATOL, rtol=STATE_RTOL)
         maximum_state_difference = max(maximum_state_difference, dataset_max)
         if not all_close:
-            checkpoint_failures.append({"dataset": dataset, "reason": "state_tolerance_exceeded", "max_abs_diff": dataset_max})
-        checkpoint_rows.append({"dataset": dataset, "config_equal": config_equal, "state_allclose": all_close, "max_abs_diff": dataset_max})
+            checkpoint_failures.append(
+                {
+                    "dataset": dataset,
+                    "reason": "state_tolerance_exceeded",
+                    "max_abs_diff": dataset_max,
+                }
+            )
+        checkpoint_rows.append(
+            {
+                "dataset": dataset,
+                "config_equal": config_equal,
+                "state_allclose": all_close,
+                "max_abs_diff": dataset_max,
+            }
+        )
 
     passed = not metric_failures and not ranking_failures and not checkpoint_failures
     result = {

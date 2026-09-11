@@ -76,27 +76,39 @@ def checked_split(data_root: Path, dataset: str, split: str) -> Path:
     return path
 
 
-def training_command(
-    python: str, train_path: Path, dev_path: Path, save_dir: Path
-) -> list[str]:
+def training_command(python: str, train_path: Path, dev_path: Path, save_dir: Path) -> list[str]:
     return [
         python,
         "training/train_gnn_subgraph_retriever.py",
-        "--train-path", str(train_path),
-        "--dev-path", str(dev_path),
-        "--save-dir", str(save_dir),
-        "--model-name", "google/bert_uncased_L-2_H-128_A-2",
-        "--epochs", "3",
-        "--max-length", "128",
-        "--candidate-batch-size", "512",
+        "--train-path",
+        str(train_path),
+        "--dev-path",
+        str(dev_path),
+        "--save-dir",
+        str(save_dir),
+        "--model-name",
+        "google/bert_uncased_L-2_H-128_A-2",
+        "--epochs",
+        "3",
+        "--max-length",
+        "128",
+        "--candidate-batch-size",
+        "512",
         "--freeze-encoder",
-        "--ranking-margin", "0.2",
-        "--ranking-weight", "2.0",
-        "--bce-weight", "0.2",
-        "--listwise-weight", "0.0",
-        "--max-pairs", "512",
-        "--score-mode", "neural",
-        "--size-penalty", "0.01",
+        "--ranking-margin",
+        "0.2",
+        "--ranking-weight",
+        "2.0",
+        "--bce-weight",
+        "0.2",
+        "--listwise-weight",
+        "0.0",
+        "--max-pairs",
+        "512",
+        "--score-mode",
+        "neural",
+        "--size-penalty",
+        "0.01",
         "--hard-pair-reservation",
     ]
 
@@ -117,12 +129,19 @@ def validate_checkpoint(path: Path) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
-    parser.add_argument("--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v2")
-    parser.add_argument("--run-root", type=Path, default=ROOT / "outputs/final_results/production_generator_d_v2_training")
+    parser.add_argument(
+        "--checkpoint-root", type=Path, default=ROOT / "checkpoints/production_generator_d_v2"
+    )
+    parser.add_argument(
+        "--run-root",
+        type=Path,
+        default=ROOT / "outputs/final_results/production_generator_d_v2_training",
+    )
     parser.add_argument(
         "--gate",
         type=Path,
-        default=ROOT / "outputs/final_results/production_generator_d_v2_freeze/implementation_invariance_gate.json",
+        default=ROOT
+        / "outputs/final_results/production_generator_d_v2_freeze/implementation_invariance_gate.json",
     )
     args = parser.parse_args()
     args.data_root = args.data_root.resolve()
@@ -171,7 +190,11 @@ def main() -> None:
         "only_training_mechanism_changed": "deterministic complete and hard-incomplete candidate reservation plus exactly-once ordered margin-pair reservation",
         "dataset_order": [dataset for dataset, _ in DATASETS],
         "implementation": implementation,
-        "gate": {"path": str(args.gate.relative_to(ROOT)), "sha256": sha256(args.gate), "global": gate["global"]},
+        "gate": {
+            "path": str(args.gate.relative_to(ROOT)),
+            "sha256": sha256(args.gate),
+            "global": gate["global"],
+        },
         "data": data,
         "commands": commands,
         "frozen_hyperparameters": EXPECTED_CHECKPOINT_CONFIG,
@@ -210,7 +233,9 @@ def main() -> None:
                 check=True,
             )
         checkpoint = validate_checkpoint(save_dir / "best_model.pt")
-        completed.append({"dataset": dataset, "checkpoint": checkpoint, "log_sha256": sha256(log_path)})
+        completed.append(
+            {"dataset": dataset, "checkpoint": checkpoint, "log_sha256": sha256(log_path)}
+        )
         print(f"completed {dataset}", flush=True)
 
     completion = {

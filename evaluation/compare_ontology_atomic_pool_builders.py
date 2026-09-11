@@ -4,6 +4,7 @@ This is an isolated development experiment. Both approaches use the same
 ``beam_connected_subgraphs`` candidate composer and fixed candidate budgets.
 Gold explanations are read only after candidate generation has finished.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -78,9 +79,7 @@ def graph_expansion_atomic_pool(
     if max_context_units <= 0 or not axioms:
         return []
 
-    query_signature = extract_query_signature(
-        question=question, sparql_query=sparql_query
-    )
+    query_signature = extract_query_signature(question=question, sparql_query=sparql_query)
     query_entities = set(query_signature.get("query_entities", []))
     query_properties = set(query_signature.get("query_properties", []))
     question_terms = text_tokens(question)
@@ -91,19 +90,14 @@ def graph_expansion_atomic_pool(
     formal_scores: dict[int, int] = {}
     lexical_scores: dict[int, float] = {}
 
-    for index, ((entities, properties), terms) in enumerate(
-        zip(signatures, terms_by_index)
-    ):
+    for index, ((entities, properties), terms) in enumerate(zip(signatures, terms_by_index)):
         for term in terms:
             term_to_indices[term].append(index)
-        formal_scores[index] = (
-            2 * len(entities & query_entities)
-            + len(properties & query_properties)
+        formal_scores[index] = 2 * len(entities & query_entities) + len(
+            properties & query_properties
         )
         readable_tokens = text_tokens(" ".join(sorted(terms)))
-        lexical_scores[index] = len(question_terms & readable_tokens) / max(
-            len(question_terms), 1
-        )
+        lexical_scores[index] = len(question_terms & readable_tokens) / max(len(question_terms), 1)
 
     seeds = {
         index
@@ -238,9 +232,7 @@ def attach_gold_diagnostics(
         recalls = [len(pool & gold) / len(gold) for gold in golds]
         details.append(
             {
-                "example_id": (
-                    f"{dataset}__g{source['group_index']}__q{source['qa_index']}"
-                ),
+                "example_id": (f"{dataset}__g{source['group_index']}__q{source['qa_index']}"),
                 "atomic_pool_size": len(pool),
                 "candidate_count": len(candidates),
                 "atomic_pool_gold_recall": max(recalls, default=0.0),
@@ -261,9 +253,7 @@ def summarize(details: list[dict[str, Any]], runtime_seconds: float) -> dict[str
     return {
         "examples": count,
         "atomic_pool_gold_recall": mean("atomic_pool_gold_recall"),
-        "complete_gold_explanation_in_pool_pct": pct(
-            "complete_gold_explanation_in_pool"
-        ),
+        "complete_gold_explanation_in_pool_pct": pct("complete_gold_explanation_in_pool"),
         "complete_candidate_coverage_pct": pct("complete_candidate"),
         "zero_candidate_rate_pct": pct("zero_candidates"),
         "average_atomic_pool_size": mean("atomic_pool_size"),
@@ -302,9 +292,7 @@ def run(output_dir: Path) -> dict[str, Any]:
             "llm_or_api_calls": False,
         },
         "git": git_provenance(ROOT),
-        "implementation_sha256": hashlib.sha256(
-            Path(__file__).read_bytes()
-        ).hexdigest(),
+        "implementation_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "results": {},
         "sources": {},
     }
@@ -330,8 +318,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=ROOT
-        / "outputs/development_runs/ontology_atomic_pool_graph_expansion_v1",
+        default=ROOT / "outputs/development_runs/ontology_atomic_pool_graph_expansion_v1",
     )
     args = parser.parse_args()
     print(json.dumps(run(args.output_dir), indent=2, ensure_ascii=False))

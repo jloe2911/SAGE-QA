@@ -25,9 +25,7 @@ class BaseInstruction(torch.nn.Module):
         elif "num_layer" in args:
             self.num_ins = args["num_layer"]
         elif "num_expansion_ins" in args and "num_backup_ins" in args:
-            self.num_ins = (
-                args["num_backup_ins"] if self.constraint else args["num_expansion_ins"]
-            )
+            self.num_ins = args["num_backup_ins"] if self.constraint else args["num_expansion_ins"]
         else:
             self.num_ins = 1
 
@@ -78,9 +76,7 @@ class BaseInstruction(torch.nn.Module):
         self.batch_size = query_text.size(0)
         self.max_query_word = query_text.size(1)
         self.encode_question(query_text)
-        self.relational_ins = torch.zeros(self.batch_size, self.entity_dim).to(
-            self.device
-        )
+        self.relational_ins = torch.zeros(self.batch_size, self.entity_dim).to(self.device)
         self.instructions = []
         self.attn_list = []
 
@@ -107,9 +103,7 @@ class BaseInstruction(torch.nn.Module):
         ca = self.ca_linear(self.linear_drop(cq * query_hidden_emb))
         # batch_size, max_local_entity, 1
         # cv = self.softmax_d1(ca + (1 - query_mask.unsqueeze(2)) * VERY_NEG_NUMBER)
-        attn_weight = F.softmax(
-            ca + (1 - query_mask.unsqueeze(2)) * VERY_NEG_NUMBER, dim=1
-        )
+        attn_weight = F.softmax(ca + (1 - query_mask.unsqueeze(2)) * VERY_NEG_NUMBER, dim=1)
         # batch_size, max_local_entity, 1
         relational_ins = torch.sum(attn_weight * query_hidden_emb, dim=1)
         return relational_ins, attn_weight
@@ -119,9 +113,7 @@ class BaseInstruction(torch.nn.Module):
             self.node_encoder = lm
         self.init_reason(query_text)
         for i in range(self.num_ins):
-            relational_ins, attn_weight = self.get_instruction(
-                self.relational_ins, step=i
-            )
+            relational_ins, attn_weight = self.get_instruction(self.relational_ins, step=i)
             self.instructions.append(relational_ins)
             self.attn_list.append(attn_weight)
             self.relational_ins = relational_ins

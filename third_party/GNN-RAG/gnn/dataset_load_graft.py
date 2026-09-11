@@ -82,9 +82,7 @@ class GraftBasicDataLoader(BasicDataLoader):
 
     def _build_fact_mat_maxfacts(self, sample_ids, fact_dropout):
         """Create sparse matrix representation for batched data"""
-        kb_fact_rels = np.full(
-            (len(sample_ids), self.max_facts), self.num_kb_relation, dtype=int
-        )
+        kb_fact_rels = np.full((len(sample_ids), self.max_facts), self.num_kb_relation, dtype=int)
 
         mats0_batch = np.array([], dtype=int)
         mats0_0 = np.array([], dtype=int)
@@ -127,9 +125,7 @@ class GraftSingleDataLoader(GraftBasicDataLoader):
     Single Dataloader creates training/eval batches during KGQA.
     """
 
-    def __init__(
-        self, config, word2id, relation2id, entity2id, tokenize, data_type="train"
-    ):
+    def __init__(self, config, word2id, relation2id, entity2id, tokenize, data_type="train"):
         super(GraftSingleDataLoader, self).__init__(
             config, word2id, relation2id, entity2id, tokenize, data_type
         )
@@ -148,9 +144,7 @@ class GraftSingleDataLoader(GraftBasicDataLoader):
         q_input = self.deal_q_type(q_type)
         kb_adj_mats = self._build_fact_mat(sample_ids, fact_dropout=fact_dropout)
         kb_fact_rels = self.kb_fact_rels[sample_ids]
-        kb_adj_mats_graft, _ = self._build_fact_mat_maxfacts(
-            sample_ids, fact_dropout=fact_dropout
-        )
+        kb_adj_mats_graft, _ = self._build_fact_mat_maxfacts(sample_ids, fact_dropout=fact_dropout)
 
         if test:
             return (

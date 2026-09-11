@@ -4,6 +4,7 @@ Candidate generation receives only question/context-visible fields. Gold support
 joined after both methods have frozen their candidates, solely for diagnostics.
 This module is not imported by the SAGE-QA training or inference pipeline.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -92,10 +93,39 @@ ONTOLOGY_CONFIG = {
 
 # Only used for cross-sentence connectivity, never for relevance or labels.
 BRIDGE_STOPWORDS = {
-    "about", "after", "also", "been", "before", "being", "between", "both",
-    "could", "does", "from", "have", "into", "more", "other", "over", "same",
-    "that", "their", "there", "these", "they", "this", "those", "through",
-    "under", "what", "when", "where", "which", "while", "with", "would",
+    "about",
+    "after",
+    "also",
+    "been",
+    "before",
+    "being",
+    "between",
+    "both",
+    "could",
+    "does",
+    "from",
+    "have",
+    "into",
+    "more",
+    "other",
+    "over",
+    "same",
+    "that",
+    "their",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "through",
+    "under",
+    "what",
+    "when",
+    "where",
+    "which",
+    "while",
+    "with",
+    "would",
 }
 
 
@@ -128,9 +158,7 @@ def progressive_beam(
                     expansions.add(tuple(sorted((*hypothesis, next_index))))
         if not expansions:
             break
-        frontier = sorted(expansions, key=lambda indices: (-score(indices), indices))[
-            :beam_width
-        ]
+        frontier = sorted(expansions, key=lambda indices: (-score(indices), indices))[:beam_width]
         retained.extend(frontier)
 
     seen: set[tuple[str, ...]] = set()
@@ -159,8 +187,11 @@ def text_beam_candidates(
     title_tokens = [token_setter(title) for title, _, _ in parsed]
     sentence_tokens = [token_setter(sentence) for _, _, sentence in parsed]
     bridge_tokens = [
-        {token for token in title_tokens[i] | sentence_tokens[i]
-         if len(token) >= 4 and token not in BRIDGE_STOPWORDS}
+        {
+            token
+            for token in title_tokens[i] | sentence_tokens[i]
+            if len(token) >= 4 and token not in BRIDGE_STOPWORDS
+        }
         for i in range(len(universe))
     ]
 
@@ -184,9 +215,7 @@ def text_beam_candidates(
             + 0.03 * float(len(titles) > 1)
         )
 
-    return progressive_beam(
-        universe, max_depth=max_depth, beam_width=beam_width, score=score
-    )
+    return progressive_beam(universe, max_depth=max_depth, beam_width=beam_width, score=score)
 
 
 def ontology_beam_candidates(
@@ -216,9 +245,7 @@ def ontology_beam_candidates(
     def score(indices: tuple[int, ...]) -> float:
         return score_subgraph_indices(indices, universe, adjacency, unit_scores)
 
-    return progressive_beam(
-        universe, max_depth=max_depth, beam_width=beam_width, score=score
-    )
+    return progressive_beam(universe, max_depth=max_depth, beam_width=beam_width, score=score)
 
 
 def _sample_text_rows(name: str) -> list[dict[str, Any]]:
@@ -290,18 +317,22 @@ def _method_summary(rows: Sequence[Mapping[str, Any]], method: str) -> dict[str,
     return {
         "complete_candidate_coverage": {
             "count": sum(item["complete_candidate"] for item in diagnostics_rows),
-            "rate": statistics.fmean(
-                float(item["complete_candidate"]) for item in diagnostics_rows
-            ) if diagnostics_rows else 0.0,
+            "rate": statistics.fmean(float(item["complete_candidate"]) for item in diagnostics_rows)
+            if diagnostics_rows
+            else 0.0,
         },
         "evidence_unit_atomic_recall": statistics.fmean(
             item["candidate_union_atomic_recall"] for item in diagnostics_rows
-        ) if diagnostics_rows else 0.0,
+        )
+        if diagnostics_rows
+        else 0.0,
         "explored_universe_complete_coverage": {
             "count": sum(item["explored_universe_complete"] for item in diagnostics_rows),
             "rate": statistics.fmean(
                 float(item["explored_universe_complete"]) for item in diagnostics_rows
-            ) if diagnostics_rows else 0.0,
+            )
+            if diagnostics_rows
+            else 0.0,
         },
         "zero_candidate_rate": sum(count == 0 for count in counts) / len(counts) if counts else 0.0,
         "average_generated_candidates": statistics.fmean(counts) if counts else 0.0,
@@ -311,9 +342,11 @@ def _method_summary(rows: Sequence[Mapping[str, Any]], method: str) -> dict[str,
         },
         "runtime_seconds": runtime,
         "runtime_seconds_per_example": runtime / len(rows) if rows else 0.0,
-        "miss_attribution": dict(sorted(collections.Counter(
-            item["failure_category"] for item in diagnostics_rows
-        ).items())),
+        "miss_attribution": dict(
+            sorted(
+                collections.Counter(item["failure_category"] for item in diagnostics_rows).items()
+            )
+        ),
     }
 
 
@@ -326,8 +359,7 @@ def _condition_summary(
     current = _method_summary(rows, "current")
     beam = _method_summary(rows, "beam")
     delta = (
-        beam["complete_candidate_coverage"]["rate"]
-        - current["complete_candidate_coverage"]["rate"]
+        beam["complete_candidate_coverage"]["rate"] - current["complete_candidate_coverage"]["rate"]
     )
     return {
         "dataset": name,
@@ -393,22 +425,29 @@ def evaluate_text(name: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
         # Gold boundary: neither generator above receives this value.
         gold_sets = [gold_fn(example, generated["sent_lookup"])]
-        details.append({
-            "example_id": generated["example_id"],
-            "full_context_unit_count": len(full_universe),
-            "current_candidate_count": len(generated["candidates"]),
-            "current_candidate_sizes": [len(candidate) for candidate in generated["candidates"]],
-            "current_runtime_seconds": current_runtime,
-            "current_diagnostics": diagnostics(
-                generated["candidates"], gold_sets, generated["sentence_pool"], config["max_depth"]
-            ),
-            "beam_candidate_count": len(beam_candidates),
-            "beam_candidate_sizes": [len(candidate) for candidate in beam_candidates],
-            "beam_runtime_seconds": beam_runtime,
-            "beam_diagnostics": diagnostics(
-                beam_candidates, gold_sets, full_universe, config["max_depth"]
-            ),
-        })
+        details.append(
+            {
+                "example_id": generated["example_id"],
+                "full_context_unit_count": len(full_universe),
+                "current_candidate_count": len(generated["candidates"]),
+                "current_candidate_sizes": [
+                    len(candidate) for candidate in generated["candidates"]
+                ],
+                "current_runtime_seconds": current_runtime,
+                "current_diagnostics": diagnostics(
+                    generated["candidates"],
+                    gold_sets,
+                    generated["sentence_pool"],
+                    config["max_depth"],
+                ),
+                "beam_candidate_count": len(beam_candidates),
+                "beam_candidate_sizes": [len(candidate) for candidate in beam_candidates],
+                "beam_runtime_seconds": beam_runtime,
+                "beam_diagnostics": diagnostics(
+                    beam_candidates, gold_sets, full_universe, config["max_depth"]
+                ),
+            }
+        )
 
     reported_config = {
         "current_atomic_budget": config["atomic_budget"],
@@ -456,22 +495,29 @@ def evaluate_ontology(name: str, path: Path) -> tuple[dict[str, Any], list[dict[
 
         # Gold boundary: explanations are read only after both candidate sets freeze.
         gold_sets = get_gold_explanations(qa)
-        details.append({
-            "example_id": f"{name}__g{group_index}__q{qa_index}",
-            "full_context_unit_count": len(full_universe),
-            "current_candidate_count": len(generated["candidate_subgraphs"]),
-            "current_candidate_sizes": [len(candidate) for candidate in generated["candidate_subgraphs"]],
-            "current_runtime_seconds": current_runtime,
-            "current_diagnostics": diagnostics(
-                generated["candidate_subgraphs"], gold_sets, generated["candidate_units"], config["max_depth"]
-            ),
-            "beam_candidate_count": len(beam_candidates),
-            "beam_candidate_sizes": [len(candidate) for candidate in beam_candidates],
-            "beam_runtime_seconds": beam_runtime,
-            "beam_diagnostics": diagnostics(
-                beam_candidates, gold_sets, full_universe, config["max_depth"]
-            ),
-        })
+        details.append(
+            {
+                "example_id": f"{name}__g{group_index}__q{qa_index}",
+                "full_context_unit_count": len(full_universe),
+                "current_candidate_count": len(generated["candidate_subgraphs"]),
+                "current_candidate_sizes": [
+                    len(candidate) for candidate in generated["candidate_subgraphs"]
+                ],
+                "current_runtime_seconds": current_runtime,
+                "current_diagnostics": diagnostics(
+                    generated["candidate_subgraphs"],
+                    gold_sets,
+                    generated["candidate_units"],
+                    config["max_depth"],
+                ),
+                "beam_candidate_count": len(beam_candidates),
+                "beam_candidate_sizes": [len(candidate) for candidate in beam_candidates],
+                "beam_runtime_seconds": beam_runtime,
+                "beam_diagnostics": diagnostics(
+                    beam_candidates, gold_sets, full_universe, config["max_depth"]
+                ),
+            }
+        )
 
     reported_config = {
         "current_atomic_budget": config["atomic_budget"],
@@ -501,8 +547,11 @@ def invariance_checks() -> dict[str, Any]:
         unit_parser = parse_2wiki_unit if name == "2Wiki" else parse_hotpot_unit
         mismatches = []
         for index, attached in enumerate(_sample_text_rows(name)[:INVARIANCE_SAMPLE_SIZE]):
-            deleted = {key: value for key, value in attached.items()
-                       if key not in {"answer", "supporting_facts", "evidences"}}
+            deleted = {
+                key: value
+                for key, value in attached.items()
+                if key not in {"answer", "supporting_facts", "evidences"}
+            }
             digests = []
             for source in (attached, deleted):
                 clean = clean_text_retrieval_input(source)
@@ -538,7 +587,9 @@ def invariance_checks() -> dict[str, Any]:
         mismatches = []
         for group_index, qa_index, item, qa in _ontology_dev_rows(path)[:INVARIANCE_SAMPLE_SIZE]:
             inputs = {
-                "question": str(qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or ""),
+                "question": str(
+                    qa.get("NL Question") or qa.get("ABS Question") or qa.get("Task ID") or ""
+                ),
                 "sparql_query": str(qa.get("SPARQL Query") or ""),
                 "owl_context": str(item.get("OWL Context") or ""),
             }

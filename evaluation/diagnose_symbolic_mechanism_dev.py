@@ -35,11 +35,16 @@ from training.train_gnn_subgraph_retriever import (
 
 
 DATASETS = (
-    ("HotpotQA", "text", "2hop"), ("2WikiMultiHopQA", "text", "2hop"),
-    ("FamilyOWL_1hop", "ontology", "1hop"), ("FamilyOWL_2hop", "ontology", "2hop"),
-    ("pizza_100_1hop", "ontology", "1hop"), ("pizza_100_2hop", "ontology", "2hop"),
-    ("pizza_250_1hop", "ontology", "1hop"), ("pizza_250_2hop", "ontology", "2hop"),
-    ("OWL2Bench_1hop", "ontology", "1hop"), ("OWL2Bench_2hop", "ontology", "2hop"),
+    ("HotpotQA", "text", "2hop"),
+    ("2WikiMultiHopQA", "text", "2hop"),
+    ("FamilyOWL_1hop", "ontology", "1hop"),
+    ("FamilyOWL_2hop", "ontology", "2hop"),
+    ("pizza_100_1hop", "ontology", "1hop"),
+    ("pizza_100_2hop", "ontology", "2hop"),
+    ("pizza_250_1hop", "ontology", "1hop"),
+    ("pizza_250_2hop", "ontology", "2hop"),
+    ("OWL2Bench_1hop", "ontology", "1hop"),
+    ("OWL2Bench_2hop", "ontology", "2hop"),
 )
 
 
@@ -56,7 +61,9 @@ def key(units) -> tuple[str, ...]:
 
 
 def complete(row: Mapping[str, Any]) -> bool:
-    return bool(row.get("contains_any_gold_explanation")) or float(row.get("rank_target", 0.0)) >= 0.9
+    return (
+        bool(row.get("contains_any_gold_explanation")) or float(row.get("rank_target", 0.0)) >= 0.9
+    )
 
 
 def text_terms(row: Mapping[str, Any]) -> dict[str, float]:
@@ -120,10 +127,24 @@ def summarize(values: list[float]) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rankings", type=Path, default=ROOT / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl")
+    parser.add_argument(
+        "--rankings",
+        type=Path,
+        default=ROOT
+        / "outputs/development_runs/production_generator_d_v1_k_sensitivity/per_example_rankings.jsonl",
+    )
     parser.add_argument("--data-root", type=Path, default=ROOT / "data/production_generator_d_v1")
-    parser.add_argument("--existing-symbolic-diagnostic", type=Path, default=ROOT / "outputs/diagnostics/production_generator_d_v1_causal_retrieval_diagnosis/symbolic_reranking_analysis.json")
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev")
+    parser.add_argument(
+        "--existing-symbolic-diagnostic",
+        type=Path,
+        default=ROOT
+        / "outputs/diagnostics/production_generator_d_v1_causal_retrieval_diagnosis/symbolic_reranking_analysis.json",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT / "outputs/diagnostics/production_generator_d_v1_symbolic_mechanism_dev",
+    )
     args = parser.parse_args()
 
     persisted_totals = {}
@@ -133,7 +154,13 @@ def main() -> None:
             candidate = example.get(name, {})
             total = candidate.get("symbolic_terms", {}).get("proof_adjustment_total")
             if total is not None:
-                persisted_totals[(example["dataset"], example["example_id"], key(candidate.get("subgraph_units", [])))] = float(total)
+                persisted_totals[
+                    (
+                        example["dataset"],
+                        example["example_id"],
+                        key(candidate.get("subgraph_units", [])),
+                    )
+                ] = float(total)
 
     records = defaultdict(dict)
     with args.rankings.open("r", encoding="utf-8") as handle:
@@ -181,17 +208,30 @@ def main() -> None:
             stored_total = persisted_totals.get((dataset, example_id, candidate_key))
             total_available = persisted is not None or stored_total is not None
             if domain == "ontology" and total_available:
-                total = (float(persisted["adjusted_score"]) - float(persisted["score"])) if persisted is not None else stored_total
+                total = (
+                    (float(persisted["adjusted_score"]) - float(persisted["score"]))
+                    if persisted is not None
+                    else stored_total
+                )
                 residual = total - sum(terms.values())
                 terms["proof_entailment_bonus"] = residual
-            changed_candidates.append({
-                "dataset": dataset, "domain": domain, "hop": hop, "example_id": example_id,
-                "subgraph_units": list(candidate_key), "gnn_top5_rank": g_rank,
-                "symbolic_top5_rank": f_rank, "complete": complete(raw),
-                "neural_score": float((persisted or gnn_rows[candidate_key])["score"]),
-                "term_contributions": terms if domain == "text" or total_available else None,
-                "ontology_total_unavailable_outside_persisted_symbolic_top5": domain == "ontology" and not total_available,
-            })
+            changed_candidates.append(
+                {
+                    "dataset": dataset,
+                    "domain": domain,
+                    "hop": hop,
+                    "example_id": example_id,
+                    "subgraph_units": list(candidate_key),
+                    "gnn_top5_rank": g_rank,
+                    "symbolic_top5_rank": f_rank,
+                    "complete": complete(raw),
+                    "neural_score": float((persisted or gnn_rows[candidate_key])["score"]),
+                    "term_contributions": terms if domain == "text" or total_available else None,
+                    "ontology_total_unavailable_outside_persisted_symbolic_top5": domain
+                    == "ontology"
+                    and not total_available,
+                }
+            )
 
         g_key, f_key = gnn_order[0], final_order[0]
         if g_key == f_key:
@@ -199,7 +239,13 @@ def main() -> None:
         g_raw = candidate_rows[(dataset, example_id, g_key)]
         f_raw = candidate_rows[(dataset, example_id, f_key)]
         g_complete, f_complete = complete(g_raw), complete(f_raw)
-        effect = "fixed" if not g_complete and f_complete else "harmed" if g_complete and not f_complete else "completeness_unaffected"
+        effect = (
+            "fixed"
+            if not g_complete and f_complete
+            else "harmed"
+            if g_complete and not f_complete
+            else "completeness_unaffected"
+        )
         g_persisted, f_persisted = final_rows.get(g_key), final_rows[f_key]
         g_terms = text_terms(g_raw) if domain == "text" else ontology_nonproof_terms(g_raw)
         f_terms = text_terms(f_raw) if domain == "text" else ontology_nonproof_terms(f_raw)
@@ -209,27 +255,46 @@ def main() -> None:
             f_total = float(f_persisted["adjusted_score"]) - float(f_persisted["score"])
             f_terms["proof_entailment_bonus"] = f_total - sum(f_terms.values())
             if g_persisted is not None or g_stored_total is not None:
-                g_total = (float(g_persisted["adjusted_score"]) - float(g_persisted["score"])) if g_persisted is not None else g_stored_total
+                g_total = (
+                    (float(g_persisted["adjusted_score"]) - float(g_persisted["score"]))
+                    if g_persisted is not None
+                    else g_stored_total
+                )
                 g_terms["proof_entailment_bonus"] = g_total - sum(g_terms.values())
             else:
                 g_terms["proof_entailment_bonus"] = None
-        flips.append({
-            "dataset": dataset, "domain": domain, "hop": hop, "example_id": example_id,
-            "effect": effect, "gnn_top1_complete": g_complete, "symbolic_top1_complete": f_complete,
-            "gnn_top1_units": list(g_key), "symbolic_top1_units": list(f_key),
-            "neural_score_gap_symbolic_winner_minus_gnn_winner": float(f_persisted["score"]) - float(gnn_rows[g_key]["score"]),
-            "term_difference_symbolic_winner_minus_gnn_winner": {
-                name: (f_terms[name] - g_terms[name] if g_terms[name] is not None else None)
-                for name in f_terms
-            },
-            "fully_decomposable_from_persisted_scores": decomposable,
-        })
+        flips.append(
+            {
+                "dataset": dataset,
+                "domain": domain,
+                "hop": hop,
+                "example_id": example_id,
+                "effect": effect,
+                "gnn_top1_complete": g_complete,
+                "symbolic_top1_complete": f_complete,
+                "gnn_top1_units": list(g_key),
+                "symbolic_top1_units": list(f_key),
+                "neural_score_gap_symbolic_winner_minus_gnn_winner": float(f_persisted["score"])
+                - float(gnn_rows[g_key]["score"]),
+                "term_difference_symbolic_winner_minus_gnn_winner": {
+                    name: (f_terms[name] - g_terms[name] if g_terms[name] is not None else None)
+                    for name in f_terms
+                },
+                "fully_decomposable_from_persisted_scores": decomposable,
+            }
+        )
 
     groups = {}
     for effect in ("fixed", "harmed", "completeness_unaffected"):
         groups[effect] = {}
         subset = [row for row in flips if row["effect"] == effect]
-        term_names = sorted({name for row in subset for name in row["term_difference_symbolic_winner_minus_gnn_winner"]})
+        term_names = sorted(
+            {
+                name
+                for row in subset
+                for name in row["term_difference_symbolic_winner_minus_gnn_winner"]
+            }
+        )
         for term in term_names:
             groups[effect][term] = {}
             for slice_name, predicate in {
@@ -239,7 +304,13 @@ def main() -> None:
                 "1hop": lambda row: row["hop"] == "1hop",
                 "2hop": lambda row: row["hop"] == "2hop",
             }.items():
-                values = [row["term_difference_symbolic_winner_minus_gnn_winner"][term] for row in subset if predicate(row) and term in row["term_difference_symbolic_winner_minus_gnn_winner"] and row["term_difference_symbolic_winner_minus_gnn_winner"][term] is not None]
+                values = [
+                    row["term_difference_symbolic_winner_minus_gnn_winner"][term]
+                    for row in subset
+                    if predicate(row)
+                    and term in row["term_difference_symbolic_winner_minus_gnn_winner"]
+                    and row["term_difference_symbolic_winner_minus_gnn_winner"][term] is not None
+                ]
                 groups[effect][term][slice_name] = summarize(values)
 
     counts = defaultdict(int)
@@ -247,18 +318,42 @@ def main() -> None:
         counts[row["effect"]] += 1
     analysis = {
         "schema_version": "production_generator_d_v1_symbolic_component_analysis_v1",
-        "split": "dev", "test_data_accessed": False, "training_run": False,
-        "neural_inference_run": False, "candidate_generation_run": False, "answer_generation_run": False,
+        "split": "dev",
+        "test_data_accessed": False,
+        "training_run": False,
+        "neural_inference_run": False,
+        "candidate_generation_run": False,
+        "answer_generation_run": False,
         "rank_change_scope": "union of persisted GNN top-5 and SAGE-QA top-5 candidates; ranks outside a persisted top-5 are recorded as null",
-        "top1_flip_counts": dict(counts), "component_summaries": groups,
+        "top1_flip_counts": dict(counts),
+        "component_summaries": groups,
         "changed_candidates": changed_candidates,
-        "lineage": {"rankings": str(args.rankings.relative_to(ROOT)), "rankings_sha256": sha256(args.rankings), "dev_candidate_files": accessed},
+        "lineage": {
+            "rankings": str(args.rankings.relative_to(ROOT)),
+            "rankings_sha256": sha256(args.rankings),
+            "dev_candidate_files": accessed,
+        },
     }
     fixed_harmed = {"split": "dev", "counts": dict(counts), "top1_flips": flips}
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "symbolic_component_analysis.json").write_text(json.dumps(analysis, indent=2, ensure_ascii=False), encoding="utf-8")
-    (args.output_dir / "fixed_vs_harmed.json").write_text(json.dumps(fixed_harmed, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({"counts": dict(counts), "changed_candidates": len(changed_candidates), "fully_decomposable_flips": sum(row["fully_decomposable_from_persisted_scores"] for row in flips)}, indent=2))
+    (args.output_dir / "symbolic_component_analysis.json").write_text(
+        json.dumps(analysis, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    (args.output_dir / "fixed_vs_harmed.json").write_text(
+        json.dumps(fixed_harmed, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "counts": dict(counts),
+                "changed_candidates": len(changed_candidates),
+                "fully_decomposable_flips": sum(
+                    row["fully_decomposable_from_persisted_scores"] for row in flips
+                ),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

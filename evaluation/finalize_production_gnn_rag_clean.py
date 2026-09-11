@@ -35,18 +35,26 @@ def main() -> None:
     for dataset in DATASETS:
         dataset_dir = output_root / dataset
         summary = json.loads((dataset_dir / "adapter_summary.json").read_text(encoding="utf-8"))
-        frozen = json.loads((dataset_dir / "frozen_checkpoint_manifest.json").read_text(encoding="utf-8"))
-        invariance = json.loads((dataset_dir / "leakage_invariance.json").read_text(encoding="utf-8"))
+        frozen = json.loads(
+            (dataset_dir / "frozen_checkpoint_manifest.json").read_text(encoding="utf-8")
+        )
+        invariance = json.loads(
+            (dataset_dir / "leakage_invariance.json").read_text(encoding="utf-8")
+        )
         command = json.loads((dataset_dir / "training_command.json").read_text(encoding="utf-8"))
         log = (dataset_dir / "training.log").read_text(encoding="utf-8")
         checkpoint = dataset_dir / frozen["selected_checkpoint"]
         checks = {
-            "checkpoint_hash_matches": sha256_file(checkpoint) == frozen["selected_checkpoint_sha256"],
-            "relation_hash_matches": sha256_file(dataset_dir / "adapter" / "relations.txt") == frozen["relation_vocabulary_sha256"],
+            "checkpoint_hash_matches": sha256_file(checkpoint)
+            == frozen["selected_checkpoint_sha256"],
+            "relation_hash_matches": sha256_file(dataset_dir / "adapter" / "relations.txt")
+            == frozen["relation_vocabulary_sha256"],
             "three_dev_epochs": [item["epoch"] for item in frozen["dev_metrics"]] == [1, 2, 3],
-            "invariance_pass": invariance.get("pass") is True and all(item.get("pass") for item in invariance["checks"]),
+            "invariance_pass": invariance.get("pass") is True
+            and all(item.get("pass") for item in invariance["checks"]),
             "no_test_adapter": not (dataset_dir / "adapter" / "test.json").exists(),
-            "train_dev_only_flag": "--train_dev_only" in command and command[command.index("--train_dev_only") + 1].lower() == "true",
+            "train_dev_only_flag": "--train_dev_only" in command
+            and command[command.index("--train_dev_only") + 1].lower() == "true",
             "no_legacy_load_argument": "--load_experiment" not in command,
             "no_test_eval_argument": "--is_eval" not in command,
             "no_test_metric_log": "TEST F1" not in log,
@@ -75,10 +83,7 @@ def main() -> None:
         "base_git_commit": head,
         "tracked_diff_sha256": hashlib.sha256(diff).hexdigest(),
         "note": "Run code includes the listed working-tree files; use their hashes in addition to the base commit.",
-        "files": [
-            {"path": path, "sha256": sha256_file(root / path)}
-            for path in CODE_FILES
-        ],
+        "files": [{"path": path, "sha256": sha256_file(root / path)} for path in CODE_FILES],
     }
     write_json(output_root / "code_state.json", code_state)
     report = {

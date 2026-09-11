@@ -152,13 +152,9 @@ def eval_result(predict_file1, encrypt=False, cal_f1=True, topk=-1):
                     all_found += [found]
                     input_len += [len(data["input"]) / 4]  # avg chars
                     # print("\n\n")
-                    f1_score, precision_score, recall_score = eval_f1(
-                        prediction, answer
-                    )
+                    f1_score, precision_score, recall_score = eval_f1(prediction, answer)
                     f1_list.append(f1_score)
-                    hit1 = eval_hit1(
-                        prediction, answer
-                    )  # eval_hit(prediction_str, answer)
+                    hit1 = eval_hit1(prediction, answer)  # eval_hit(prediction_str, answer)
                     hit = eval_hit(prediction_str, answer)
                     hit1_list.append(hit1)
                     hit_list.append(hit)

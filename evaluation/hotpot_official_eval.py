@@ -117,9 +117,7 @@ def eval(prediction_file, gold_file):
             print("missing answer {}".format(cur_id))
             can_eval_joint = False
         else:
-            em, prec, recall = update_answer(
-                metrics, prediction["answer"][cur_id], dp["answer"]
-            )
+            em, prec, recall = update_answer(metrics, prediction["answer"][cur_id], dp["answer"])
         if cur_id not in prediction["sp"]:
             print("missing sp fact {}".format(cur_id))
             can_eval_joint = False

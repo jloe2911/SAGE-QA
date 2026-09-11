@@ -4,6 +4,7 @@ Candidate generation, union deduplication, pre-ranking, and capping are complete
 before gold support is read. This module is not imported by the training or final
 inference pipeline.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -118,7 +119,9 @@ def digest(candidates: Sequence[Sequence[str]]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def summarize(name: str, source: Path, rows: Sequence[Mapping[str, Any]], budget: int) -> dict[str, Any]:
+def summarize(
+    name: str, source: Path, rows: Sequence[Mapping[str, Any]], budget: int
+) -> dict[str, Any]:
     total = len(rows)
 
     def method(key: str) -> dict[str, Any]:
@@ -188,15 +191,17 @@ def evaluate_text(name: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         )
         current = deduplicate(generated["candidates"])
         full_universe = [record["unit"] for record in flattener(clean)]
-        beam = deduplicate(text_beam_candidates(
-            full_universe,
-            question=str(clean.get("question", "")),
-            max_depth=config["max_depth"],
-            beam_width=beam_width,
-            pre_rank=pre_rank,
-            token_setter=token_setter,
-            unit_parser=unit_parser,
-        ))
+        beam = deduplicate(
+            text_beam_candidates(
+                full_universe,
+                question=str(clean.get("question", "")),
+                max_depth=config["max_depth"],
+                beam_width=beam_width,
+                pre_rank=pre_rank,
+                token_setter=token_setter,
+                unit_parser=unit_parser,
+            )
+        )
         union = union_candidates(current, beam)
         capped = cap_union(
             union,
@@ -206,7 +211,9 @@ def evaluate_text(name: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
         # Gold boundary: generation, unioning, scoring, and capping are frozen above.
         gold_sets = [gold_fn(example, generated["sent_lookup"])]
-        details.append(_detail_row(generated["example_id"], current, beam, union, capped, gold_sets))
+        details.append(
+            _detail_row(generated["example_id"], current, beam, union, capped, gold_sets)
+        )
 
     return summarize(name, config["path"], details, config["candidate_cap"]), details
 
@@ -228,6 +235,7 @@ def _ontology_scorer(
         for index, unit in enumerate(universe)
     ]
     index_by_unit = {unit: index for index, unit in enumerate(universe)}
+
     def score(candidate: list[str]) -> float:
         indices = tuple(sorted(index_by_unit[unit] for unit in candidate))
         return score_subgraph_indices(indices, universe, adjacency, unit_scores)
@@ -255,13 +263,15 @@ def evaluate_ontology(name: str, path: Path) -> tuple[dict[str, Any], list[dict[
         )
         current = deduplicate(generated["candidate_subgraphs"])
         full_universe = sorted(set(parse_owl_context(owl_context)))
-        beam = deduplicate(ontology_beam_candidates(
-            full_universe,
-            question=question,
-            sparql_query=sparql_query,
-            max_depth=config["max_depth"],
-            beam_width=beam_width,
-        ))
+        beam = deduplicate(
+            ontology_beam_candidates(
+                full_universe,
+                question=question,
+                sparql_query=sparql_query,
+                max_depth=config["max_depth"],
+                beam_width=beam_width,
+            )
+        )
         union = union_candidates(current, beam)
         pre_rank = _ontology_scorer(
             question=question,
