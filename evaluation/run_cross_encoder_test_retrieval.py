@@ -6,7 +6,7 @@ import argparse
 import json
 import statistics
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -270,6 +270,19 @@ def evaluate(args: argparse.Namespace) -> None:
         "metric_aggregation": "unweighted mean over examples",
         "allowed_k": list(ALLOWED_K),
         "overall": overall,
+        "equal_dataset_macro": {
+            method: {
+                setting: {
+                    metric: statistics.fmean(
+                        dataset["methods"][method][setting][metric]
+                        for dataset in dataset_results
+                    )
+                    for metric in ("precision", "recall", "f1")
+                }
+                for setting in ("k1", "adaptive")
+            }
+            for method in METHODS
+        },
         "datasets": dataset_results,
         "prediction_freeze_sha256": sha256(freeze_path),
         "test_informed_tuning": False,
