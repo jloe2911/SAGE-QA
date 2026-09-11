@@ -221,7 +221,6 @@ data/production_generator_d_v1/
 outputs/
 checkpoints/
 results/
-tests/
 
 # Vendored GNN-RAG generated results
 third_party/GNN-RAG/llm/results/
