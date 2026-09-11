@@ -55,7 +55,12 @@ INPUT_FILENAMES = (
     "metrics.json",
     "checkpoint_metadata.json",
 )
-RANKING_METHODS = ("gnn_only", "sageqa_final")
+RANKING_METHODS = (
+    "gnn_only",
+    "sageqa_final",
+    "cross_encoder",
+    "final_sageqa",
+)
 
 
 def sha256(path: Path) -> str:
@@ -557,7 +562,12 @@ def fit(args: argparse.Namespace) -> None:
     }
     write_json(output_dir / "lineage_checkpoint_metadata.json", lineage)
 
-    display_method = "SAGE-QA final" if ranking_method == "sageqa_final" else "GNN-only"
+    display_method = {
+        "gnn_only": "GNN-only",
+        "sageqa_final": "SAGE-QA final",
+        "cross_encoder": "cross-encoder",
+        "final_sageqa": "final SAGE-QA",
+    }[ranking_method]
     lines = [
         f"# Frozen production {display_method} adaptive-k policy (clean DEV)",
         "",

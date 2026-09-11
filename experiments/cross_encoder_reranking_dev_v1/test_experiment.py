@@ -13,6 +13,7 @@ from experiments.cross_encoder_reranking_dev_v1.run_experiment import (
     pretrained_model_source,
     select_training_pairs,
     serialize_candidate,
+    summarize_equal_dataset_macro,
     validate_frozen_model_snapshot,
 )
 
@@ -60,6 +61,17 @@ def test_pairs_are_within_example_deterministic_and_ordered_by_target():
     assert ("complete", "partial") in targets
     assert ("complete", "irrelevant") in targets
     assert ("partial", "irrelevant") in targets
+
+
+def test_equal_dataset_macro_gives_each_dataset_equal_weight():
+    datasets = {
+        "large": {"method": {"support": {"precision": 0.8, "recall": 0.6, "f1": 0.7}}},
+        "small": {"method": {"support": {"precision": 0.2, "recall": 0.4, "f1": 0.3}}},
+    }
+
+    assert summarize_equal_dataset_macro(datasets, ("method",)) == {
+        "method": {"precision": 0.5, "recall": 0.5, "f1": 0.5}
+    }
 
 
 def test_local_snapshot_is_validated_and_used_without_changing_identity(

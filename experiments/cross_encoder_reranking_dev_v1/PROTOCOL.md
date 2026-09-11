@@ -88,9 +88,11 @@ The architecture passes only if both matched comparisons satisfy all conditions:
 3. each new method has no material regression (F1 decrease greater than 0.02)
    on at least 8 of 10 datasets.
 
-Here macro means the unweighted mean of per-example support precision, recall,
-and F1 over the full pooled DEV cohort; dataset breadth is assessed on each
-dataset's own per-example macro F1. No second variation is permitted after DEV.
+Here the criterion's macro means the unweighted mean of per-example support
+precision, recall, and F1 over the full pooled DEV cohort. It is therefore
+dataset-size weighted; it is not an equal-weight mean of the ten dataset-level
+means or a count-level micro F1. Dataset breadth is assessed on each dataset's
+own per-example macro F1. No second variation is permitted after DEV.
 
 ## Adaptive aggregation exclusion
 

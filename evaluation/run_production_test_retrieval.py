@@ -137,7 +137,7 @@ DATASETS = (
     ),
 )
 POLICY_DOMAINS = ("text", "ontology")
-RANKING_METHODS = ("gnn_only", "sageqa_final")
+RANKING_METHODS = ("gnn_only", "sageqa_final", "cross_encoder", "final_sageqa")
 FITTED_POLICY_FILES = tuple(
     ["chosen_thresholds.joblib"]
     + [f"{domain}_{kind}.joblib" for domain in POLICY_DOMAINS for kind in ("scaler", "model")]

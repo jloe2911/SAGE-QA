@@ -555,6 +555,23 @@ def summarize_method(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def summarize_equal_dataset_macro(
+    datasets: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    method_names: Sequence[str],
+) -> dict[str, dict[str, float]]:
+    return {
+        method: {
+            key: sum(
+                float(dataset_methods[method]["support"][key])
+                for dataset_methods in datasets.values()
+            )
+            / len(datasets)
+            for key in ("precision", "recall", "f1")
+        }
+        for method in method_names
+    }
+
+
 def old_record_metrics(row: Mapping[str, Any]) -> dict[str, Any]:
     k1 = next(item for item in row["prefix_evaluation"] if int(item["k"]) == 1)
     diagnostic = row.get("ranking_diagnostic") or {}
@@ -636,6 +653,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         method: summarize_method([row["methods"][method] for row in per_example])
         for method in method_names
     }
+    equal_dataset_macro = summarize_equal_dataset_macro(datasets, method_names)
 
     eligible_pairs = [
         (
@@ -656,19 +674,33 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             - datasets[dataset][old_name]["support"]["f1"]
             for dataset, _, _ in DATASETS
         }
-        macro_delta = overall[new_name]["support"]["f1"] - overall[old_name]["support"]["f1"]
+        pooled_per_example_macro_delta = (
+            overall[new_name]["support"]["f1"] - overall[old_name]["support"]["f1"]
+        )
+        equal_dataset_macro_delta = (
+            equal_dataset_macro[new_name]["f1"] - equal_dataset_macro[old_name]["f1"]
+        )
+        datasets_improved = sum(delta > 0.0 for delta in changes.values())
+        datasets_without_material_regression = sum(
+            delta >= -0.02 for delta in changes.values()
+        )
         matched[label] = {
             "old_method": old_name,
             "new_method": new_name,
-            "macro_f1_delta": macro_delta,
+            "criterion_f1_aggregation": "pooled_dev_unweighted_per_example_mean",
+            "pooled_per_example_macro_f1_delta": pooled_per_example_macro_delta,
+            "equal_dataset_macro_f1_delta_audit": equal_dataset_macro_delta,
             "per_dataset_f1_delta": changes,
-            "datasets_improved": sum(delta > 0.0 for delta in changes.values()),
-            "datasets_without_material_regression": sum(
-                delta >= -0.02 for delta in changes.values()
+            "datasets_improved": datasets_improved,
+            "datasets_without_material_regression": datasets_without_material_regression,
+            "equal_dataset_macro_full_criterion_passed_audit": (
+                equal_dataset_macro_delta >= 0.03
+                and datasets_improved >= 6
+                and datasets_without_material_regression >= 8
             ),
-            "passed": macro_delta >= 0.03
-            and sum(delta > 0.0 for delta in changes.values()) >= 6
-            and sum(delta >= -0.02 for delta in changes.values()) >= 8,
+            "passed": pooled_per_example_macro_delta >= 0.03
+            and datasets_improved >= 6
+            and datasets_without_material_regression >= 8,
         }
     decision_passed = matched["neural"]["passed"] and matched["symbolic"]["passed"]
     report = {
@@ -682,7 +714,12 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             "applied": False,
             "reason": "Frozen policies standardize GNN-score-scale features; cross-encoder logits are not scale-compatible and refitting is forbidden.",
         },
+        "aggregation_definitions": {
+            "overall": "Unweighted mean of per-example metrics over the pooled DEV cohort; datasets are therefore weighted by their example counts.",
+            "equal_dataset_macro": "Unweighted mean of the ten dataset-level per-example means; reported as an aggregation audit and not substituted into the frozen decision rule.",
+        },
         "overall": overall,
+        "equal_dataset_macro": equal_dataset_macro,
         "datasets": datasets,
         "old_gnn_vs_cross_encoder_when_complete_exists": {
             "examples": len(eligible_pairs),
@@ -722,6 +759,12 @@ def render_summary(args: argparse.Namespace, report: Mapping[str, Any]) -> None:
         f"- Prediction time: {freeze['prediction_seconds']:.1f} seconds",
         f"- Success criterion passed: **{report['success_criterion_passed']}**",
         f"- Required next action: `{report['required_next_action']}`",
+        "- Frozen criterion aggregation: pooled DEV unweighted per-example mean (dataset-size weighted)",
+        "- Equal-dataset macro audit: unweighted mean of the 10 dataset-level means",
+        "- Equal-dataset macro full-criterion audit passed: "
+        f"**{all(item['equal_dataset_macro_full_criterion_passed_audit'] for item in report['decision_rule'].values())}**",
+        "",
+        "## Pooled DEV per-example means",
         "",
         "| Method | P | R | F1 | Complete@1 (eligible) | Median best-complete rank | MRR |",
         "|---|---:|---:|---:|---:|---:|---:|",
@@ -737,6 +780,26 @@ def render_summary(args: argparse.Namespace, report: Mapping[str, Any]) -> None:
             f"| {method} | {row['support']['precision']:.6f} | {row['support']['recall']:.6f} | "
             f"{row['support']['f1']:.6f} | {row['complete_support_at_1_when_available']:.6f} | "
             f"{row['median_best_complete_rank']} | {row['mrr_best_complete_candidate_when_available']:.6f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Equal-dataset macro audit",
+            "",
+            "| Comparison | Existing F1 | New F1 | Delta | Threshold | Full criterion pass |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for comparison in ("neural", "symbolic"):
+        decision = report["decision_rule"][comparison]
+        old_name = decision["old_method"]
+        new_name = decision["new_method"]
+        old_f1 = report["equal_dataset_macro"][old_name]["f1"]
+        new_f1 = report["equal_dataset_macro"][new_name]["f1"]
+        audit_passed = decision["equal_dataset_macro_full_criterion_passed_audit"]
+        lines.append(
+            f"| {old_name} vs {new_name} | {old_f1:.6f} | {new_f1:.6f} | "
+            f"{new_f1 - old_f1:+.6f} | +0.030000 | {audit_passed} |"
         )
     lines.extend(
         [
