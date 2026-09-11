@@ -65,7 +65,7 @@ DEFAULT_OLD_RANKINGS = (
     ROOT
     / "outputs"
     / "development_runs"
-    / "production_generator_d_v1_k_sensitivity"
+    / "production_generator_d_v2_hard_pair_k_sensitivity_merged"
     / "per_example_rankings.jsonl"
 )
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "development_runs" / "question_candidate_cross_encoder_v1"

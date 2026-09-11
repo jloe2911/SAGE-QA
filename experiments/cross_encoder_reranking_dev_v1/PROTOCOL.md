@@ -76,7 +76,7 @@ partial and partial > irrelevant comparisons whenever those strata exist.
 The four fixed-k comparisons are existing GNN k1, cross-encoder k1, existing
 SAGE-QA-final k1, and cross-encoder plus the existing unchanged Text-Chain/Proof
 adjustment at k1. Existing GNN/SAGE results come from the frozen
-`production_generator_d_v1_k_sensitivity` artifact. Cross-encoder predictions
+`production_generator_d_v2_hard_pair_k_sensitivity_merged` artifact. Cross-encoder predictions
 and complete candidate orderings are frozen before DEV gold fields are joined.
 
 The architecture passes only if both matched comparisons satisfy all conditions:
