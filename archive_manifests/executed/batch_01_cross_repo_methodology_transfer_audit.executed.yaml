@@ -1,0 +1,117 @@
+schema_version: sageqa_archive_move_execution_v1
+batch_id: batch_01_cross_repo_methodology_transfer_audit
+planning_manifest: archive_manifests/batch_01_cross_repo_methodology_transfer_audit.yaml
+executed_at: 2026-09-14T15:20:41.7778616+02:00
+pre_move_head: 483e89d9f213ac7d36308ba4caaaffb8b0361e45
+scientific_classification: development
+status: REJECTED
+recommendation: ARCHIVE_INTERNAL
+completed_at: 2026-09-14T15:24:11.2048257+02:00
+result: COMPLETE
+pre_move:
+  file_count: 7
+  total_bytes: 51049
+  source_tracking_state: ignored_untracked
+  destination_expected_absent: true
+post_move:
+  source_file_count: 0
+  destination_file_count: 7
+  total_bytes: 51049
+  destination_tracking_state: untracked_not_ignored
+files:
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/candidate_mechanisms.json
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/candidate_mechanisms.json
+    bytes: 16846
+    pre_move_sha256: 49b49e5349958897e29d0b1bc78ef409e0f96fa9694479e9cdce547b68e9b156
+    post_move_sha256: 49b49e5349958897e29d0b1bc78ef409e0f96fa9694479e9cdce547b68e9b156
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/comparison_with_hard_pair_v2.md
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/comparison_with_hard_pair_v2.md
+    bytes: 4233
+    pre_move_sha256: 936efc7c4ae3f4d198a3e3cf1f5cc9f7c4cd2e8099611d7a05a2984657e3b6a0
+    post_move_sha256: 936efc7c4ae3f4d198a3e3cf1f5cc9f7c4cd2e8099611d7a05a2984657e3b6a0
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/final_recommendation.md
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/final_recommendation.md
+    bytes: 1549
+    pre_move_sha256: 58b5760cda888de266684210df2ea37311ddced3610b7239490244807cfbc31c
+    post_move_sha256: 58b5760cda888de266684210df2ea37311ddced3610b7239490244807cfbc31c
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/leakage_audit.json
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/leakage_audit.json
+    bytes: 4744
+    pre_move_sha256: 873c451562f9734b4d0f33c47968919a4ca05ffb5393b4fd2255f5864eb181df
+    post_move_sha256: 873c451562f9734b4d0f33c47968919a4ca05ffb5393b4fd2255f5864eb181df
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/nesy_reasoner_audit.md
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/nesy_reasoner_audit.md
+    bytes: 8862
+    pre_move_sha256: a77d6dd73ed4e26d63331e2b07e4666793f07b433c527e41e5882445fd7082d7
+    post_move_sha256: a77d6dd73ed4e26d63331e2b07e4666793f07b433c527e41e5882445fd7082d7
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/nesygr_qa_audit.md
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/nesygr_qa_audit.md
+    bytes: 9411
+    pre_move_sha256: f4e705ade485bf2012aa2d426b10a7ce18f63d914d2f4bd078042cf2aae3c320
+    post_move_sha256: f4e705ade485bf2012aa2d426b10a7ce18f63d914d2f4bd078042cf2aae3c320
+  - source: outputs/diagnostics/cross_repo_methodology_transfer_audit/summary.md
+    destination: archive/development/rejected/cross_repo_methodology_transfer_audit/summary.md
+    bytes: 5404
+    pre_move_sha256: e289df5a174f4fa8adae2402846e29b07b03a15355e8d7353192d9ec5350778b
+    post_move_sha256: e289df5a174f4fa8adae2402846e29b07b03a15355e8d7353192d9ec5350778b
+references:
+  before_move:
+    active_external: []
+    frozen_reference_blockers: []
+    historical_text_only:
+      - archive_manifests/batch_01_cross_repo_methodology_transfer_audit.yaml
+      - docs/repository_cleanup_v2/PHASE_6A_ARCHIVE_PLAN.md
+      - docs/repository_cleanup_v2/PHASE_6A_ARCHIVE_DECISIONS.csv
+  changed:
+    - release_manifests/development_archive/index.yaml
+    - docs/ARTIFACTS.md
+validation_commands:
+  pre_move:
+    - git status --porcelain=v1 --untracked-files=all
+    - Get-FileHash -Algorithm SHA256 on each literal source file
+    - git grep exact old path and each member filename across first-party tracked text
+    - pytest FAST per docs/REPRODUCIBILITY_TEST_BASELINE.md
+    - pytest STANDARD per docs/REPRODUCIBILITY_TEST_BASELINE.md
+    - pytest original-paper contracts plus supported paper tests
+  post_move:
+    - Get-FileHash -Algorithm SHA256 on each literal destination file
+    - git grep exact old and new paths across first-party tracked text
+    - pytest FAST per docs/REPRODUCIBILITY_TEST_BASELINE.md
+    - pytest STANDARD per docs/REPRODUCIBILITY_TEST_BASELINE.md
+    - pytest original-paper contracts plus supported paper tests
+    - git diff --check
+    - git diff --stat
+validation_results:
+  pre_move_fast: 28_passed_1_skipped
+  pre_move_standard: 123_passed_1_skipped
+  pre_move_original_paper: 10_passed
+  post_move_fast_initial: 1_failed_27_passed_1_skipped_metadata_status_corrected
+  post_move_fast_final: 28_passed_1_skipped
+  post_move_standard: 123_passed_1_skipped
+  post_move_original_paper: 10_passed
+  post_move_source_file_count: 0
+  post_move_destination_file_count: 7
+  post_move_destination_total_bytes: 51049
+  post_move_hash_comparison: PASS
+  old_path_active_references: 0
+  protected_artifact_verification: PASS
+  git_diff_check: PASS
+assessment:
+  MOVE_INTEGRITY: PASS
+  REFERENCE_INTEGRITY: PASS
+  SCIENTIFIC_INTEGRITY: PASS
+  TEST_INTEGRITY: PASS
+  ROLLBACK_READINESS: PASS
+rollback:
+  require_source_destination_absent: true
+  verify_destination_file_count: 7
+  verify_destination_total_bytes: 51049
+  verify_each_sha256: true
+  mapping_direction: reverse_each_files_source_and_destination
+  procedure:
+    - Verify this execution record's seven destination sizes and SHA-256 values.
+    - Verify every original source file path is absent.
+    - Move each destination file back to its exact source path using literal paths.
+    - Reverify seven source files, 51049 total bytes, and all SHA-256 values.
+    - Revert only the two mutable reference updates and mark this execution record ROLLED_BACK while preserving it as history.
+    - Run FAST, STANDARD, original-paper, protected-artifact, and Git diff gates again.

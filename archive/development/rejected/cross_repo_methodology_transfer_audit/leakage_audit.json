@@ -1,0 +1,101 @@
+{
+  "schema_version": "cross_repo_leakage_audit_v1",
+  "audit_date": "2026-09-09",
+  "policy": "Gold support, answers, explanations, target triples, benchmark evidence fields, TEST labels, oracle entities, and gold pruning must not enter generation, retrieval, scoring, reranking, aggregation, or inference. TRAIN labels may supervise a model only when inference inputs remain gold-free.",
+  "repositories": {
+    "NeSyGR-QA": {
+      "classification": "MIXED_BY_MECHANISM",
+      "safe_paths": [
+        {
+          "mechanism": "lexical two-hop candidate graphs",
+          "classification": "SAFE",
+          "basis": "ModelInput question/context and source graph only; gold resolved after construction."
+        },
+        {
+          "mechanism": "incidence evidence GNN and TRAIN-only pointwise/pairwise/listwise objectives",
+          "classification": "SAFE",
+          "basis": "Gold forms TRAIN labels; inference consumes question and candidate graph."
+        },
+        {
+          "mechanism": "typed-chain reranker and typed text proof",
+          "classification": "SAFE",
+          "basis": "Code rejects gold/answer/support fields; saved artifacts freeze predictions before evaluation join."
+        },
+        {
+          "mechanism": "constrained explanation search",
+          "classification": "SAFE",
+          "basis": "Input schema permits evidence ID, frozen score, and rank only and explicitly rejects evaluation fields."
+        },
+        {
+          "mechanism": "GNNExplainer and GraphMask inference masks",
+          "classification": "SAFE",
+          "basis": "No gold required to generate masks, though saved evidence is negative."
+        }
+      ],
+      "unsafe_or_adaptable_paths": [
+        {
+          "mechanism": "query-faithful ontology constructor",
+          "classification": "UNSAFE",
+          "basis": "Consumes exact formal SPARQL query/target. Direct transfer would expose a benchmark target triple before evaluation."
+        },
+        {
+          "mechanism": "historical accepted artifacts versus current dirty checkout",
+          "classification": "ADAPTABLE",
+          "basis": "Frozen results are lineage-sensitive; current source cannot be assumed to reproduce accepted artifacts without restoring pinned bytes."
+        }
+      ]
+    },
+    "nesy-reasoner": {
+      "classification": "MIXED_BY_MECHANISM",
+      "safe_paths": [
+        {
+          "mechanism": "FamilyGraphAdapter and context-only TwoWikiGraphAdapter",
+          "classification": "SAFE",
+          "basis": "Source graph construction uses supplied context only."
+        },
+        {
+          "mechanism": "QAGNNWorkingGraphBuilder",
+          "classification": "SAFE",
+          "basis": "Question-conditioned structural pruning receives no answer, query, or gold explanation."
+        },
+        {
+          "mechanism": "learned question-to-triple linker",
+          "classification": "SAFE",
+          "basis": "Reference edges supervise TRAIN; inference uses question/context and learned scores."
+        },
+        {
+          "mechanism": "required-edge deletion and necessity margin",
+          "classification": "SAFE",
+          "basis": "Gold proof edges construct TRAIN-only counterfactual labels; no gold is needed at inference."
+        },
+        {
+          "mechanism": "typed relational attention, GNNExplainer, GraphMask, question-rooted selection",
+          "classification": "SAFE",
+          "basis": "Inference uses question, context-derived graph, and trained model outputs."
+        }
+      ],
+      "unsafe_or_adaptable_paths": [
+        {
+          "mechanism": "TwoWiki auto/llm_with_provided graph artifacts",
+          "classification": "UNSAFE",
+          "basis": "Provided benchmark evidences can enter graph construction; these paths are not context-only."
+        },
+        {
+          "mechanism": "symbolic completion/verification with supplied target triple",
+          "classification": "UNSAFE",
+          "basis": "A gold/reference target is required unless a separately validated question-to-target parser is introduced."
+        },
+        {
+          "mechanism": "answer-candidate QA-GNN scorer",
+          "classification": "ADAPTABLE",
+          "basis": "Gold answers are legitimate TRAIN labels, but the method ranks answer candidates, not evidence support sets; oracle-candidate diagnostics must never enter inference or selection."
+        }
+      ]
+    }
+  },
+  "transfer_verdict": {
+    "passed_for_current_hard_pair_v2": true,
+    "new_mechanism_approved": false,
+    "reason": "All scientifically serious alternatives either have insufficient/negative evidence, require a new tuning surface, change the frozen protocol, or depend on oracle targets."
+  }
+}

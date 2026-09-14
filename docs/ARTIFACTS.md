@@ -16,7 +16,7 @@ permission to regenerate an artifact.
 | Hard-pair GraphSAGE | Graph ablation | `complete_frozen_test_evaluation` | Separate graph-model lineage and TEST ablation | `outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/` and associated end-to-end/audit roots | `release_manifests/thesis_graph_ablation/index.yaml` | Yes |
 | Earlier Generator-D-v1 thesis stages | Superseded thesis experiment | `valid_historical_superseded` | Preserve earlier retrieval, policies, and answers for provenance | Listed in `release_manifests/thesis_superseded/index.yaml` | `release_manifests/thesis_superseded/index.yaml` | Yes |
 | Complete Gold Support oracle | Oracle | `complete_frozen_post_publication_oracle` | Complete 3,509-row support-bearing oracle analysis | `outputs/final_results/gold_support_complete_oracle/` | `release_manifests/oracle/index.yaml` and root `artifact_manifest.json` | Yes |
-| Development archive | Development experiment | `indexed_not_physically_archived` | Preserve rejected, diagnostic, exploratory, aborted, and incomplete work | Listed in `release_manifests/development_archive/index.yaml` | `release_manifests/development_archive/index.yaml` | No, heterogeneous |
+| Development archive | Development experiment | `indexed_not_physically_archived` for the heterogeneous aggregate; one completed pilot | Preserve rejected, diagnostic, exploratory, aborted, and incomplete work | Listed in `release_manifests/development_archive/index.yaml`; first controlled pilot at `archive/development/rejected/cross_repo_methodology_transfer_audit/` | `release_manifests/development_archive/index.yaml` | No, heterogeneous |
 
 ## External restoration status
 
@@ -60,7 +60,7 @@ The hard-pair GraphSAGE architecture is indexed separately under `release_manife
 
 ## Superseded and development results
 
-Valid earlier thesis stages remain scientific provenance and are indexed as `thesis_superseded`; rejected, diagnostic, exploratory, aborted, or incomplete work is indexed as `development_archive`. Neither label means disposable. No physical archive operation is authorized by these indexes.
+Valid earlier thesis stages remain scientific provenance and are indexed as `thesis_superseded`; rejected, diagnostic, exploratory, aborted, or incomplete work is indexed as `development_archive`. Neither label means disposable. The only completed physical archive operation is the separately authorized seven-file pilot recorded under `archive_manifests/executed/`; these indexes do not authorize further moves.
 
 ## Complete Gold Support oracle
 
