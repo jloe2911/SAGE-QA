@@ -1,0 +1,211 @@
+schema_version: sageqa_hidden_untracked_classification_v1
+audit_date: 2026-09-14
+source: .git/info/exclude
+source_entry_count: 206
+observed_entry_state_counts:
+  ignored_untracked_present: 122
+  exclude_entry_absent: 84
+resolution: Rules are applied top to bottom. Every exact root-anchored entry in the source inherits every field of its first matching rule; exact overrides precede prefix rules. This provides one classification and recommendation per path without changing the local exclude file.
+required_fields: [path, classification, state, inbound_references, outbound_imports, used_by_thesis_final, required_for_paper_reproduction, scientifically_meaningful, recommendation]
+state_rule:
+  if_exists: ignored_untracked
+  if_absent: exclude_entry_absent
+rules:
+  - match: exact
+    paths: [.worktrees/sageqa-original-eval-compat/]
+    classification: LOCAL_ONLY
+    inbound_references: git worktree administrative metadata only
+    outbound_imports: post-submission source tree rooted at ffee42c
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: KEEP_LOCAL
+    evidence: Clean detached worktree at ffee42c; useful for compatibility inspection but not authoritative paper source.
+  - match: exact
+    paths: [.github/workflows/tests.yml, CITATION.cff, REPRODUCE.md, RESULTS.md, pyproject.toml, requirements-dev.txt]
+    classification: RELEASE_INFRASTRUCTURE
+    inbound_references: release and CI entry points; submission test references root release files
+    outbound_imports: dependency, workflow, metadata, and reproduction declarations; no scientific runtime import
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+  - match: exact
+    paths: [ARTIFACTS.md, FINAL_ARCHITECTURE.md, NEUROSYMBOLIC_METHODOLOGY.md, SCIENTIFIC_RATIONALE.md, SUBMISSION_CHECKLIST.md]
+    classification: RELEASE_INFRASTRUCTURE
+    inbound_references: stale local-exclude entries; paths absent
+    outbound_imports: unavailable because absent
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: false
+    recommendation: REVIEW
+  - match: exact
+    paths: [artifacts/manifest.json]
+    classification: NEEDS_REVIEW
+    inbound_references: local artifact pipeline documentation and verification context
+    outbound_imports: references local artifact members; no Python imports
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: REVIEW
+    evidence: Local manifest exists but is not bound to the final-thesis or paper bundle.
+  - match: prefix
+    prefix: artifacts/step_01_context_to_kg/wikidata_cache/
+    classification: CACHE
+    inbound_references: step-01 context-to-KG cache lookup by digest
+    outbound_imports: cached Wikidata response JSON only
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: false
+    recommendation: KEEP_LOCAL
+    coverage: 64 exact JSON paths
+  - match: prefix
+    prefix: data/development/
+    classification: DEVELOPMENT
+    inbound_references: development builders, walkthrough, and diagnostic runners named by sibling excluded sources
+    outbound_imports: data files do not import code; manifests reference development members
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: ARCHIVE_LATER
+    coverage: 40 exact paths, all absent after Phase 2A
+  - match: prefix
+    prefix: data_processing/
+    classification: DEVELOPMENT
+    inbound_references: excluded development tests and runners
+    outbound_imports: repository data-processing/model utilities; unavailable for the five absent paths
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: REVIEW
+    coverage: 5 exact paths, all absent
+  - match: prefix
+    prefix: evaluation/
+    classification: DEVELOPMENT
+    inbound_references: excluded development configs/tests and historical architecture documents
+    outbound_imports: repository evaluation, model, and data utilities; unavailable for absent paths
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: REVIEW
+    coverage: 34 exact paths, all absent
+  - match: exact
+    paths: [experiments/sageqa_original_a0_a3_matched_v1.json, experiments/run_matched_original_a0_a3.py]
+    classification: PAPER_ORIGINAL_TEST
+    inbound_references: tests/test_run_matched_original_a0_a3.py and matched-comparison documentation
+    outbound_imports: historical runner/evaluator compatibility paths
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+  - match: exact
+    paths: [experiments/sageqa_final_architecture_frozen.json, experiments/familyowl_a3_symbolic_reranking_frozen.json, experiments/familyowl_a3_reader_test.json, experiments/2wiki_a0_a3_heldout.json, experiments/2wiki_sentence_compiler_v1_test.json, experiments/2wiki_sentence_compiler_v1_test_statistics.json]
+    classification: THESIS_SUPERSEDED
+    inbound_references: ignored architecture tests and historical A0/A3 evaluators
+    outbound_imports: frozen configuration/metadata only
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+  - match: prefix
+    prefix: experiments/
+    classification: DEVELOPMENT
+    inbound_references: paired ignored tests and development evaluators
+    outbound_imports: development configuration or runner dependencies
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: ARCHIVE_LATER
+    coverage: remaining 9 exact experiment paths
+  - match: exact
+    paths: [models/familyowl_atomic_selector_v2.py, models/familyowl_compiler_v2.py]
+    classification: DEVELOPMENT
+    inbound_references: tests/test_familyowl_architecture_extensions.py; exclusion assertion in tests/test_final_architecture.py; no current thesis-final imports
+    outbound_imports: models.dataset_adapters and models.reasoning_ir
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: ARCHIVE_LATER
+    evidence: Module docstrings and experiments/sageqa_final_architecture_frozen.json explicitly label both rejected development ablations.
+  - match: exact
+    paths: [models/dataset_adapters.py, models/reasoning_ir.py, models/symbolic_executor.py]
+    classification: THESIS_SUPERSEDED
+    inbound_references: historical A0/A3 symbolic modules and ignored tests
+    outbound_imports: shared symbolic reasoning types and adapters
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+  - match: exact
+    paths: [models/twowiki_sentence_compiler_v1.py]
+    classification: DEVELOPMENT
+    inbound_references: tests/test_2wiki_sentence_compiler_v1.py and development evaluator/configs
+    outbound_imports: models.reasoning_ir and dataset adapters
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: ARCHIVE_LATER
+  - match: exact
+    paths: [tests/test_evaluate_owl_qa_predictions.py, tests/test_gnn_rag_alignment.py, tests/test_gnn_subgraph_retriever.py, tests/test_run_matched_original_a0_a3.py]
+    classification: PAPER_ORIGINAL_TEST
+    inbound_references: pytest discovery and paper compatibility work
+    outbound_imports: historical evaluator, GraphSAGE, GNN-RAG, or matched-runner modules
+    used_by_thesis_final: false
+    required_for_paper_reproduction: true
+    scientifically_meaningful: true
+    recommendation: TRACK
+  - match: exact
+    paths: [tests/test_submission_readiness.py]
+    classification: RELEASE_INFRASTRUCTURE
+    inbound_references: pytest discovery
+    outbound_imports: release metadata and submission checks
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+  - match: prefix
+    prefix: tests/fixtures/
+    classification: DEVELOPMENT
+    inbound_references: ignored comparison tests
+    outbound_imports: fixture data only
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+    coverage: 3 exact fixture paths
+  - match: prefix
+    prefix: tests/
+    classification: DEVELOPMENT
+    inbound_references: pytest discovery
+    outbound_imports: paired ignored development and superseded architecture modules
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: TRACK
+    coverage: remaining 17 exact test paths
+  - match: exact
+    paths: [training/run_gnn_rag_walkthrough.py]
+    classification: DEVELOPMENT
+    inbound_references: walkthrough documentation and excluded sample builder
+    outbound_imports: GNN-RAG training and repository adapters
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: ARCHIVE_LATER
+  - match: exact
+    paths: [notebooks/experiment3_symbolic_reranking.ipynb]
+    classification: DEVELOPMENT
+    inbound_references: none found outside cleanup documentation
+    outbound_imports: notebook-local analysis dependencies
+    used_by_thesis_final: false
+    required_for_paper_reproduction: false
+    scientifically_meaningful: true
+    recommendation: ARCHIVE_LATER
+coverage_assertion:
+  unmatched_entries: 0
+  multiply_classified_entries: 0
+  classifications_used: [PAPER_ORIGINAL_TEST, THESIS_SUPERSEDED, DEVELOPMENT, RELEASE_INFRASTRUCTURE, CACHE, LOCAL_ONLY, NEEDS_REVIEW]
+notes:
+  - State is computed from existence because all 206 source entries are exact root-anchored local excludes and none is tracked at HEAD.
+  - TRACK is a recommendation only; this phase does not change tracking.
+  - Absent entries are retained in this audit because .git/info/exclude still contains them; REVIEW means decide whether to remove only the stale exclude rule later.

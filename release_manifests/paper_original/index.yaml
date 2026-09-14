@@ -1,0 +1,23 @@
+schema_version: sageqa_logical_release_index_v1
+category: paper_original
+bundles:
+  - logical_name: sageqa_published_paper_original
+    protocol: historical run_experiments.py lexical, GraphSAGE, SAGE-QA Text-Chain/Proof, and GNN-RAG workflow
+    status: candidate_source_revision_unresolved
+    source_revision: dbdbb50708bdc6c686ef82518ec71c1d1bf55985
+    dataset: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, owl2bench_1hop, owl2bench_2hop, pizza_100_1hop, pizza_100_2hop, pizza_250_1hop, pizza_250_2hop]
+    hop: mixed_1hop_2hop
+    split: train_dev_test
+    gold_access_policy: historical_published_protocol; do_not_relabel_as_thesis_gold_firewall
+    leakage_status: historical_protocol_distinct_from_thesis_final
+    data_root: [data/HotpotQA, data/2WikiMultiHopQA, data/FamilyOWL_1hop, data/FamilyOWL_2hop, data/owl2bench_1hop, data/owl2bench_2hop, data/pizza_100_1hop, data/pizza_100_2hop, data/pizza_250_1hop, data/pizza_250_2hop]
+    checkpoint_root: checkpoints/gnn_subgraph_ranker_*_full
+    policy_root: null
+    result_root: outputs/full_results
+    producing_entry_point: experiments/run_experiments.py
+    evaluator_finalizer: [evaluation/hotpot_official_eval.py, evaluation/evaluate_owl_qa_predictions.py, evaluation/collect_final_results.py]
+    manifest_file: null
+    known_sha256: {}
+    frozen: true
+    externally_archived: unknown
+    notes: dbdbb507 is tagged conference-submission but is not yet formally proven as the exact publication source. Ignored assets lack a commit-bound top-level manifest.

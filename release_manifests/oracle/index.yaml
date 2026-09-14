@@ -1,0 +1,27 @@
+schema_version: sageqa_logical_release_index_v1
+category: oracle
+bundles:
+  - logical_name: gold_support_complete_oracle
+    protocol: order-preserving deduplicated union of all persisted gold-support alternatives, then support-grounded answer generation
+    status: complete_frozen_post_publication_oracle
+    source_revision: 884480be53c554edae70d3b2d8e781847590aa69
+    dataset: ten_dataset_suite
+    hop: mixed_1hop_2hop
+    split: TEST_support_bearing_rows
+    gold_access_policy: oracle_only; gold support intentionally exposed; no retrieval or ranking claim
+    leakage_status: oracle_condition_explicit
+    data_root: data/production_generator_d_v1
+    checkpoint_root: null
+    policy_root: null
+    result_root: outputs/final_results/gold_support_complete_oracle
+    producing_entry_point: generation/run_gold_support_complete_oracle.py
+    evaluator_finalizer: evaluation/finalize_provenance_correction.py
+    manifest_file: outputs/final_results/gold_support_complete_oracle/artifact_manifest.json
+    known_sha256:
+      frozen_reader_inputs: 332cf48fae2b03a6d08e7560d9bf9e3056a7aff855da54caf4eb8a8c5371bd56
+      predictions: 27dcdbd6c4cdac8388502a24d6d2d0cb6ce422a95b8cac09a9c364cd45630dae
+      metrics: 8ab0d547d3c1cbf6a1bfddacb5696393f79ac56e07e16d396af43401bbe7519f
+      oracle_manifest: a07952efce24d9f7014c6b51da59d520d9cad625f8ac67d8d9073c40a5fb53a0
+    frozen: true
+    externally_archived: unknown
+    notes: 3509 rows. Must remain distinct from the historical Gold Support condition embedded in the final thesis bundle.

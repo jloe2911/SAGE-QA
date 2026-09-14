@@ -1,0 +1,26 @@
+schema_version: sageqa_frozen_path_map_v1
+purpose: Interpret machine-local strings without rewriting frozen files.
+rewrite_frozen_files: false
+mappings:
+  - historical_prefix: 'C:\Users\julie\github\PhD\SAGE-QA\'
+    logical_prefix: repository_root/
+    repository_relative: ./
+  - historical_prefix: 'C:\Users\julie\github\PhD\SAGE-QA\.venv\Scripts\python.exe'
+    logical_prefix: python_runtime
+    repository_relative: .venv/Scripts/python.exe
+  - historical_prefix: 'C:\Users\julie\AppData\Local\Programs\Python\Python312\python.exe'
+    logical_prefix: python_runtime
+    repository_relative: null
+  - historical_prefix: '/home/coder/.cache/huggingface/hub/models--distilbert-base-uncased/snapshots/12040accade4e8a0f71eabdb258fecc2e7e948be'
+    logical_prefix: distilbert_base_snapshot
+    repository_relative: null
+logical_roots:
+  generator_d: data/production_generator_d_v1
+  hard_pair_checkpoint: checkpoints/production_generator_d_v2_hard_pair
+  cross_encoder_checkpoint: outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final
+  thesis_final_results: outputs/final_results/final_manuscript_test_end_to_end
+  baseline_results: outputs/final_results/final_manuscript_baselines_test_end_to_end
+  complete_oracle: outputs/final_results/gold_support_complete_oracle
+notes:
+  - Runtime resolvers may map logical model identity to a local snapshot, but manifests retain their recorded model name and revision.
+  - This sidecar is descriptive. It does not claim that a repository-relative Python environment or Hugging Face snapshot is portable.

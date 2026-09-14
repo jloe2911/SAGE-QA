@@ -1,0 +1,26 @@
+schema_version: sageqa_logical_release_index_v1
+category: thesis_graph_ablation
+bundles:
+  - logical_name: generator_d_hard_pair_v2_graphsage_ablation
+    protocol: hard-pair GraphSAGE training architecture with frozen GNN-only and SAGE-QA adaptive policies
+    status: complete_frozen_test_evaluation
+    source_revision: 884480be53c554edae70d3b2d8e781847590aa69
+    dataset: ten_dataset_suite
+    hop: mixed_1hop_2hop
+    split: DEV_policy_and_TEST_once
+    gold_access_policy: DEV-only policy fitting; one-time TEST inference; evaluation gold joined afterward
+    leakage_status: TEST_gold_free_until_evaluation
+    data_root: data/production_generator_d_v1
+    checkpoint_root: checkpoints/production_generator_d_v2_hard_pair
+    policy_root: [outputs/development_runs/production_generator_d_v2_hard_pair_gnn_only_adaptive_k, outputs/development_runs/production_generator_d_v2_hard_pair_sageqa_final_adaptive_k]
+    result_root: outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval
+    producing_entry_point: evaluation/run_production_test_retrieval.py
+    evaluator_finalizer: [evaluation/audit_final_test_evaluation.py, generation/run_production_test_answer_generation.py]
+    manifest_file: outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/artifact_manifest.json
+    known_sha256:
+      retrieval_rows: 1575240aa4e2f0cf53e34b793d91181b3f75b87c06ef9849da13506488fc12c5
+      end_to_end_predictions: 751d9aac2ee19f0fe5c9191bb4c6df3c9160790c1fdea32d41a4c08d07406b4b
+      end_to_end_metrics: 3215b1ffe7e32083fad891e67d4fc4a8d557c64390c38c1f90d2b9e5f6b5d9c1
+    frozen: true
+    externally_archived: unknown
+    notes: K-sensitivity and final TEST audit remain associated roots; this is an ablation lineage, not the cross-encoder checkpoint.

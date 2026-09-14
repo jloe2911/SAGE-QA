@@ -1,0 +1,49 @@
+schema_version: sageqa_logical_release_index_v1
+category: thesis_final
+bundles:
+  - logical_name: thesis_final_generator_d_cross_encoder_adaptive_answers
+    protocol: frozen Generator D -> frozen DistilBERT cross-encoder -> Text-Chain/Proof -> adaptive support -> support-grounded reader
+    status: complete_frozen
+    source_revision: 884480be53c554edae70d3b2d8e781847590aa69
+    dataset: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, pizza_100_1hop, pizza_100_2hop, pizza_250_1hop, pizza_250_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    hop: mixed_1hop_2hop
+    split: TEST
+    gold_access_policy: predictions and reader inputs frozen before evaluation gold join
+    leakage_status: gold_free_retrieval_and_generation; support gold used only by evaluator
+    data_root: data/production_generator_d_v1
+    checkpoint_root: outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final
+    policy_root: [outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k, outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k]
+    result_root: outputs/final_results/final_manuscript_test_end_to_end
+    producing_entry_point: generation/run_final_manuscript_answer_generation.py
+    evaluator_finalizer: evaluation/finalize_final_manuscript_end_to_end.py
+    manifest_file: outputs/final_results/final_manuscript_test_end_to_end/artifact_manifest.json
+    known_sha256:
+      generator_d_66_entry_aggregate: 27a4c149181e96df1fa9aca581eaeee17e354755f6a034ce93f2021b496296e5
+      retrieval_predictions: 0251c2d28bf251a7ba6c83dd0ebfa8b3afb8c88bb917fa4331bcbf118cf5b7ac
+      reader_predictions: 03e391ed697fb25a07439ec7664544cd6582d2a2dffc868bb9f972c1ae9236d3
+      canonical_metrics: 8cc472c49cd4ab4dca55a57d97fb6560557f2cf846c5d445e35775a07ba54c43
+    frozen: true
+    externally_archived: unknown
+    notes: Answer denominator 4249; Support/Joint denominator 3509; equal-dataset macro primary. Historical Gold Support is not the complete oracle.
+  - logical_name: thesis_final_canonical_retrieval_hard_pair_v2
+    protocol: frozen cross-encoder and final SAGE-QA rankings with hard-pair-v2 GraphSAGE lineage
+    status: complete_frozen_artifact_only_export
+    source_revision: 884480be53c554edae70d3b2d8e781847590aa69
+    dataset: ten_dataset_suite
+    hop: mixed_1hop_2hop
+    split: TEST
+    gold_access_policy: matched eligible cohort scored after frozen ranking
+    leakage_status: gold_free_ranking
+    data_root: data/production_generator_d_v1
+    checkpoint_root: checkpoints/production_generator_d_v2_hard_pair
+    policy_root: outputs/development_runs/production_generator_d_v2_hard_pair_sageqa_final_adaptive_k
+    result_root: outputs/final_results/manuscript_retrieval_results_hard_pair_v2
+    producing_entry_point: evaluation/export_manuscript_retrieval_results.py
+    evaluator_finalizer: evaluation/export_manuscript_retrieval_results.py
+    manifest_file: outputs/final_results/manuscript_retrieval_results_hard_pair_v2/artifact_manifest.json
+    known_sha256:
+      hard_pair_test_retrieval: 1575240aa4e2f0cf53e34b793d91181b3f75b87c06ef9849da13506488fc12c5
+      manifest: b4ff31b88821e65284814b707309075fbe1bd76aec0c7ee26aac63bb4acf69e9
+    frozen: true
+    externally_archived: unknown
+    notes: Preserves the earlier V1 canonical retrieval export separately.

@@ -1,0 +1,23 @@
+schema_version: sageqa_logical_release_index_v1
+category: development
+bundles:
+  - logical_name: rejected_exploratory_diagnostic_and_incomplete_work
+    protocol: heterogeneous DEV-only interventions, diagnostics, rejected mechanisms, aborted runs, and incomplete attempts
+    status: indexed_not_physically_archived
+    source_revision: mixed; consult per-run metadata
+    dataset: mixed
+    hop: mixed
+    split: primarily_DEV; verify_each_run
+    gold_access_policy: heterogeneous; never promote to TEST evidence without per-run audit
+    leakage_status: heterogeneous_or_not_applicable
+    data_root: data/development
+    checkpoint_root: checkpoints/development
+    policy_root: outputs/development_runs
+    result_root: [outputs/development_runs, outputs/diagnostics, outputs/final_model_development, outputs/quarantine]
+    producing_entry_point: multiple_diagnostic_and_development_scripts
+    evaluator_finalizer: multiple; consult embedded summaries
+    manifest_file: release_manifests/hidden_untracked_classification.yaml
+    known_sha256: {}
+    frozen: false
+    externally_archived: false
+    notes: Includes rejected FamilyOWL selector/compiler v2. This logical index neither deletes nor moves negative results.

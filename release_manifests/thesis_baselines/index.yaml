@@ -1,0 +1,28 @@
+schema_version: sageqa_logical_release_index_v1
+category: thesis_baseline
+bundles:
+  - logical_name: thesis_final_lexical_gnn_rag_full_context_baselines
+    protocol: lexical k1, clean GNN-RAG k1, and gold-free full context on the frozen ten-dataset TEST cohort
+    status: complete_frozen
+    source_revision: 884480be53c554edae70d3b2d8e781847590aa69
+    dataset: ten_dataset_suite
+    hop: mixed_1hop_2hop
+    split: TEST
+    gold_access_policy: reader inputs and predictions frozen before answer/support evaluation
+    leakage_status: gold_fields_excluded_from_retrieval_and_reader_input_construction
+    data_root: data/production_generator_d_v1
+    checkpoint_root: checkpoints/production_generator_d_v1_gnn_rag_clean
+    policy_root: null
+    result_root: outputs/final_results/final_manuscript_baselines_test_end_to_end
+    producing_entry_point: generation/run_final_manuscript_baselines.py
+    evaluator_finalizer: evaluation/finalize_final_manuscript_end_to_end.py
+    manifest_file: outputs/final_results/final_manuscript_baselines_test_end_to_end/artifact_manifest.json
+    known_sha256:
+      reader_inputs: 7096b39451e1f29c96ab121cb93fb1b84ebb2a634c92a6caf816503bdb2caa33
+      predictions: 2fec835e829cc532183cff202456f3e6647872b140416e33b82b0893c3521a43
+      metrics: 626b18315aa5aa64fd455a6471baffb97e774a2a81b47e107a52e44fcbc36e43
+      lexical_retrieval: f7f12d4729ca3815aef7f222a46668ff870e8ec44aebb1dc3b425b925470236f
+      gnn_rag_predictions: 6b343bd8ae1728847e3379e53b1755e853eef71d2cdb080d286b3335d994bee6
+    frozen: true
+    externally_archived: unknown
+    notes: Retrieval components remain under production_generator_d_v1_test_baselines; failed native attempts there are development, not baseline results.
