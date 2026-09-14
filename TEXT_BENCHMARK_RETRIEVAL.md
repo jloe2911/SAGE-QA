@@ -1,5 +1,11 @@
 # HotpotQA and 2Wiki Retrieval Data
 
+> **Scope:** This is a specialized technical note about text-evidence representation and
+> retrieval scoring. It is not the overall SAGE-QA architecture or reproduction guide.
+> Start with [`README.md`](README.md), then use
+> [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for protocol generations and
+> [`REPRODUCE.md`](REPRODUCE.md) for commands and dependency boundaries.
+
 This note explains what one text QA example becomes inside SAGE-QA. The same
 schema is used for HotpotQA and 2WikiMultiHopQA: raw benchmark examples are
 converted into candidate support-subgraph rows, then a retriever ranks those

@@ -1,0 +1,5 @@
+-r requirements.txt
+
+pytest==9.0.2
+jupyter==1.1.1
+nbclient==0.10.4

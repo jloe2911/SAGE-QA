@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [
+  ".git",
+  ".venv",
+  ".cache",
+  "checkpoints",
+  "data",
+  "outputs",
+  "results",
+  "third_party",
+  "pytest-cache-files-*",
+]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "-p",
+  "no:cacheprovider",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
