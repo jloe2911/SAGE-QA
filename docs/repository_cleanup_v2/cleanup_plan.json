@@ -1,0 +1,232 @@
+{
+  "schema_version": "sageqa_repository_cleanup_plan_v2",
+  "created_at": "2026-09-11T18:10:43+02:00",
+  "repository": "C:\\Users\\julie\\github\\PhD\\SAGE-QA",
+  "git": {
+    "branch": "main",
+    "commit": "25be348f4cf885e258f65d5a28bfc62abbb94158",
+    "status": "3_untracked_0_tracked_modifications_at_snapshot"
+  },
+  "authorization": {
+    "phase": "audit_only",
+    "execute_operations": false,
+    "forbidden": [
+      "delete",
+      "move",
+      "rename",
+      "modify_frozen_artifacts",
+      "training",
+      "inference",
+      "answer_generation",
+      "git_clean",
+      "git_reset",
+      "git_add_A"
+    ]
+  },
+  "snapshot": {
+    "measured_at": "2026-09-11T18:10:43+02:00",
+    "accessible_file_count": 62489,
+    "accessible_bytes": 41910391680,
+    "lower_bound_due_to_acl_errors": true,
+    "acl_blocked_roots": 12,
+    "live_output_made_size_transient": true
+  },
+  "canonical_pipeline": [
+    "generator_d_frozen_v1",
+    "question_candidate_distilbert_cross_encoder",
+    "text_chain_for_text_or_proof_for_ontology",
+    "support_aggregation",
+    "support_grounded_answer_generation"
+  ],
+  "classification_counts_path_units": {
+    "SAFE_DELETE": 28,
+    "SAFE_ARCHIVE": 32,
+    "KEEP_FINAL": 38,
+    "KEEP_LEGACY": 42,
+    "NEEDS_REVIEW": 36
+  },
+  "size_estimates": {
+    "conditionally_removable_known_bytes": 5781065147,
+    "archiveable_bytes": 1002367860,
+    "duplicate_theoretical_redundant_bytes_not_safe_to_delete": 887816341
+  },
+  "hard_gates": [
+    {
+      "id": "G1",
+      "condition": "final_manuscript_test_end_to_end is complete and no process is writing it",
+      "satisfied": false,
+      "evidence": "artifact manifest status was preflight_complete_no_api_calls and predictions.jsonl was changing"
+    },
+    {
+      "id": "G2",
+      "condition": "predictions are frozen before gold join and final generation/evaluation manifests verify",
+      "satisfied": false
+    },
+    {
+      "id": "G3",
+      "condition": "two immutable backups and their checksum manifests verify",
+      "satisfied": false
+    },
+    {
+      "id": "G4",
+      "condition": "original-paper and final source lineages are pinned",
+      "satisfied": false
+    },
+    {
+      "id": "G5",
+      "condition": "path consumers are configurable and compatibility wrappers pass",
+      "satisfied": false
+    },
+    {
+      "id": "G6",
+      "condition": "user approves an exact operation allowlist",
+      "satisfied": false
+    }
+  ],
+  "protected_roots": [
+    "data/production_generator_d_v1",
+    "experiments/cross_encoder_reranking_dev_v1",
+    "outputs/development_runs/question_candidate_cross_encoder_v1",
+    "outputs/development_runs/question_candidate_cross_encoder_v1_adaptive_input",
+    "outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k",
+    "outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k",
+    "outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40",
+    "outputs/final_results/manuscript_retrieval_results",
+    "outputs/final_results/final_manuscript_test_end_to_end"
+  ],
+  "proposed_operations": [
+    {
+      "id": "PRESERVE-01",
+      "type": "backup",
+      "source": ".",
+      "destination": "USER_APPROVED_IMMUTABLE_BACKUP",
+      "execute": false,
+      "requires": ["G1", "G2", "G6"]
+    },
+    {
+      "id": "INDEX-01",
+      "type": "create_release_indexes",
+      "targets": [
+        "thesis_final",
+        "thesis_baselines",
+        "thesis_graph_ablation",
+        "paper_original",
+        "development_archive"
+      ],
+      "execute": false,
+      "requires": ["G2", "G3", "G4", "G6"]
+    },
+    {
+      "id": "ARCHIVE-01",
+      "type": "move_with_hash_verification",
+      "source": "outputs/development_diagnostics",
+      "destination": "outputs/development_archive/diagnostics",
+      "expected_bytes_at_snapshot": 73900581,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G5", "G6"]
+    },
+    {
+      "id": "ARCHIVE-02",
+      "type": "move_with_hash_verification",
+      "source": "outputs/diagnostics",
+      "destination": "outputs/development_archive/status_partitioned",
+      "expected_bytes_at_snapshot": 27395576,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G5", "G6"]
+    },
+    {
+      "id": "ARCHIVE-03",
+      "type": "move_with_hash_verification",
+      "source": "outputs/final_model_development",
+      "destination": "outputs/development_archive/rejected/static_hard",
+      "expected_bytes_at_snapshot": 9020751,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G5", "G6"]
+    },
+    {
+      "id": "ARCHIVE-04",
+      "type": "move_with_hash_verification",
+      "source": "outputs/quarantine",
+      "destination": "outputs/development_archive/aborted",
+      "expected_bytes_at_snapshot": 20047392,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G5", "G6"]
+    },
+    {
+      "id": "ARCHIVE-05",
+      "type": "classify_then_move",
+      "source": "checkpoints/development",
+      "destination": "USER_APPROVED_DEVELOPMENT_ARCHIVE/checkpoints",
+      "expected_bytes_at_snapshot": 781219644,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G4", "G5", "G6"]
+    },
+    {
+      "id": "ARCHIVE-06",
+      "type": "partition_then_move",
+      "source": "outputs/development_runs",
+      "exclude": [
+        "question_candidate_cross_encoder_v1",
+        "question_candidate_cross_encoder_v1_adaptive_input",
+        "question_candidate_cross_encoder_v1_cross_encoder_adaptive_k",
+        "question_candidate_cross_encoder_v1_final_sageqa_adaptive_k"
+      ],
+      "expected_archiveable_bytes_at_snapshot": 90277981,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G5", "G6"]
+    },
+    {
+      "id": "DELETE-01",
+      "type": "delete_exact_recreatable_caches",
+      "targets": [
+        ".ruff_cache",
+        "data/__pycache__",
+        "data_processing/__pycache__",
+        "evaluation/__pycache__",
+        "experiments/__pycache__",
+        "experiments/cross_encoder_reranking_dev_v1/__pycache__",
+        "generation/__pycache__",
+        "models/__pycache__",
+        "outputs/development_diagnostics/final_bottleneck_analysis/__pycache__",
+        "tests/__pycache__",
+        "training/__pycache__",
+        "utils/__pycache__"
+      ],
+      "expected_known_bytes_at_snapshot": 2577064,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G6"]
+    },
+    {
+      "id": "DELETE-02",
+      "type": "delete_environment",
+      "target": ".venv",
+      "expected_bytes_at_snapshot": 5778488083,
+      "execute": false,
+      "requires": ["G1", "G2", "G3", "G6", "replacement_environment_verified"]
+    },
+    {
+      "id": "REVIEW-01",
+      "type": "manual_decision",
+      "targets": [
+        ".worktrees/sageqa-original-eval-compat",
+        "artifacts/step_01_context_to_kg/wikidata_cache",
+        "dist/sageqa-submission-artifacts.zip",
+        "checkpoints/production_generator_d_v1",
+        "checkpoints/production_generator_d_static_hard_v1",
+        "third_party/GNN-RAG generated payload",
+        "23 ignored_or_untracked tests",
+        ".git/objects"
+      ],
+      "execute": false,
+      "requires": ["G6"]
+    }
+  ],
+  "verification": {
+    "cross_encoder_test_manifest": "4_of_4_members_ok",
+    "manuscript_retrieval_manifest": "21_of_21_members_and_sources_ok",
+    "final_answer_preflight_manifest": "2_of_2_listed_members_ok_but_bundle_not_final",
+    "python_ast": "134_files_0_syntax_errors",
+    "ruff_f401": "41_findings_no_fixes",
+    "exact_duplicate_scan": "108_groups_no_deletion_authorized"
+  }
+}

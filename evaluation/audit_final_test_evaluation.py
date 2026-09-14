@@ -8,7 +8,6 @@ and writes diagnostics under ``outputs/audits/final_test_evaluation_audit``.
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import math
@@ -27,7 +26,6 @@ if __package__ in {None, ""}:
 from evaluation.evaluate_owl_qa_predictions import (  # noqa: E402
     answer_set_scores,
     best_support_scores,
-    normalize_answer as normalize_ontology_answer,
     split_answer_items,
 )
 from evaluation.hotpot_official_eval import (  # noqa: E402

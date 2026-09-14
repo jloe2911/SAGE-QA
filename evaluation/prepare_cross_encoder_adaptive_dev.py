@@ -12,7 +12,7 @@ import argparse
 import hashlib
 import json
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 

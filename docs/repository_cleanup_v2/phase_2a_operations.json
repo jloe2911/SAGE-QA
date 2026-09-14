@@ -1,0 +1,92 @@
+{
+  "schema_version": "sageqa_repository_cleanup_phase_2a_operations_v1",
+  "phase": "2A",
+  "repository": "C:\\Users\\julie\\github\\PhD\\SAGE-QA",
+  "git_commit": "25be348f4cf885e258f65d5a28bfc62abbb94158",
+  "scope": {
+    "unique_deleted_paths": 14,
+    "predelete_files": 136,
+    "predelete_bytes": 2503867,
+    "final_absent_paths": 14,
+    "new_cleanup_targets_added_during_validation": 0,
+    "archives": 0,
+    "moves": 0,
+    "renames": 0
+  },
+  "operations": [
+    {"operation": "delete_directory", "path": ".ruff_cache", "predelete_files": 26, "predelete_bytes": 9529, "reason": "re-creatable Ruff cache", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "data/__pycache__", "predelete_files": 2, "predelete_bytes": 43701, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "data_processing/__pycache__", "predelete_files": 8, "predelete_bytes": 239147, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "evaluation/__pycache__", "predelete_files": 68, "predelete_bytes": 1436038, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "experiments/__pycache__", "predelete_files": 4, "predelete_bytes": 90568, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "generation/__pycache__", "predelete_files": 6, "predelete_bytes": 215803, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "models/__pycache__", "predelete_files": 9, "predelete_bytes": 145605, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "outputs/development_diagnostics/final_bottleneck_analysis/__pycache__", "predelete_files": 1, "predelete_bytes": 85187, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "tests/__pycache__", "predelete_files": 3, "predelete_bytes": 102825, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "training/__pycache__", "predelete_files": 5, "predelete_bytes": 119169, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "utils/__pycache__", "predelete_files": 4, "predelete_bytes": 16295, "reason": "re-creatable Python bytecode", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": ".deepeval", "predelete_files": 0, "predelete_bytes": 0, "reason": "empty local tool-state directory", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "outputs/.test_scratch_adaptive_k", "predelete_files": 0, "predelete_bytes": 0, "reason": "empty test-output root", "protected_overlap": false, "final_exists": false},
+    {"operation": "delete_directory", "path": "outputs/test_runs", "predelete_files": 0, "predelete_bytes": 0, "reason": "empty test-output root", "protected_overlap": false, "final_exists": false}
+  ],
+  "validation_pass_regenerated_target_removals": [
+    {"path": "evaluation/__pycache__", "files": 6, "bytes": 72084, "contents_verified": "pyc_only", "final_exists": false},
+    {"path": "generation/__pycache__", "files": 3, "bytes": 99858, "contents_verified": "pyc_only", "final_exists": false},
+    {"path": "utils/__pycache__", "files": 1, "bytes": 3424, "contents_verified": "pyc_only", "final_exists": false},
+    {"path": "outputs/test_runs", "files": 0, "bytes": 0, "contents_verified": "empty", "final_exists": false}
+  ],
+  "bytes": {
+    "unique_predelete_snapshot_removed": 2503867,
+    "regenerated_transient_bytes_removed_on_validation_pass": 175366,
+    "physical_bytes_removed_across_both_passes_including_regeneration": 2679233,
+    "reported_repository_space_saving_without_double_counting": 2503867
+  },
+  "protected_validation": {
+    "deletion_allowlist_overlaps_protected_roots": false,
+    "protected_roots_present": 8,
+    "protected_roots_missing": [],
+    "frozen_final_retrieval_members": {"matched": 4, "checked": 4},
+    "manuscript_retrieval_export_members_and_sources": {"matched": 21, "checked": 21},
+    "final_answer_preflight_sources_candidates_and_reader_inputs": {"matched": 16, "checked": 16},
+    "completed_final_bundle_members": {"matched": 14, "checked": 14},
+    "frozen_predictions": {
+      "expected_sha256": "03e391ed697fb25a07439ec7664544cd6582d2a2dffc868bb9f972c1ae9236d3",
+      "actual_sha256": "03e391ed697fb25a07439ec7664544cd6582d2a2dffc868bb9f972c1ae9236d3",
+      "matched": true
+    },
+    "a40_checkpoint_and_tokenizer": {"matched": 6, "checked": 6},
+    "a40_source_code_raw_bytes": {
+      "matched": 6,
+      "checked": 7,
+      "failure": "training/train_gnn_subgraph_retriever.py",
+      "expected_sha256": "a2bc6624cb582cc8aa6298154fff4c69145c2589b2a18410fcc5625e23797898",
+      "actual_crlf_sha256": "6776a2afd18348c0be47e092a5b853a3faae89f9b24436938348f3dcbbdcc977",
+      "lf_normalized_sha256": "a2bc6624cb582cc8aa6298154fff4c69145c2589b2a18410fcc5625e23797898",
+      "deletion_related": false
+    }
+  },
+  "validation": {
+    "first_party_python_compile": {"files": 135, "failures": 0},
+    "focused_no_inference_no_api_tests": {"passed": 64, "failed": 0, "errors": 0, "duration_seconds": 9.92},
+    "sandbox_attempt": {"status": "infrastructure_acl_failure", "product_failure": false},
+    "inference_invoked": false,
+    "answer_generation_invoked": false,
+    "test_evaluation_workflow_invoked": false,
+    "api_calls_invoked": false,
+    "broken_import_or_test_caused_by_deletion": false
+  },
+  "repository_snapshot": {
+    "accessible_bytes": "41938343674",
+    "accessible_file_count": "62404",
+    "lower_bound_due_to_acl_errors": true,
+    "acl_blocked_roots": 12,
+    "measurement": "os.walk accessible regular files and os.path.getsize"
+  },
+  "needs_review": [
+    "A40 raw-byte source hash is line-ending-sensitive; the current CRLF file matches after LF normalization.",
+    "Twelve pre-existing pytest scratch roots remain ACL-blocked and outside Phase 2A scope.",
+    "Disposable bytecode and empty test roots can be regenerated by protected finalization or focused tests."
+  ],
+  "new_safe_delete_to_needs_review_reclassifications": [],
+  "hard_stop": "No further deletions, archiving, moves, renames, reorganization, or Phase 2B operations."
+}
