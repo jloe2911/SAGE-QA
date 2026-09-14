@@ -46,6 +46,7 @@ from evaluation.evaluate_adaptive_support_aggregation_v2 import (  # noqa: E402
     grouped_oof,
     model_description,
 )
+from utils.paths import outputs_root, repo_display_path, repo_path_arg  # noqa: E402
 
 
 ALLOWED_K = (1, 2, 3, 5)
@@ -528,7 +529,7 @@ def fit(args: argparse.Namespace) -> None:
         "source_code_commit_hash": source_metadata.get("code_commit_hash"),
         "git_status_after": git_output("status", "--short").splitlines(),
         "python": platform.python_version(),
-        "source_directory": str(input_dir),
+        "source_directory": repo_display_path(input_dir),
         "source_artifact_sha256": input_hashes_before,
         "source_artifacts_unchanged": input_hashes_before == input_hashes_after,
         "source_checkpoint_metadata": source_metadata,
@@ -545,7 +546,7 @@ def fit(args: argparse.Namespace) -> None:
             for dataset, values in source_metadata.get("datasets", {}).items()
         },
         "input_scope": "three persisted clean DEV output artifacts for fitting",
-        "accessed_files": [str(path) for path in input_paths],
+        "accessed_files": [repo_display_path(path) for path in input_paths],
         "fit_process_test_files_opened": 0,
         "test_scores_labels_answers_or_gold_used": False,
         "candidate_generation_rerun": False,
@@ -669,13 +670,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input-dir",
-        type=Path,
-        default=Path("outputs/development_runs/production_generator_d_v1_k_sensitivity"),
+        type=repo_path_arg,
+        default=outputs_root() / "development_runs/production_generator_d_v1_k_sensitivity",
     )
     parser.add_argument(
         "--output-dir",
-        type=Path,
-        default=Path("outputs/development_runs/production_generator_d_v1_gnn_adaptive_k"),
+        type=repo_path_arg,
+        default=outputs_root() / "development_runs/production_generator_d_v1_gnn_adaptive_k",
     )
     parser.add_argument(
         "--ranking-method",

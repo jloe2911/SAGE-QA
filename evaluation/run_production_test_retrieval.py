@@ -50,6 +50,14 @@ from training.train_gnn_subgraph_retriever import (
     prepare_examples,
     score_candidate_rows,
 )
+from utils.paths import (
+    checkpoints_root,
+    generator_d_root,
+    outputs_root,
+    repo_display_path,
+    repo_path_arg,
+    repo_root,
+)
 
 
 ALLOWED_K = (1, 2, 3, 5)
@@ -603,24 +611,26 @@ def summary_markdown(metrics: Mapping[str, Any]) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
+    parser.add_argument("--data-root", type=repo_path_arg, default=generator_d_root())
     parser.add_argument(
-        "--checkpoint-root", type=Path, default=Path("checkpoints/production_generator_d_v1")
+        "--checkpoint-root",
+        type=repo_path_arg,
+        default=checkpoints_root() / "production_generator_d_v1",
     )
     parser.add_argument(
         "--sageqa-policy-dir",
-        type=Path,
-        default=Path("outputs/development_runs/production_generator_d_v1_adaptive_k"),
+        type=repo_path_arg,
+        default=outputs_root() / "development_runs/production_generator_d_v1_adaptive_k",
     )
     parser.add_argument(
         "--gnn-policy-dir",
-        type=Path,
-        default=Path("outputs/development_runs/production_generator_d_v1_gnn_adaptive_k"),
+        type=repo_path_arg,
+        default=outputs_root() / "development_runs/production_generator_d_v1_gnn_adaptive_k",
     )
     parser.add_argument(
         "--output-dir",
-        type=Path,
-        default=Path("outputs/final_results/production_generator_d_v1_test_retrieval"),
+        type=repo_path_arg,
+        default=outputs_root() / "final_results/production_generator_d_v1_test_retrieval",
     )
     parser.add_argument("--candidate-batch-size", type=int, default=64)
     parser.add_argument("--max-length", type=int, default=128)
@@ -631,7 +641,7 @@ def main() -> None:
     args = parse_args()
     if args.output_dir.exists():
         raise FileExistsError(f"Refusing to overwrite final result: {args.output_dir}")
-    root = Path(__file__).resolve().parents[1]
+    root = repo_root()
     command = [sys.executable, str(Path(__file__).relative_to(root)), *sys.argv[1:]]
     commit = git_output("rev-parse", "HEAD")
     status_before = git_output("status", "--short").splitlines()
@@ -817,11 +827,11 @@ def main() -> None:
         "evaluation_command_argv": command,
         "evaluation_command_display": subprocess.list2cmdline(command),
         "configuration": {
-            "data_root": str(args.data_root),
-            "checkpoint_root": str(args.checkpoint_root),
-            "sageqa_policy_dir": str(args.sageqa_policy_dir),
-            "gnn_policy_dir": str(args.gnn_policy_dir),
-            "output_dir": str(args.output_dir),
+            "data_root": repo_display_path(args.data_root),
+            "checkpoint_root": repo_display_path(args.checkpoint_root),
+            "sageqa_policy_dir": repo_display_path(args.sageqa_policy_dir),
+            "gnn_policy_dir": repo_display_path(args.gnn_policy_dir),
+            "output_dir": repo_display_path(args.output_dir),
             "candidate_batch_size": args.candidate_batch_size,
             "max_length": args.max_length,
             "fixed_k": [1, 3],

@@ -12,15 +12,25 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from generation import run_production_test_answer_generation as production
+from utils.paths import (
+    complete_oracle_root,
+    cross_encoder_test_root,
+    final_answer_root,
+    manuscript_retrieval_root,
+    outputs_root,
+    provenance_correction_root,
+    repo_display_path,
+    repo_root,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
-ORACLE_ROOT = ROOT / "outputs/final_results/gold_support_complete_oracle"
-GNN_ROOT = ROOT / "outputs/final_results/manuscript_retrieval_results_hard_pair_v2"
-HISTORICAL_GNN_ROOT = ROOT / "outputs/final_results/manuscript_retrieval_results"
-SELECTION_ROOT = ROOT / "outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40"
-ANSWER_ROOT = ROOT / "outputs/final_results/final_manuscript_test_end_to_end"
-OUTPUT = ROOT / "outputs/final_results/provenance_correction_v1"
+ROOT = repo_root()
+ORACLE_ROOT = complete_oracle_root()
+GNN_ROOT = manuscript_retrieval_root()
+HISTORICAL_GNN_ROOT = outputs_root() / "final_results/manuscript_retrieval_results"
+SELECTION_ROOT = cross_encoder_test_root()
+ANSWER_ROOT = final_answer_root()
+OUTPUT = provenance_correction_root()
 
 
 def read_json(path: Path) -> Any:
@@ -88,30 +98,30 @@ def main() -> dict[str, Any]:
 
     protected = {
         "cross_encoder_frozen_predictions": {
-            "path": str((SELECTION_ROOT / "test_predictions_frozen.jsonl").relative_to(ROOT)),
+            "path": repo_display_path(SELECTION_ROOT / "test_predictions_frozen.jsonl"),
             "sha256": selection_hash,
             "condition_path": "methods.cross_encoder",
         },
         "final_sageqa_k1_frozen_predictions": {
-            "path": str((SELECTION_ROOT / "test_predictions_frozen.jsonl").relative_to(ROOT)),
+            "path": repo_display_path(SELECTION_ROOT / "test_predictions_frozen.jsonl"),
             "sha256": selection_hash,
             "condition_path": "methods.final_sageqa.k1",
         },
         "final_sageqa_adaptive_frozen_predictions": {
-            "path": str((SELECTION_ROOT / "test_predictions_frozen.jsonl").relative_to(ROOT)),
+            "path": repo_display_path(SELECTION_ROOT / "test_predictions_frozen.jsonl"),
             "sha256": selection_hash,
             "condition_path": "methods.final_sageqa.adaptive",
         },
         "main_reader_predictions": {
-            "path": str((ANSWER_ROOT / "predictions.jsonl").relative_to(ROOT)),
+            "path": repo_display_path(ANSWER_ROOT / "predictions.jsonl"),
             "sha256": answer_hash,
         },
         "main_reader_metrics": {
-            "path": str((ANSWER_ROOT / "metrics.json").relative_to(ROOT)),
+            "path": repo_display_path(ANSWER_ROOT / "metrics.json"),
             "sha256": metrics_hash,
         },
         "main_canonical_metrics": {
-            "path": str((ANSWER_ROOT / "canonical_metrics.json").relative_to(ROOT)),
+            "path": repo_display_path(ANSWER_ROOT / "canonical_metrics.json"),
             "sha256": canonical_hash,
         },
     }
@@ -120,15 +130,15 @@ def main() -> dict[str, Any]:
         "status": "complete_verified",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "corrected_gold_support_manifest": {
-            "path": str(oracle_manifest_path.relative_to(ROOT)),
+            "path": repo_display_path(oracle_manifest_path),
             "sha256": production.sha256(oracle_manifest_path),
         },
         "hard_pair_v2_gnn_manifest": {
-            "path": str(gnn_manifest_path.relative_to(ROOT)),
+            "path": repo_display_path(gnn_manifest_path),
             "sha256": production.sha256(gnn_manifest_path),
         },
         "historical_gnn_manifest_preserved": {
-            "path": str((HISTORICAL_GNN_ROOT / "artifact_manifest.json").relative_to(ROOT)),
+            "path": repo_display_path(HISTORICAL_GNN_ROOT / "artifact_manifest.json"),
             "sha256": production.sha256(HISTORICAL_GNN_ROOT / "artifact_manifest.json"),
         },
         "protected_main_artifacts": protected,

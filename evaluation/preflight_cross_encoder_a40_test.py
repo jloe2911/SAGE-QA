@@ -20,6 +20,13 @@ from experiments.cross_encoder_reranking_dev_v1.run_experiment import (  # noqa:
     MAX_LENGTH,
     safe_inference_row,
 )
+from utils.paths import (  # noqa: E402
+    cross_encoder_root,
+    generator_d_root,
+    repo_display_path,
+    repo_path_arg,
+    repo_root,
+)
 
 
 EXPECTED = {
@@ -135,7 +142,7 @@ def main(args: argparse.Namespace) -> None:
         datasets[dataset] = {
             "domain": domain,
             "score_mode": score_mode,
-            "test_candidate_path": str(path),
+            "test_candidate_path": repo_display_path(path),
             "test_candidate_sha256": actual_hash,
             "expected_examples": examples,
             "candidate_rows": rows,
@@ -160,7 +167,7 @@ def main(args: argparse.Namespace) -> None:
             "gold_source_files_opened": 0,
             "prediction_freeze_required_before_evaluate": True,
         },
-        "code_sha256": {name: sha256(Path(name)) for name in CODE_FILES},
+        "code_sha256": {name: sha256(repo_root() / name) for name in CODE_FILES},
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
@@ -171,15 +178,15 @@ def main(args: argparse.Namespace) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
+    parser.add_argument("--data-root", type=repo_path_arg, default=generator_d_root())
     parser.add_argument(
         "--cross-encoder-dir",
-        type=Path,
-        default=Path("outputs/development_runs/question_candidate_cross_encoder_v1"),
+        type=repo_path_arg,
+        default=cross_encoder_root(),
     )
-    parser.add_argument("--cross-encoder-policy-dir", type=Path, required=True)
-    parser.add_argument("--final-sageqa-policy-dir", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--cross-encoder-policy-dir", type=repo_path_arg, required=True)
+    parser.add_argument("--final-sageqa-policy-dir", type=repo_path_arg, required=True)
+    parser.add_argument("--output", type=repo_path_arg, required=True)
     parser.add_argument("--require-a40", action="store_true")
     return parser.parse_args()
 

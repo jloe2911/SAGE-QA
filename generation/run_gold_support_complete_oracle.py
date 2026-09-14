@@ -23,9 +23,19 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from generation import run_production_test_answer_generation as production
+from utils.paths import (
+    baseline_answer_root,
+    complete_oracle_root,
+    generator_d_root,
+    hard_pair_test_retrieval_root,
+    outputs_root,
+    repo_display_path,
+    repo_path_arg,
+    repo_root,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = repo_root()
 MODEL = production.MODEL_NAME
 METHOD = "gold_support_complete"
 SETTING = "oracle"
@@ -42,19 +52,16 @@ CACHE_FIELDS = (
     "sparql_query",
     "answer_type",
 )
-DEFAULT_SELECTIONS = ROOT / (
-    "outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40/"
+DEFAULT_SELECTIONS = outputs_root() / (
+    "final_results/question_candidate_cross_encoder_v1_adaptive_test_a40/"
     "test_predictions_frozen.jsonl"
 )
 DEFAULT_SELECTION_FREEZE = DEFAULT_SELECTIONS.parent / "generation_freeze.json"
-DEFAULT_SUPPORT = ROOT / (
-    "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/"
-    "per_example_test_retrieval.jsonl"
-)
+DEFAULT_SUPPORT = hard_pair_test_retrieval_root() / "per_example_test_retrieval.jsonl"
 DEFAULT_SUPPORT_MANIFEST = DEFAULT_SUPPORT.parent / "artifact_manifest.json"
-DEFAULT_CANDIDATE_ROOT = ROOT / "data/production_generator_d_v1"
-DEFAULT_FULL_CONTEXT_ROOT = ROOT / "outputs/final_results/final_manuscript_baselines_test_end_to_end"
-DEFAULT_OUTPUT = ROOT / "outputs/final_results/gold_support_complete_oracle"
+DEFAULT_CANDIDATE_ROOT = generator_d_root()
+DEFAULT_FULL_CONTEXT_ROOT = baseline_answer_root()
+DEFAULT_OUTPUT = complete_oracle_root()
 
 
 def _read_json(path: Path) -> Any:
@@ -86,10 +93,10 @@ def _source_hashes(
     if support_hash != _manifest_hash(support_manifest, support.name):
         raise ValueError("Persisted support source manifest mismatch")
     return {
-        str(selections.relative_to(ROOT)): selection_hash,
-        str(selection_freeze.relative_to(ROOT)): production.sha256(selection_freeze),
-        str(support.relative_to(ROOT)): support_hash,
-        str(support_manifest.relative_to(ROOT)): production.sha256(support_manifest),
+        repo_display_path(selections): selection_hash,
+        repo_display_path(selection_freeze): production.sha256(selection_freeze),
+        repo_display_path(support): support_hash,
+        repo_display_path(support_manifest): production.sha256(support_manifest),
     }
 
 
@@ -368,10 +375,10 @@ def _validate_full_context(root: Path) -> tuple[list[dict[str, Any]], dict[str, 
     if len(rows) != 4249:
         raise ValueError("Primary Full Context population is not 4,249")
     return rows, {
-        str(predictions.relative_to(ROOT)): production.sha256(predictions),
-        str(freeze_path.relative_to(ROOT)): production.sha256(freeze_path),
-        str(scored_path.relative_to(ROOT)): production.sha256(scored_path),
-        str(manifest_path.relative_to(ROOT)): production.sha256(manifest_path),
+        repo_display_path(predictions): production.sha256(predictions),
+        repo_display_path(freeze_path): production.sha256(freeze_path),
+        repo_display_path(scored_path): production.sha256(scored_path),
+        repo_display_path(manifest_path): production.sha256(manifest_path),
     }
 
 
@@ -461,7 +468,7 @@ def evaluate_phase(
         "full_context_primary_all_example_reference": {
             "examples": 4249,
             "retained_as_primary": True,
-            "source": str((full_context_root / "metrics.json").relative_to(ROOT)),
+            "source": repo_display_path(full_context_root / "metrics.json"),
             "source_sha256": production.sha256(full_context_root / "metrics.json"),
         },
         "full_context_source_sha256": full_hashes,
@@ -502,7 +509,7 @@ def evaluate_phase(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("phase", choices=("preflight", "generate", "evaluate"))
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--resume", action="store_true")
     return parser.parse_args()

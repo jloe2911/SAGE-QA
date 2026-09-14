@@ -29,6 +29,12 @@ from evaluation.run_production_dev_k_sensitivity import (  # noqa: E402
     sha256,
 )
 from training.train_gnn_subgraph_retriever import gold_explanations_from_row  # noqa: E402
+from utils.paths import (  # noqa: E402
+    cross_encoder_root,
+    generator_d_root,
+    repo_display_path,
+    repo_path_arg,
+)
 
 
 ALLOWED_K = (1, 2, 3, 5)
@@ -156,7 +162,7 @@ def materialize(args: argparse.Namespace) -> None:
                     )
                 counts[dataset] += 1
             dataset_metadata[dataset] = {
-                "dev_path": str(dev_path),
+                "dev_path": repo_display_path(dev_path),
                 "dev_sha256": sha256(dev_path),
                 "dev_candidate_rows": row_count,
                 "dev_examples": counts[dataset],
@@ -187,9 +193,9 @@ def materialize(args: argparse.Namespace) -> None:
             "test_rows_read": 0,
             "test_gold_accessed": False,
             "adaptive_k_ready": True,
-            "prediction_freeze_path": str(freeze_path),
+            "prediction_freeze_path": repo_display_path(freeze_path),
             "prediction_freeze_sha256": sha256(freeze_path),
-            "frozen_predictions_path": str(prediction_path),
+            "frozen_predictions_path": repo_display_path(prediction_path),
             "frozen_predictions_sha256": sha256(prediction_path),
             "checkpoint_sha256": freeze.get("checkpoint_sha256"),
             "datasets": dataset_metadata,
@@ -205,13 +211,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--cross-encoder-dir",
-        type=Path,
-        default=Path("outputs/development_runs/question_candidate_cross_encoder_v1"),
+        type=repo_path_arg,
+        default=cross_encoder_root(),
     )
     parser.add_argument(
-        "--data-root", type=Path, default=Path("data/production_generator_d_v1")
+        "--data-root", type=repo_path_arg, default=generator_d_root()
     )
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-dir", type=repo_path_arg, required=True)
     return parser.parse_args()
 
 

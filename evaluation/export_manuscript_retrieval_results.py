@@ -19,18 +19,25 @@ if __package__ in {None, ""}:
 
 from data_processing.prepare_familyowl_gnn_rag import unit_node
 from data_processing.prepare_text_gnn_rag import evidence_node
+from utils.paths import (
+    manuscript_retrieval_root,
+    outputs_root,
+    repo_display_path,
+    repo_path_arg,
+    repo_root,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = ROOT / "outputs/final_results/manuscript_retrieval_results_hard_pair_v2"
+ROOT = repo_root()
+DEFAULT_OUTPUT = manuscript_retrieval_root()
 # The previous canonical export remains in manuscript_retrieval_results.  This
 # version deliberately aligns the GNN and GNN-based SAGE rows with the frozen
 # hard-pair-v2 end-to-end lineage.
-OLD_ROOT = ROOT / "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval"
-LEXICAL_ROOT = ROOT / "outputs/final_results/production_generator_d_v1_test_baselines/lexical_subgraph"
-GNN_RAG_ROOT = ROOT / "outputs/final_results/production_generator_d_v1_test_baselines/gnn_rag"
-CE_ROOT = ROOT / "outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40"
-DIAGNOSTIC_ROOT = ROOT / "outputs/development_diagnostics/final_old_vs_cross_encoder_analysis"
+OLD_ROOT = outputs_root() / "final_results/production_generator_d_v2_hard_pair_test_retrieval"
+LEXICAL_ROOT = outputs_root() / "final_results/production_generator_d_v1_test_baselines/lexical_subgraph"
+GNN_RAG_ROOT = outputs_root() / "final_results/production_generator_d_v1_test_baselines/gnn_rag"
+CE_ROOT = outputs_root() / "final_results/question_candidate_cross_encoder_v1_adaptive_test_a40"
+DIAGNOSTIC_ROOT = outputs_root() / "development_diagnostics/final_old_vs_cross_encoder_analysis"
 
 DATASET_ORDER = (
     "HotpotQA",
@@ -127,8 +134,8 @@ def validate_manifest(manifest_path: Path, required: Sequence[str]) -> dict[str,
             raise ValueError(f"Frozen artifact hash mismatch: {target}")
         if isinstance(entry, dict) and target.stat().st_size != int(entry["size_bytes"]):
             raise ValueError(f"Frozen artifact size mismatch: {target}")
-        hashes[str(target.relative_to(ROOT))] = actual
-    hashes[str(manifest_path.relative_to(ROOT))] = sha256(manifest_path)
+        hashes[repo_display_path(target)] = actual
+    hashes[repo_display_path(manifest_path)] = sha256(manifest_path)
     return hashes
 
 
@@ -284,9 +291,9 @@ def export(output_dir: Path) -> dict[str, Any]:
     gnn_hash = sha256(SOURCE_PATHS["gnn_rag_predictions"])
     if gnn_hash != gnn_freeze.get("prediction_freeze_sha256"):
         raise ValueError("GNN-RAG frozen prediction hash mismatch")
-    source_hashes[str(SOURCE_PATHS["gnn_rag_predictions"].relative_to(ROOT))] = gnn_hash
-    source_hashes[str(SOURCE_PATHS["gnn_rag_freeze"].relative_to(ROOT))] = sha256(SOURCE_PATHS["gnn_rag_freeze"])
-    source_hashes[str(SOURCE_PATHS["prior_diagnostic"].relative_to(ROOT))] = sha256(SOURCE_PATHS["prior_diagnostic"])
+    source_hashes[repo_display_path(SOURCE_PATHS["gnn_rag_predictions"])] = gnn_hash
+    source_hashes[repo_display_path(SOURCE_PATHS["gnn_rag_freeze"])] = sha256(SOURCE_PATHS["gnn_rag_freeze"])
+    source_hashes[repo_display_path(SOURCE_PATHS["prior_diagnostic"])] = sha256(SOURCE_PATHS["prior_diagnostic"])
 
     old_rows = read_jsonl(SOURCE_PATHS["old_per_example"])
     lexical_rows = read_jsonl(SOURCE_PATHS["lexical_per_example"])
@@ -390,7 +397,7 @@ def export(output_dir: Path) -> dict[str, Any]:
         "aggregation": {"primary": "equal_dataset_macro: unweighted mean of ten dataset-level per-example means", "secondary": "pooled_per_example_mean: unweighted mean over all 3,509 eligible examples"},
         "methods": overall,
         "comparisons": comparisons,
-        "diagnostic_preserved": {"path": str((CE_ROOT / "metrics.json").relative_to(ROOT)), "examples": 4249, "manuscript_comparison": False},
+        "diagnostic_preserved": {"path": repo_display_path(CE_ROOT / "metrics.json"), "examples": 4249, "manuscript_comparison": False},
         "gnn_lineage": "production_generator_d_v2_hard_pair_test_retrieval",
         "historical_canonical_export_preserved": "outputs/final_results/manuscript_retrieval_results",
         "source_sha256": source_hashes,
@@ -467,7 +474,7 @@ The prior 4,249-example Cross-Encoder evaluation is preserved as a diagnostic ar
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT)
     return parser.parse_args()
 
 

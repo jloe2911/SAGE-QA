@@ -56,6 +56,7 @@ from data_processing.prepare_text_gnn_rag import (
     text_mentions_entity,
 )
 from evaluation.eval_lexical_hotpot_subgraph import lexical_score
+from utils.paths import checkpoints_root, generator_d_root, outputs_root, repo_path_arg, repo_root
 
 
 DATASETS = (
@@ -755,8 +756,8 @@ def common_run_state(args: argparse.Namespace, root: Path) -> dict[str, Any]:
     if split_file_manifest_sha != EXPECTED_CORPUS_MANIFEST_SHA256:
         raise ValueError(f"Frozen split-file corpus manifest mismatch: {split_file_manifest_sha}")
 
-    protected_checkpoint_root = root / "checkpoints/production_generator_d_v1"
-    completed_eval_dir = root / "outputs/final_results/production_generator_d_v1_test_retrieval"
+    protected_checkpoint_root = checkpoints_root() / "production_generator_d_v1"
+    completed_eval_dir = outputs_root() / "final_results/production_generator_d_v1_test_retrieval"
     return {
         "corpus_files": corpus_files,
         "corpus_manifest": corpus_manifest,
@@ -849,11 +850,11 @@ def base_lineage(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
+    parser.add_argument("--data-root", type=repo_path_arg, default=generator_d_root())
     parser.add_argument(
         "--output-dir",
-        type=Path,
-        default=Path("outputs/final_results/production_generator_d_v1_test_baselines"),
+        type=repo_path_arg,
+        default=outputs_root() / "final_results/production_generator_d_v1_test_baselines",
     )
     parser.add_argument("--text-max-candidates", type=int, default=5)
     parser.add_argument("--stage", choices=("lexical", "gnn", "finalize"), required=True)
@@ -864,7 +865,7 @@ def main() -> None:
     args = parse_args()
     if args.text_max_candidates != 5:
         raise ValueError("The frozen manuscript GNN-RAG text candidate cap is 5")
-    root = Path(__file__).resolve().parents[1]
+    root = repo_root()
     args.data_root = (
         (root / args.data_root).resolve()
         if not args.data_root.is_absolute()

@@ -41,6 +41,13 @@ from experiments.cross_encoder_reranking_dev_v1.run_experiment import (  # noqa:
     serialize_candidate,
 )
 from training.train_gnn_subgraph_retriever import compute_adjusted_score  # noqa: E402
+from utils.paths import (  # noqa: E402
+    cross_encoder_root,
+    generator_d_root,
+    repo_display_path,
+    repo_path_arg,
+    repo_root,
+)
 
 
 METHODS = {
@@ -102,7 +109,7 @@ def generate(args: argparse.Namespace) -> None:
         test_path = args.data_root / data_dir / "test_subgraph_retrieval.jsonl"
         if not test_path.is_file() or "test" not in test_path.name.lower():
             raise FileNotFoundError(f"Missing frozen TEST candidates: {test_path}")
-        input_hashes[str(test_path)] = sha256(test_path)
+        input_hashes[repo_display_path(test_path)] = sha256(test_path)
         count = 0
         for example_id, raw_rows in grouped_jsonl(test_path):
             admitted_source = cap_inference_candidate_rows(
@@ -175,7 +182,7 @@ def generate(args: argparse.Namespace) -> None:
             "prediction_examples": len(predictions),
             "datasets": dataset_counts,
             "test_candidate_input_sha256": input_hashes,
-            "checkpoint_path": str(checkpoint_file),
+            "checkpoint_path": repo_display_path(checkpoint_file),
             "checkpoint_sha256": sha256(checkpoint_file),
             "adaptive_policy_artifact_hashes": policy_hashes,
             "allowed_k": list(ALLOWED_K),
@@ -210,7 +217,7 @@ def evaluate(args: argparse.Namespace) -> None:
     for dataset, _, _, domain, _, gold_source in DATASETS:
         rows = by_dataset[dataset]
         ids = {str(row["example_id"]) for row in rows}
-        source = Path(gold_source)
+        source = repo_root() / gold_source
         gold = text_gold(source, dataset, ids) if domain == "text" else ontology_gold(source, ids)
         if set(gold) != ids:
             raise ValueError(f"Incomplete TEST gold join: {dataset}")
@@ -300,15 +307,15 @@ def evaluate(args: argparse.Namespace) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("phase", choices=("generate", "evaluate"))
-    parser.add_argument("--data-root", type=Path, default=Path("data/production_generator_d_v1"))
+    parser.add_argument("--data-root", type=repo_path_arg, default=generator_d_root())
     parser.add_argument(
         "--cross-encoder-dir",
-        type=Path,
-        default=Path("outputs/development_runs/question_candidate_cross_encoder_v1"),
+        type=repo_path_arg,
+        default=cross_encoder_root(),
     )
-    parser.add_argument("--cross-encoder-policy-dir", type=Path, required=True)
-    parser.add_argument("--final-sageqa-policy-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--cross-encoder-policy-dir", type=repo_path_arg, required=True)
+    parser.add_argument("--final-sageqa-policy-dir", type=repo_path_arg, required=True)
+    parser.add_argument("--output-dir", type=repo_path_arg, required=True)
     return parser.parse_args()
 
 

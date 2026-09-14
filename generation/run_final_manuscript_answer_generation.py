@@ -25,9 +25,18 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from generation import run_production_test_answer_generation as production
+from utils.paths import (
+    final_answer_root,
+    generator_d_root,
+    hard_pair_test_retrieval_root,
+    outputs_root,
+    repo_display_path,
+    repo_path_arg,
+    repo_root,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = repo_root()
 MODEL_NAME = production.MODEL_NAME
 CONFIGURATIONS = (
     ("cross_encoder", "k1"),
@@ -36,21 +45,18 @@ CONFIGURATIONS = (
     ("gold_support", "oracle"),
 )
 RETRIEVAL_CONFIGURATIONS = CONFIGURATIONS[:-1]
-DEFAULT_SELECTIONS = ROOT / (
-    "outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40/"
+DEFAULT_SELECTIONS = outputs_root() / (
+    "final_results/question_candidate_cross_encoder_v1_adaptive_test_a40/"
     "test_predictions_frozen.jsonl"
 )
 DEFAULT_SELECTION_FREEZE = DEFAULT_SELECTIONS.parent / "generation_freeze.json"
 DEFAULT_SELECTION_MANIFEST = DEFAULT_SELECTIONS.parent / "artifact_manifest.json"
-DEFAULT_SUPPORT_GOLD = ROOT / (
-    "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/"
-    "per_example_test_retrieval.jsonl"
-)
+DEFAULT_SUPPORT_GOLD = hard_pair_test_retrieval_root() / "per_example_test_retrieval.jsonl"
 DEFAULT_SUPPORT_MANIFEST = DEFAULT_SUPPORT_GOLD.parent / "artifact_manifest.json"
-DEFAULT_CANDIDATE_ROOT = ROOT / "data/production_generator_d_v1"
-DEFAULT_OUTPUT = ROOT / "outputs/final_results/final_manuscript_test_end_to_end"
-OLD_METRICS = ROOT / "outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end/metrics.json"
-BASELINE_METRICS = ROOT / "outputs/final_results/final_manuscript_baselines_test_end_to_end/metrics.json"
+DEFAULT_CANDIDATE_ROOT = generator_d_root()
+DEFAULT_OUTPUT = final_answer_root()
+OLD_METRICS = outputs_root() / "final_results/production_generator_d_v2_hard_pair_test_end_to_end/metrics.json"
+BASELINE_METRICS = outputs_root() / "final_results/final_manuscript_baselines_test_end_to_end/metrics.json"
 
 
 def _manifest_hash(manifest_path: Path, filename: str) -> str:
@@ -157,7 +163,7 @@ def _audit_existing_denominators() -> dict[str, Any]:
             if answer_n != 4249 or (support_n is not None and support_n != 3509):
                 raise ValueError(f"Incompatible old denominator in {path}: {method}/{setting}")
             summary[f"{method}/{setting}"] = {"answer_examples": answer_n, "support_examples": support_n}
-        audited[label] = {"path": str(path.relative_to(ROOT)), "sha256": production.sha256(path), "conditions": summary}
+        audited[label] = {"path": repo_display_path(path), "sha256": production.sha256(path), "conditions": summary}
     return audited
 
 
@@ -237,11 +243,11 @@ def preflight_phase(
         "expected_openai_calls": len(unique) - deterministic,
         "gold_support_answer_examples": support_count,
         "gold_support_undefined_support_examples_excluded": 4249 - support_count,
-        "frozen_reader_inputs_path": str(inputs_path.relative_to(ROOT)),
+        "frozen_reader_inputs_path": repo_display_path(inputs_path),
         "frozen_reader_inputs_sha256": production.sha256(inputs_path),
         "source_paths": {
-            "frozen_selections": str(selections.relative_to(ROOT)),
-            "support_gold": str(support_gold.relative_to(ROOT)),
+            "frozen_selections": repo_display_path(selections),
+            "support_gold": repo_display_path(support_gold),
         },
         "source_hashes": hashes, "candidate_metadata": candidate_lineage,
         "openai_calls_made": 0,
@@ -441,14 +447,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="phase", required=True)
     pre = sub.add_parser("preflight")
-    pre.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    pre.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT)
     gen = sub.add_parser("generate")
-    gen.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    gen.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT)
     gen.add_argument("--workers", type=int, default=8)
     gen.add_argument("--resume", action="store_true")
     eva = sub.add_parser("evaluate")
-    eva.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    eva.add_argument("--source-root", type=Path, default=ROOT)
+    eva.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT)
+    eva.add_argument("--source-root", type=repo_path_arg, default=ROOT)
     return parser
 
 

@@ -29,17 +29,19 @@ from evaluation.evaluate_owl_qa_predictions import answer_set_scores, best_suppo
 from evaluation.hotpot_official_eval import exact_match_score, f1_score
 from generation import generate_hotpot_answers_with_llm as text_reader_module
 from generation import generate_owl_answers_with_llm as ontology_reader_module
+from utils.paths import (
+    generator_d_root,
+    hard_pair_answer_root,
+    hard_pair_test_retrieval_root,
+    repo_path_arg,
+    repo_root,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RETRIEVAL = ROOT / (
-    "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/"
-    "per_example_test_retrieval.jsonl"
-)
-DEFAULT_CANDIDATE_ROOT = ROOT / "data/production_generator_d_v1"
-DEFAULT_OUTPUT_DIR = ROOT / (
-    "outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end"
-)
+ROOT = repo_root()
+DEFAULT_RETRIEVAL = hard_pair_test_retrieval_root() / "per_example_test_retrieval.jsonl"
+DEFAULT_CANDIDATE_ROOT = generator_d_root()
+DEFAULT_OUTPUT_DIR = hard_pair_answer_root()
 MODEL_NAME = "gpt-4.1-mini"
 CONFIGURATIONS = (
     ("gnn_only", "k1"),
@@ -848,16 +850,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="phase", required=True)
     generate = subparsers.add_parser("generate", help="Phase 1: gold-answer-blind generation")
-    generate.add_argument("--retrieval", type=Path, default=DEFAULT_RETRIEVAL)
-    generate.add_argument("--candidate-root", type=Path, default=DEFAULT_CANDIDATE_ROOT)
-    generate.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    generate.add_argument("--retrieval", type=repo_path_arg, default=DEFAULT_RETRIEVAL)
+    generate.add_argument("--candidate-root", type=repo_path_arg, default=DEFAULT_CANDIDATE_ROOT)
+    generate.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT_DIR)
     generate.add_argument("--model", default=MODEL_NAME)
     generate.add_argument("--resume", action="store_true")
     generate.add_argument("--workers", type=int, default=8)
     evaluate = subparsers.add_parser("evaluate", help="Phase 2: post-freeze gold evaluation")
-    evaluate.add_argument("--retrieval", type=Path, default=DEFAULT_RETRIEVAL)
-    evaluate.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    evaluate.add_argument("--source-root", type=Path, default=ROOT)
+    evaluate.add_argument("--retrieval", type=repo_path_arg, default=DEFAULT_RETRIEVAL)
+    evaluate.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT_DIR)
+    evaluate.add_argument("--source-root", type=repo_path_arg, default=ROOT)
     return parser
 
 

@@ -16,13 +16,19 @@ from pathlib import Path
 from statistics import fmean
 from typing import Any, Mapping
 
+if __package__ in {None, ""}:
+    import sys
 
-ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "outputs/final_results/final_manuscript_test_end_to_end"
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from utils.paths import final_answer_root, outputs_root, repo_display_path, repo_root
+
+ROOT = repo_root()
+OUTPUT = final_answer_root()
 NEW_METRICS = OUTPUT / "metrics.json"
 NEW_PER_EXAMPLE = OUTPUT / "per_example_end_to_end.jsonl"
-OLD_METRICS = ROOT / "outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end/metrics.json"
-BASELINE_METRICS = ROOT / "outputs/final_results/final_manuscript_baselines_test_end_to_end/metrics.json"
+OLD_METRICS = outputs_root() / "final_results/production_generator_d_v2_hard_pair_test_end_to_end/metrics.json"
+BASELINE_METRICS = outputs_root() / "final_results/final_manuscript_baselines_test_end_to_end/metrics.json"
 PREDICTIONS = OUTPUT / "predictions.jsonl"
 READER_INPUTS = OUTPUT / "frozen_reader_inputs.jsonl"
 GENERATION_FREEZE = OUTPUT / "generation_freeze.json"
@@ -287,8 +293,8 @@ Lexical Subgraph k=1, GNN-RAG k=1, GNN k=1, the retained old GNN-based SAGE-QA k
             "frozen_reader_inputs.jsonl": sha256(READER_INPUTS),
             "generation_freeze.json": sha256(GENERATION_FREEZE),
             "preflight_report.json": sha256(PREFLIGHT),
-            str(OLD_METRICS.relative_to(ROOT)): sha256(OLD_METRICS),
-            str(BASELINE_METRICS.relative_to(ROOT)): sha256(BASELINE_METRICS),
+            repo_display_path(OLD_METRICS): sha256(OLD_METRICS),
+            repo_display_path(BASELINE_METRICS): sha256(BASELINE_METRICS),
         },
         "derived_files": {name: sha256(OUTPUT / name) for name in output_names},
         "verification": canonical["verification"],

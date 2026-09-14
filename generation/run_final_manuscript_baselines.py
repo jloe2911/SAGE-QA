@@ -45,9 +45,18 @@ from data_processing.prepare_familyowl_gnn_rag import unit_node
 from data_processing.prepare_text_gnn_rag import evidence_node
 from evaluation.evaluate_owl_qa_predictions import best_support_scores
 from generation import run_production_test_answer_generation as reader_pipeline
+from utils.paths import (
+    baseline_answer_root,
+    baseline_retrieval_root,
+    generator_d_root,
+    hard_pair_answer_root,
+    hard_pair_test_retrieval_root,
+    repo_path_arg,
+    repo_root,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = repo_root()
 MODEL_NAME = reader_pipeline.MODEL_NAME
 CONFIGURATIONS = (
     ("lexical_subgraph", "k1"),
@@ -55,26 +64,15 @@ CONFIGURATIONS = (
     ("full_context", "full"),
 )
 SUPPORT_CONFIGURATIONS = CONFIGURATIONS[:2]
-DEFAULT_LEXICAL = ROOT / (
-    "outputs/final_results/production_generator_d_v1_test_baselines/"
-    "lexical_subgraph/per_example_retrieval.jsonl"
-)
-DEFAULT_GNN_RAG = ROOT / (
-    "outputs/final_results/production_generator_d_v1_test_baselines/"
-    "gnn_rag/predictions_frozen.jsonl"
-)
+DEFAULT_LEXICAL = baseline_retrieval_root() / "lexical_subgraph/per_example_retrieval.jsonl"
+DEFAULT_GNN_RAG = baseline_retrieval_root() / "gnn_rag/predictions_frozen.jsonl"
 DEFAULT_GNN_RAG_FREEZE = DEFAULT_GNN_RAG.parent / "prediction_freeze_manifest.json"
-DEFAULT_CANDIDATE_ROOT = ROOT / "data/production_generator_d_v1"
-DEFAULT_SUPPORT_GOLD = ROOT / (
-    "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/"
-    "per_example_test_retrieval.jsonl"
-)
-DEFAULT_OUTPUT_DIR = ROOT / ("outputs/final_results/final_manuscript_baselines_test_end_to_end")
+DEFAULT_CANDIDATE_ROOT = generator_d_root()
+DEFAULT_SUPPORT_GOLD = hard_pair_test_retrieval_root() / "per_example_test_retrieval.jsonl"
+DEFAULT_OUTPUT_DIR = baseline_answer_root()
 PROTECTED_MANIFESTS = (
-    ROOT
-    / "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/artifact_manifest.json",
-    ROOT
-    / "outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end/artifact_manifest.json",
+    hard_pair_test_retrieval_root() / "artifact_manifest.json",
+    hard_pair_answer_root() / "artifact_manifest.json",
 )
 FORBIDDEN_INPUT_FIELDS = reader_pipeline.FORBIDDEN_GENERATION_FIELDS
 
@@ -857,21 +855,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="phase", required=True)
     freeze = subparsers.add_parser("freeze-inputs")
-    freeze.add_argument("--lexical", type=Path, default=DEFAULT_LEXICAL)
-    freeze.add_argument("--gnn-rag", type=Path, default=DEFAULT_GNN_RAG)
-    freeze.add_argument("--gnn-rag-freeze", type=Path, default=DEFAULT_GNN_RAG_FREEZE)
-    freeze.add_argument("--candidate-root", type=Path, default=DEFAULT_CANDIDATE_ROOT)
-    freeze.add_argument("--source-root", type=Path, default=ROOT)
-    freeze.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    freeze.add_argument("--lexical", type=repo_path_arg, default=DEFAULT_LEXICAL)
+    freeze.add_argument("--gnn-rag", type=repo_path_arg, default=DEFAULT_GNN_RAG)
+    freeze.add_argument("--gnn-rag-freeze", type=repo_path_arg, default=DEFAULT_GNN_RAG_FREEZE)
+    freeze.add_argument("--candidate-root", type=repo_path_arg, default=DEFAULT_CANDIDATE_ROOT)
+    freeze.add_argument("--source-root", type=repo_path_arg, default=ROOT)
+    freeze.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT_DIR)
     generate = subparsers.add_parser("generate")
-    generate.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    generate.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT_DIR)
     generate.add_argument("--model", default=MODEL_NAME)
     generate.add_argument("--workers", type=int, default=8)
     generate.add_argument("--resume", action="store_true")
     evaluate = subparsers.add_parser("evaluate")
-    evaluate.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    evaluate.add_argument("--support-gold", type=Path, default=DEFAULT_SUPPORT_GOLD)
-    evaluate.add_argument("--source-root", type=Path, default=ROOT)
+    evaluate.add_argument("--output-dir", type=repo_path_arg, default=DEFAULT_OUTPUT_DIR)
+    evaluate.add_argument("--support-gold", type=repo_path_arg, default=DEFAULT_SUPPORT_GOLD)
+    evaluate.add_argument("--source-root", type=repo_path_arg, default=ROOT)
     return parser
 
 
