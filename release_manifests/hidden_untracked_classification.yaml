@@ -41,14 +41,14 @@ rules:
     recommendation: REVIEW
   - match: exact
     paths: [artifacts/manifest.json]
-    classification: NEEDS_REVIEW
-    inbound_references: local artifact pipeline documentation and verification context
-    outbound_imports: references local artifact members; no Python imports
+    classification: THESIS_SUPERSEDED
+    inbound_references: REPRODUCE.md, tests/test_submission_readiness.py, and the root of dist/sageqa-submission-artifacts.zip
+    outbound_imports: three development GraphSAGE checkpoints and three frozen A0/A3 reader or policy results; no Python imports
     used_by_thesis_final: false
     required_for_paper_reproduction: false
     scientifically_meaningful: true
-    recommendation: REVIEW
-    evidence: Local manifest exists but is not bound to the final-thesis or paper bundle.
+    recommendation: TRACK
+    evidence: Its sageqa_a0_a3_reader_v1 architecture ID matches experiments/sageqa_final_architecture_frozen.json; all referenced paths belong to the superseded submission bundle and do not overlap Generator D, thesis-final, oracle, or paper-original protected roots.
   - match: prefix
     prefix: artifacts/step_01_context_to_kg/wikidata_cache/
     classification: CACHE
@@ -204,7 +204,7 @@ rules:
 coverage_assertion:
   unmatched_entries: 0
   multiply_classified_entries: 0
-  classifications_used: [PAPER_ORIGINAL_TEST, THESIS_SUPERSEDED, DEVELOPMENT, RELEASE_INFRASTRUCTURE, CACHE, LOCAL_ONLY, NEEDS_REVIEW]
+  classifications_used: [PAPER_ORIGINAL_TEST, THESIS_SUPERSEDED, DEVELOPMENT, RELEASE_INFRASTRUCTURE, CACHE, LOCAL_ONLY]
 notes:
   - State is computed from existence because all 206 source entries are exact root-anchored local excludes and none is tracked at HEAD.
   - TRACK is a recommendation only; this phase does not change tracking.
