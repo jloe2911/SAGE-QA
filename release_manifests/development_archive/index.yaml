@@ -31,4 +31,19 @@ bundles:
       removal_record: archive_manifests/removed/rejected_development_payload_backup_01.yaml
       preservation_only: true
       scientific_release_artifact: false
-    notes: Includes rejected FamilyOWL selector/compiler v2. The seven-file cross-repository methodology-transfer audit and eleven-file unified evidence-graph comparison are absent from the repository after verified preservation backup; their planning, execution, and removal records remain. All other indexed development results remain at their existing paths.
+      additional_batches:
+        - cleanup_phase: Phase 7B
+          roots:
+            - outputs/diagnostics/production_generator_d_v1_complementarity_dev
+            - outputs/diagnostics/production_generator_d_v1_cross_branch_completion_dev
+            - outputs/diagnostics/production_generator_d_v1_disagreement_union_dev
+            - outputs/diagnostics/production_generator_d_v1_ontology_proof_gate_dev
+            - outputs/diagnostics/production_generator_d_v1_rrf_dev
+            - outputs/diagnostics/production_generator_d_v1_symbolic_validity_diagnosis
+          file_count: 33
+          total_bytes: 5039726
+          backup_id: sageqa-phase7b-rejected-diagnostics-sha256-71910d84849241ebeb5bd80217a853190593db939ef46132c9a9c2afa5288262
+          removal_record: archive_manifests/removed/rejected_diagnostics_backup_02.yaml
+          preservation_only: true
+          scientific_release_artifact: false
+    notes: Includes rejected FamilyOWL selector/compiler v2. Phase 7A removed two archived rejected payload roots after verified preservation backup. Phase 7B removed six rejected DEV diagnostic output roots after a separate verified backup and full restore test. Their planning, execution, and removal provenance remains under archive_manifests; non-selected development results remain at their existing paths.
