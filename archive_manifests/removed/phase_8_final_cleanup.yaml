@@ -1,0 +1,70 @@
+schema_version: sageqa_payload_removal_record_v1
+record_id: phase_8_final_cleanup
+cleanup_phase: Phase 8
+status: COMPLETE
+pre_removal_head: 3635516a8e0a4957960e3618a87af38427baccd9
+authority: release_manifests/reported_results_mapping.yaml
+planning_manifest: archive_manifests/removal_plans/phase_8_final_cleanup.yaml
+planning_manifest_sha256: 5a52b1d3335481566c7857d412e1968e1d3e49753a292fe013d0e6a6337c20cf
+inventory:
+  family_count: 20
+  file_count: 886
+  total_bytes: 2421462724
+  digest: 751142ba74cddb0407d14b87c52d5b85663bdd37e17547fd84fe173145c6c4da
+  members: See the planning manifest for every repository-relative path, family, size, and SHA-256.
+external_backup:
+  logical_backup_id: sageqa-phase8-final-cleanup-sha256-751142ba74cddb0407d14b87c52d5b85663bdd37e17547fd84fe173145c6c4da
+  physical_directory_name: phase8-751142ba74cddb04
+  path_representation: short backup objects mapped to exact repository-relative paths in backup_manifest.json
+  backup_manifest_name: backup_manifest.json
+  backup_manifest_sha256: 62fe528061b887caab8d4105151615c5915d0e07ff59190f25176503fc501f14
+  preservation_only: true
+  scientific_release_artifact: false
+verification:
+  repository_source_count_size_hash: PASS
+  planning_manifest_count_size_hash: PASS
+  backup_count_size_hash: PASS
+  backup_object_count: 886
+  backup_object_bytes: 2421462724
+  isolated_full_restore: PASS
+  restored_count_size_hash: PASS
+  exact_manifested_removal: PASS
+  all_manifested_members_absent: PASS
+  temporary_restore_removed: PASS
+  restore_environment_note: A sandbox-local attempt was blocked by Windows ACLs before payload copy and a longer external path hit Win32 path length after 600 verified members; the final short external restore reconstructed and verified all 886 members and was removed.
+keep_manifest:
+  before_records: 136
+  after_records: 142
+  corrections:
+    - data/__init__.py
+    - data/raw/family
+    - data/raw/owl2bench
+    - data/raw/pizza_100
+    - data/raw/pizza_250
+    - outputs/development_runs/query_local_candidate_closure_v1/comparison.json
+    - patches/GNN-RAG-local-changes.md
+review_blockers:
+  - path: .worktrees/sageqa-original-eval-compat
+    reason: Unindexed compatibility/source-lineage evidence remains while the exact original-paper revision is unresolved.
+integrity:
+  backup_integrity: PASS
+  restore_integrity: PASS
+  removal_integrity: PASS
+  preservation_only: true
+  scientific_release_artifact: false
+post_removal_gates:
+  keep_closure: 142_of_142_retained_paths_exist
+  reported_results: 12_of_12_records_and_154_direct_requirements_resolve
+  fast: 27_passed_1_skipped
+  retained_standard: 119_passed_1_skipped
+  original_paper_supported: 5_passed
+  stagewise_analysis: 6_passed
+  remaining_test_collection: 142_collected
+  protected_artifacts: PASS
+  note: Historical baselines were 28/1, 123/1, and 10 paper tests; one A0/A3 integrity assertion, three candidate-builder tests, and five A0/A3 paper-bundle tests were deliberately removed or de-scoped with their outside-closure families.
+restore_procedure:
+  - Resolve the machine-local location for external_backup.logical_backup_id.
+  - Verify backup_manifest.json against external_backup.backup_manifest_sha256.
+  - Verify its 886 members, 2421462724 bytes, and inventory digest.
+  - For each member, copy member.backup_object to member.path.
+  - Reverify every restored size and SHA-256 against backup_manifest.json.

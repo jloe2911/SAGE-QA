@@ -1,0 +1,26 @@
+schema_version: sageqa_phase8_final_cleanup_v1
+status: complete
+authority: release_manifests/reported_results_mapping.yaml
+reason: The test imports thirteen removed development-objective helpers and is not a runnable contract for retained paper or Chapter 7 code.
+backup:
+  logical_id: sageqa-phase8-stale-gnn-test-sha256-091cbe2afdb6d46ae8046fedc0adfea4c873b70083f48380d480afc69e787af8
+  physical_directory: phase8-test-091cbe2afdb6d46a
+  preservation_only: true
+  scientific_release_artifact: false
+  backup_manifest_sha256: ce0027ff70502e0fbfabcebc9677e235700f8e5442396537d125e2f209bd0644
+root_count: 1
+file_count: 1
+total_bytes: 16576
+inventory_digest: 091cbe2afdb6d46ae8046fedc0adfea4c873b70083f48380d480afc69e787af8
+members:
+  - path: tests/test_gnn_subgraph_retriever.py
+    family: MISC_DEVELOPMENT_SOURCE_AND_TESTS
+    size: 16576
+    sha256: e04397302af91cb63a645baa81efc524542775e04787f2b3e27dfb17d869cb48
+verification:
+  repository_inventory_hash_parity: PASS
+  backup_count_size_hash_parity: PASS
+  complete_isolated_restore: PASS
+  restored_count_size_hash_parity: PASS
+  temporary_restore_removed: PASS
+  exact_manifested_removal: PASS
