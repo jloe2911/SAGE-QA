@@ -4,7 +4,6 @@ No operation should be generated for these items until the named decision is rec
 
 | Item | Evidence | Decision needed |
 |---|---|---|
-| `.worktrees/sageqa-original-eval-compat/` | 112,370,538 bytes; registered detached compatibility checkout | Is its commit the authoritative original evaluator? Tag/archive it before any `git worktree remove`. |
 | `artifacts/step_01_context_to_kg/wikidata_cache/` | Approximately 36.5 MB and may encode costly external queries | Determine protocol role, privacy, and redistribution/license status. |
 | `dist/sageqa-submission-artifacts.zip` | 52,118,416 bytes; SHA-256 recorded in the prior audit; separate A0/A3 generation | Identify the exact manuscript/submission it supports and whether a durable external copy exists. |
 | `checkpoints/production_generator_d_v1/` | 181,578,675 bytes; referenced by diagnostics/baseline protections | Keep as thesis development, archive, or include in graph-ablation bundle? Redirect references first. |
@@ -16,6 +15,13 @@ No operation should be generated for these items until the named decision is rec
 | `.git/objects/` | 2,620,233,531 bytes | After tags/backups/worktree decision, measure reachability and use Git-native maintenance only. |
 | `.env` | Local ignored credential/config file; values not inspected | Keep local, rotate if necessary, and ensure no release/manifest captures it. |
 | Frozen absolute paths | Present in lineage/per-example records | Preserve bytes; define release-side relative mappings rather than edits. |
+
+Resolved on 2026-09-18: `.worktrees/sageqa-original-eval-compat/` was audited as
+redundant and removed with `git worktree remove`. Its commit `ffee42c` remains
+recoverable from `post-submission-development` and
+`origin/post-submission-development`. This does not establish it as the published-paper
+revision; `dbdbb507` remains the strongest candidate and the exact
+published-result/source binding remains unproven.
 
 ## Broken/dead entry-point review
 

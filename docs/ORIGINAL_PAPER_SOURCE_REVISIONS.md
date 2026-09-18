@@ -16,7 +16,7 @@ The strongest original-paper candidate is `dbdbb50708bdc6c686ef82518ec71c1d1bf55
 
 This is persuasive repository evidence, but not formal proof that `dbdbb507` is the exact source used for every published number. The commit does not contain the ignored processed datasets, checkpoints, `outputs/full_results/`, environment lock, hosted-reader snapshot, or a paper artifact manifest binding those bytes to the tag. Accordingly, this phase records `dbdbb507` as `candidate_not_authoritative` and does not create or move a tag.
 
-`ffee42cced77134614f1615b391c67661ab963d7` is not an original-paper candidate. It is the tip of `post-submission-development`, is explicitly titled "Continue development after conference submission", and descends from `dbdbb507`. The clean detached worktree at `.worktrees/sageqa-original-eval-compat/` proves that revision remains inspectable, not that it produced the paper. Relative to `dbdbb507`, it changes the runner and shared builders, evaluators, generators, model, and trainer; adds development datasets and comparison tooling; and removes `TEXT_BENCHMARK_RETRIEVAL.md`. It can help compatibility investigation but must not be labeled published source.
+`ffee42cced77134614f1615b391c67661ab963d7` is not an original-paper candidate. It is the tip of `post-submission-development`, is explicitly titled "Continue development after conference submission", and descends from `dbdbb507`. The former clean detached worktree at `.worktrees/sageqa-original-eval-compat/` was audited as redundant and removed on 2026-09-18. The revision remains recoverable from both `post-submission-development` and `origin/post-submission-development`; that reachability does not show that it produced the paper. Relative to `dbdbb507`, it changes the runner and shared builders, evaluators, generators, model, and trainer; adds development datasets and comparison tooling; and removes `TEXT_BENCHMARK_RETRIEVAL.md`. It can help compatibility investigation but must not be labeled published source.
 
 ## Runner differences
 
@@ -25,7 +25,7 @@ Between `dbdbb507` and `ffee42c`, `experiments/run_experiments.py` changes by 24
 ## Reproduction verdict
 
 - `dbdbb507`: source-level paper workflow candidate; exact published-pipeline reproduction is **unproven** until the paper commit and ignored artifact/environment lineage are formally bound.
-- `ffee42c`: clean, inspectable post-submission compatibility/development revision; **not** authoritative published source.
+- `ffee42c`: post-submission compatibility/development revision, recoverable from the preserved local and remote-tracking branches after removal of its redundant compatibility worktree; **not** authoritative published source.
 - `884480b`: authoritative source revision for the indexed final-thesis state in this phase; **not** the paper source.
 
-The authoritative original-paper revision remains unresolved and is a gate for physical path abstraction or relocation of original-paper assets.
+The authoritative original-paper revision remains unresolved because the exact published-result/source binding is not fully proven. Removing the redundant compatibility worktree does not resolve or worsen that evidentiary gap; `dbdbb507` remains the strongest candidate.

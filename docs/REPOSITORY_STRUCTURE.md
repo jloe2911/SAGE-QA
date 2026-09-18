@@ -17,8 +17,7 @@ This is the final physical layout after Phase 8 on 2026-09-18.
 | `release_manifests/` | Logical indexes, path sidecar, hidden-material classification, and protection rules created by this phase |
 | `docs/` | Audit and reviewer-facing documentation |
 | `third_party/GNN-RAG/` | Vendored upstream baseline with local patch documentation |
-| `.worktrees/sageqa-original-eval-compat/` | Clean detached local worktree at post-submission revision `ffee42c`; ignored and not a release bundle |
 
 Git ignore/exclude rules still hide large scientific roots and historical exact local-exclude entries. `release_manifests/hidden_untracked_classification.yaml` is retained as a pre-Phase-8 snapshot; it is not a live-path index.
 
-The local `.venv/` and the compatibility worktree remain outside cleanup scope. Three root pytest scratch directories remain ACL-blocked and are reported as operational blockers rather than scientific repository content.
+The compatibility worktree was audited as redundant and removed on 2026-09-18; `ffee42c` remains recoverable from the preserved `post-submission-development` references. The local `.venv/` remains outside cleanup scope. Three root pytest scratch directories remain ACL-blocked and are reported as operational blockers rather than scientific repository content.

@@ -159,9 +159,6 @@ review_required:
   - path: original_paper_exact_source_revision_and_environment
     classification: THESIS_STATUS_REVIEW_REQUIRED
     missing_evidence: dbdbb507 is the strongest candidate but ignored artifacts hosted-reader lineage and environment are not commit-bound.
-  - path: .worktrees/sageqa-original-eval-compat
-    classification: THESIS_STATUS_REVIEW_REQUIRED
-    missing_evidence: Separate compatibility checkout may contain unindexed original-paper source evidence and is outside the reported artifact manifests.
   - path: outputs/development_diagnostics/final_old_vs_cross_encoder_analysis/comparison.json
     classification: KEEP_REPRODUCIBILITY
     missing_evidence: None; retained despite development naming because it is a direct READ_INPUT of the canonical hard-pair-v2 exporter.

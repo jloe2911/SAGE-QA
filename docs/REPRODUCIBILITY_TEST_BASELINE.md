@@ -7,7 +7,7 @@ The original-paper source status is `candidate_not_fully_proven` at
 `dbdbb50708bdc6c686ef82518ec71c1d1bf55985`.
 
 Phase 8 final baselines are FAST `27 passed, 1 skipped`, retained STANDARD
-`119 passed, 1 skipped`, original-paper supported `5 passed`, stage-wise `6 passed`,
+`119 passed, 1 skipped`, original-paper supported `4 passed, 1 skipped`, stage-wise `6 passed`,
 and unfiltered collection `142 tests`. The earlier 28/123/10 counts included assertions
 and tests owned only by removed A0/A3 and candidate-builder families.
 
@@ -126,7 +126,10 @@ surface or a scientific release artifact.
 ## Original-paper boundary
 
 The historical contract checks Git objects at `dbdbb507`, the original runner, processed
-dataset/checkpoint roots, `outputs/full_results`, evaluator/reader modules, and the optional
-detached compatibility worktree. Exact reproduction remains unproven because there is no
-commit-bound manifest for the ignored data, checkpoints, results, environment, or hosted
-reader. Historical checks do not import or route through thesis-final validation logic.
+dataset/checkpoint roots, `outputs/full_results`, evaluator/reader modules, and, when
+present, the optional detached compatibility worktree. The worktree was audited as
+redundant and removed on 2026-09-18; `ffee42c` remains recoverable from the preserved
+`post-submission-development` references. Exact reproduction remains unproven because
+there is no commit-bound manifest for the ignored data, checkpoints, results, environment,
+or hosted reader. Historical checks do not import or route through thesis-final validation
+logic.
