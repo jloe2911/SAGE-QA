@@ -1,13 +1,14 @@
-# Reproducing and verifying SAGE-QA
+# Reproducing SAGE-QA
 
-This is the canonical reproduction guide. Verification reuses frozen artifacts and does
-not call an external service. Scientific reproduction may require separately distributed
-assets, a GPU, or provider credentials; those dependencies are stated at each boundary.
+The published-paper and Thesis Chapter 7 workflows are separate protocols. Do not route
+one through the other or overwrite frozen artifact roots.
 
-## Environment and dependency scopes
+## A. Published paper
 
-The recorded development environment uses Python 3.12.7. Dependency versions are
-documented rather than modernized in this release-cleanup phase.
+### Environment setup
+
+The recorded repository environment uses Python 3.12.7. The requirement files are not a
+complete historical lock.
 
 ```powershell
 python -m venv .venv
@@ -15,112 +16,118 @@ python -m venv .venv
 python -m pip install -r requirements-dev.txt
 ```
 
-| Use | Dependency source | Additional requirement |
-|---|---|---|
-| Verification only | `requirements-dev.txt` | Restored frozen assets for checks that inspect them |
-| Final-thesis retrieval | `requirements.txt` | Pinned DistilBERT snapshot and frozen checkpoints; GPU for practical full inference |
-| GPU experiments/training | `requirements.txt` | Compatible CUDA/PyTorch environment; exact results can vary by hardware |
-| Answer generation | `requirements.txt` | Provider credentials and availability; not needed to verify cached answers |
-| GNN-RAG baseline | `requirements.txt` plus `third_party/GNN-RAG/` environment/configuration | Upstream/baseline-specific assets and typically a GPU |
-| Development/testing | `requirements-dev.txt` | Jupyter only for notebook work |
+### Required external assets and paths
 
-`requirements-dev.txt` includes `requirements.txt`. Neither file is an environment lock,
-and hosted model deployments are external mutable dependencies.
+Restore `paper_original_artifacts` to the exact paths in
+`release_manifests/paper_original/index.yaml`: six processed dataset roots under `data/`,
+six `checkpoints/gnn_subgraph_ranker_*_full/` roots, required raw inputs, and the six
+reported result children plus aggregates under `outputs/full_results/`.
 
-## A. Verify thesis-final frozen results
+No verified public download location is currently bound to this bundle. This is a
+**REVIEWER_REPRODUCTION_BLOCKER**.
 
-This is the safest workflow and requires no API calls.
-
-### 1. Restore required assets
-
-Restore the separately distributed roots listed in [`docs/ARTIFACTS.md`](docs/ARTIFACTS.md)
-at their manifest-recorded paths. Verify their identity against the machine-readable
-indexes under [`release_manifests/`](release_manifests/). The repository currently records
-their external publication location as pending or unknown; a fresh clone alone is not a
-complete artifact checkout.
-
-### 2. Run the path preflight
+### Verify frozen results without API calls
 
 ```powershell
-python evaluation/check_thesis_final_paths.py
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider `
+  --basetemp .tmp/reproducibility/paper `
+  tests/reproducibility/test_original_paper_contracts.py `
+  tests/test_evaluate_owl_qa_predictions.py
 ```
 
-This resolves and reports active paths without reading `.env`, invoking a model, calling
-an API, or modifying an artifact.
+This verifies source objects, retained paths, and evaluator behavior. It does not call a
+hosted reader or regenerate results.
 
-### 3. Run FAST
+### Scientific reproduction
 
 ```powershell
-$base = New-Item -ItemType Directory -Force -Path .tmp/reproducibility
-$bt = Join-Path $base.FullName ("sageqa-repro-fast-" + [guid]::NewGuid())
-.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider --basetemp $bt `
+.\.venv\Scripts\python.exe experiments/run_experiments.py `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
+  --methods auto --top-k 3
+```
+
+GraphSAGE training/inference and GNN-RAG are GPU-dependent for practical full runs. The
+answer stage uses a hosted reader and requires provider credentials and availability;
+provider drift may prevent byte-identical regeneration. Use restored frozen outputs for
+API-free verification. `dbdbb507` remains the strongest source candidate, not a formally
+proven exact publication revision.
+
+## B. Thesis Chapter 7
+
+### Environment setup
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+```
+
+GPU reproduction also requires a compatible CUDA/PyTorch environment. The final
+cross-encoder requires the pinned DistilBERT snapshot, supplied locally or through
+`SAGEQA_DISTILBERT_PATH`.
+
+### Required external assets and paths
+
+Restore `thesis_ch7_artifacts` at the exact paths in the `thesis_final`,
+`thesis_baselines`, `thesis_graph_ablation`, and `oracle` release indexes. Required roots
+include `data/production_generator_d_v1/`, final cross-encoder and GraphSAGE/GNN-RAG
+checkpoints, adaptive policies, and frozen outputs under `outputs/final_results/`.
+
+No verified public download location is currently bound to this bundle. This is a
+**REVIEWER_REPRODUCTION_BLOCKER**.
+
+### Verify frozen results without API calls
+
+```powershell
+.\.venv\Scripts\python.exe evaluation/check_thesis_final_paths.py
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider `
+  --basetemp .tmp/reproducibility/thesis-fast `
   tests/reproducibility --ignore=tests/reproducibility/test_original_paper_contracts.py
 ```
 
-FAST checks logical indexes, protected roots, selected artifact identities, thesis-final
-routing, the gold firewall, and the separation of historical Gold Support from the
-complete Gold Support oracle. The multi-gigabyte Generator D members are not fully hashed.
+For STANDARD and the 66-member FULL hash pass, use the exact commands in
+`docs/REPRODUCIBILITY_TEST_BASELINE.md`. These verification paths are local and API-free.
 
-### 4. Optionally run STANDARD or FULL
+### Scientific reproduction stages
 
-Use the exact commands in
-[`docs/REPRODUCIBILITY_TEST_BASELINE.md`](docs/REPRODUCIBILITY_TEST_BASELINE.md).
-STANDARD adds supported final-thesis, baseline, and graph-ablation tests. FULL also hashes
-all 66 Generator D members and runs supported original-paper and development contracts;
-it is local and API-free but reads about 16.9 GB for the full artifact hash pass.
+1. Build or restore Generator D under `data/production_generator_d_v1/` using the retained
+   builders in `data_processing/` and `data/build_subgraph_training_data.py`.
+2. Train/evaluate the DEV cross-encoder with
+   `experiments/cross_encoder_reranking_dev_v1/run_experiment.py` and its `PROTOCOL.md`.
+   This stage requires a GPU and the pinned DistilBERT snapshot.
+3. Generate frozen TEST rankings with explicit policies:
 
-## B. Reproduce the final thesis pipeline
+   ```powershell
+   .\.venv\Scripts\python.exe evaluation/run_cross_encoder_test_retrieval.py generate `
+     --cross-encoder-policy-dir outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k `
+     --final-sageqa-policy-dir outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k `
+     --output-dir outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40
+   ```
 
-The frozen thesis protocol is:
+4. Export canonical retrieval locally with
+   `python evaluation/export_manuscript_retrieval_results.py`.
+5. Freeze reader inputs locally with
+   `python generation/run_final_manuscript_answer_generation.py preflight`.
+6. Generate answers with
+   `python generation/run_final_manuscript_answer_generation.py generate`. This stage
+   requires provider credentials and external API access.
+7. Evaluate and finalize cached predictions without an API call:
 
-```text
-Generator D -> DistilBERT cross-encoder -> Text-Chain/Proof
-            -> adaptive support aggregation -> support-grounded reader
-```
+   ```powershell
+   .\.venv\Scripts\python.exe generation/run_final_manuscript_answer_generation.py evaluate --source-root .
+   .\.venv\Scripts\python.exe evaluation/finalize_final_manuscript_end_to_end.py
+   ```
 
-Reproduction is intentionally separated by stage. Consult the frozen configurations and
-embedded manifests before running any command; release indexes authorize verification,
-not a new TEST run.
+8. Reproduce comparison families separately:
+   - baselines: `evaluation/run_production_test_baselines.py` followed by
+     `generation/run_final_manuscript_baselines.py`;
+   - graph ablation: `evaluation/run_production_test_retrieval.py` with the explicit
+     hard-pair checkpoint and policy paths from `thesis_graph_ablation/index.yaml`;
+   - complete ground-truth support reference condition:
+     `generation/run_gold_support_complete_oracle.py` (`preflight`, `generate`, then
+     `evaluate`); only `generate` requires external API access;
+   - stage-wise analysis: `python evaluation/analyze_stagewise_test_errors.py`.
 
-| Stage | Entry point or record | Runtime/dependency boundary |
-|---|---|---|
-| Generator D candidate construction | dataset builders in `data_processing/` and `data/build_subgraph_training_data.py`; frozen corpus at `data/production_generator_d_v1/` | Deterministic/local once raw inputs are present; large output; some historical text-building modes can be provider-dependent |
-| Cross-encoder training/DEV evaluation | `experiments/cross_encoder_reranking_dev_v1/run_experiment.py` and its `PROTOCOL.md` | GPU-dependent; pinned DistilBERT snapshot required; DEV protocol only |
-| Frozen TEST retrieval | `evaluation/run_cross_encoder_test_retrieval.py` and `evaluation/run_production_test_retrieval.py` | GPU-dependent; frozen checkpoint and policies required; do not run as routine verification |
-| Retrieval export/evaluation | `evaluation/export_manuscript_retrieval_results.py` | Deterministic/local over frozen rankings; gold is joined only after ranking freeze |
-| Reader-input preflight | `python generation/run_final_manuscript_answer_generation.py preflight` | Local; validates and freezes inputs; no API call |
-| Answer generation | `python generation/run_final_manuscript_answer_generation.py generate` | Expensive and provider-dependent; requires credentials; provider drift can prevent byte-identical regeneration |
-| Frozen answer evaluation | `python generation/run_final_manuscript_answer_generation.py evaluate --source-root .` | Local over complete frozen predictions; no API call |
-| Canonical finalization | `python evaluation/finalize_final_manuscript_end_to_end.py` | Deterministic/local; verifies counts, hashes, denominators, and equal-dataset macro |
-
-For exact thesis reporting, prefer the frozen, hashed retrieval and reader artifacts over a
-new hosted-reader call. Baseline and graph-ablation workflows are separate logical bundles
-and must not be substituted for the main method.
-
-## C. Reproduce the published/original-paper protocol
-
-The historical entry point is:
-
-```powershell
-python experiments/run_experiments.py --help
-```
-
-The full historical command and its dataset-specific options remain available in that
-revision's README and runner. Do not substitute current thesis-final builders, checkpoint
-selection, cross-encoder, adaptive policy, or reader orchestration.
-
-The strongest source candidate is
-`dbdbb50708bdc6c686ef82518ec71c1d1bf55985`, but its status is
-`candidate_not_fully_proven`. Exact original reproduction cannot currently be guaranteed:
-the six reported original processed datasets, six GraphSAGE checkpoint roots, the retained reported children and aggregate files under `outputs/full_results/`,
-exact environment, and hosted-reader lineage are not bound by a complete commit-specific
-manifest. Details are in
-[`docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`](docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md) and
-[`release_manifests/paper_original/index.yaml`](release_manifests/paper_original/index.yaml).
-
-## Safety boundary
-
-Verification commands are read-only contract checks. Candidate generation, training,
-retrieval inference, and answer generation are scientific workflows: they can be costly,
-write new outputs, and may require external services. Do not run them merely to validate a
-clone, and do not overwrite any frozen artifact root.
+The indexed `884480be53c554edae70d3b2d8e781847590aa69` revision is the scientific
+thesis-source baseline. Frozen artifacts and hashes, rather than the literal current HEAD
+after documentation changes, define the reported Chapter 7 state.

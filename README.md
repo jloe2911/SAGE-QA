@@ -1,126 +1,90 @@
 # SAGE-QA
 
 SAGE-QA is a retrieval-augmented question-answering system for multi-hop reasoning over
-text benchmarks and OWL-style datasets. This repository preserves several scientific
-generations. They share code and data conventions, but they are not interchangeable
+text benchmarks and OWL-style datasets. This repository contains the published-paper
+workflow and the current Thesis Chapter 7 workflow as two distinct, reproducible
 protocols.
 
-## Repository status
+## Reproduce the published paper
 
-The repository contains:
+The paper reports six settings: HotpotQA, 2WikiMultiHopQA, FamilyOWL 1-hop and 2-hop,
+and OWL2Bench 1-hop and 2-hop. The historical pipeline combines lexical retrieval,
+GraphSAGE ranking, SAGE-QA Text-Chain or Proof reasoning, and GNN-RAG through
+[`experiments/run_experiments.py`](experiments/run_experiments.py).
 
-- the original published SAGE-QA implementation and results;
-- the final thesis pipeline and frozen results;
-- thesis baselines and a graph-model ablation;
-- external preservation records for scientifically meaningful superseded and development experiments; and
-- a post-publication complete Gold Support oracle and provenance correction.
-
-The machine-readable indexes in [`release_manifests/`](release_manifests/) define these
-logical generations without moving or rewriting their physical artifacts. See
-[`docs/ARTIFACTS.md`](docs/ARTIFACTS.md) for the public artifact map and
-[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for protocol boundaries.
-
-## Final thesis pipeline
-
-The default current architecture is:
-
-```text
-Frozen Generator D candidates
-  -> DistilBERT question-candidate cross-encoder
-  -> Text-Chain (text) / Proof reranking (ontology)
-  -> adaptive support aggregation
-  -> support-grounded answer generation
-```
-
-Retrieval, reranking, support selection, and reader inputs are frozen before evaluation
-gold is joined. The final answer cohort has 4,249 examples; Support and Joint metrics use
-the 3,509 examples with defined, non-empty gold support. The primary aggregate is an
-equal-dataset macro. This is the final thesis protocol, not a reconstruction of the
-published-paper architecture.
-
-## Published-paper implementation
-
-The historical entry point is [`experiments/run_experiments.py`](experiments/run_experiments.py).
-It is preserved for historical reproduction and must not be silently routed through the
-final thesis logic. Its strongest source-revision candidate is
-`dbdbb50708bdc6c686ef82518ec71c1d1bf55985` (`dbdbb507`), but its status remains
-`candidate_not_fully_proven`: the ignored processed data, checkpoints, result bytes,
-environment, and hosted-reader lineage are not formally bound to that revision.
-
-Historical methodological choices are therefore documented and preserved rather than
-retrospectively changed. See
-[`docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`](docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md).
-
-## Results and artifacts
-
-| Logical category | Meaning |
-|---|---|
-| `thesis_final` | Canonical final-thesis retrieval and end-to-end results |
-| `paper_original` | Published/original-paper protocol and historical results |
-| `thesis_baselines` | Frozen lexical, clean GNN-RAG, and full-context comparisons |
-| `thesis_graph_ablation` | Frozen hard-pair GraphSAGE ablation lineage |
-| `thesis_superseded` | Earlier thesis experiments externally preserved for provenance |
-| `oracle` | Complete Gold Support oracle and additive provenance correction |
-| `development_archive` | External preservation records for rejected, diagnostic, exploratory, incomplete, or DEV-only work |
-
-[`RESULTS.md`](RESULTS.md) maps result groups to their authoritative roots and manifests.
-The release indexes, rather than this summary, are authoritative for exact paths and
-hashes.
-
-## Quick verification
-
-These checks are local, read-only, and make no model or API calls:
+Restore the six processed dataset roots, six GraphSAGE checkpoint roots, raw inputs,
+and `outputs/full_results/` described by
+[`release_manifests/paper_original/index.yaml`](release_manifests/paper_original/index.yaml).
+Verify the supported historical contracts without an API call:
 
 ```powershell
-python evaluation/check_thesis_final_paths.py
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider `
+  --basetemp .tmp/reproducibility/paper `
+  tests/reproducibility/test_original_paper_contracts.py `
+  tests/test_evaluate_owl_qa_predictions.py
+```
 
-$base = New-Item -ItemType Directory -Force -Path .tmp/reproducibility
-$bt = Join-Path $base.FullName ("sageqa-repro-fast-" + [guid]::NewGuid())
-.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider --basetemp $bt `
+The reproduction entry point for exactly the six reported settings is:
+
+```powershell
+.\.venv\Scripts\python.exe experiments/run_experiments.py `
+  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
+  --methods auto --top-k 3
+```
+
+This scientific run may train or load GPU models and may call a hosted reader. Commit
+`dbdbb50708bdc6c686ef82518ec71c1d1bf55985` is the strongest paper-source candidate,
+but the exact published-result/source binding remains unproven. See
+[`REPRODUCE.md`](REPRODUCE.md) and
+[`docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`](docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md).
+
+## Reproduce Thesis Chapter 7
+
+Chapter 7 reports ten settings: the six above plus Pizza 100 and Pizza 250 at 1-hop and
+2-hop. Its main pipeline is:
+
+```text
+Generator D -> DistilBERT cross-encoder -> Text-Chain / Proof
+            -> adaptive support aggregation -> support-grounded reader
+```
+
+The retained release also covers lexical, clean GNN-RAG, and full-context baselines;
+the hard-pair GraphSAGE ablation; the complete ground-truth support reference condition;
+and stage-wise error analysis. Restore the paths indexed by `thesis_final`,
+`thesis_baselines`, `thesis_graph_ablation`, and `oracle`, then run:
+
+```powershell
+.\.venv\Scripts\python.exe evaluation/check_thesis_final_paths.py
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider `
+  --basetemp .tmp/reproducibility/thesis-fast `
   tests/reproducibility --ignore=tests/reproducibility/test_original_paper_contracts.py
 ```
 
-The first command reports missing external assets explicitly. FAST validates the release
-indexes, protected roots, selected frozen hashes, routing, the gold firewall, and oracle
-separation. It does not hash all 16.9 GB of Generator D members. See
-[`docs/REPRODUCIBILITY_TEST_BASELINE.md`](docs/REPRODUCIBILITY_TEST_BASELINE.md) for
-STANDARD and FULL.
+Exact stage commands and GPU/API boundaries are in [`REPRODUCE.md`](REPRODUCE.md).
+Frozen retrieval, predictions, metrics, and manifests can be verified without calling an
+external API. The indexed `884480be53c554edae70d3b2d8e781847590aa69` revision is the
+scientific thesis-source baseline; later documentation-only commits do not redefine it.
 
-## Reproduction
+## Results
 
-[`REPRODUCE.md`](REPRODUCE.md) separates:
+[`RESULTS.md`](RESULTS.md) maps the published-paper results and each reported Chapter 7
+result family to its frozen artifact root and release manifest.
 
-1. verification of already frozen thesis-final results;
-2. reproduction of thesis-final retrieval and answer-generation stages; and
-3. historical original-paper reproduction.
+## Artifact download
 
-A fresh clone does not contain all scientific assets. Git-ignored `data/`, `checkpoints/`,
-and `outputs/` content, the pinned DistilBERT snapshot, and some baseline-specific assets
-must be restored separately. No public location is claimed where one has not been bound
+**REVIEWER_REPRODUCTION_BLOCKER:** no verified public download URL is currently bound to
+the required paper or Chapter 7 artifact bundles. A fresh clone therefore cannot perform
+complete artifact verification or scientific reproduction.
+
+The required publication units are `paper_original_artifacts` and
+`thesis_ch7_artifacts`, with checksums and extraction paths matching
+[`docs/ARTIFACTS.md`](docs/ARTIFACTS.md). No URL is claimed until it has been published
 and verified.
 
-## Repository structure
+## Citation / License
 
-See [`docs/REPOSITORY_STRUCTURE.md`](docs/REPOSITORY_STRUCTURE.md) for the current physical
-layout and [`docs/PATH_PORTABILITY.md`](docs/PATH_PORTABILITY.md) for active-source path
-resolution. The logical indexes do not authorize physical moves or archival.
-
-## Text benchmark representation
-
-HotpotQA and 2WikiMultiHopQA use sentence evidence units for scored support and optional KG
-triples as graph context. [`TEXT_BENCHMARK_RETRIEVAL.md`](TEXT_BENCHMARK_RETRIEVAL.md) is
-the specialized schema and worked-example note.
-
-## Citation
-
-Citation metadata is provided in [`CITATION.cff`](CITATION.cff). Unverified publication
-identifiers, dates, and release versions are intentionally omitted.
-
-## License and third-party code
-
-First-party repository code is released under the MIT License; see [`LICENSE`](LICENSE).
-The adapted GNN-RAG baseline under [`third_party/GNN-RAG/`](third_party/GNN-RAG/) is
-third-party code. Its upstream provenance and local changes are described in
-[`patches/GNN-RAG-local-changes.md`](patches/GNN-RAG-local-changes.md) and the accompanying
-patch. The repository's MIT license must not be read as a relicensing statement for
-third-party components; consult their upstream terms before redistribution or use.
+Citation metadata is in [`CITATION.cff`](CITATION.cff). First-party code is released
+under the [`MIT License`](LICENSE). The adapted GNN-RAG baseline is third-party code;
+consult its upstream terms and
+[`patches/GNN-RAG-local-changes.md`](patches/GNN-RAG-local-changes.md) before use or
+redistribution.

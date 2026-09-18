@@ -1,79 +1,47 @@
-# SAGE-QA result map
+# SAGE-QA results
 
-This document maps scientific result generations to their authoritative artifacts. It is
-not a duplicate metric dump. Exact values, hashes, cohorts, and lineage are defined by the
-linked frozen outputs and machine-readable release indexes.
+Exact values, cohorts, hashes, and lineage are stored in the linked frozen outputs and
+release manifests.
 
-## 1. Final thesis results
+## 1. Published-paper results
 
-| Field | Value |
-|---|---|
-| Protocol | Final thesis protocol: Generator D, DistilBERT cross-encoder, Text-Chain/Proof, adaptive support, support-grounded reader |
-| Artifact root | `outputs/final_results/final_manuscript_test_end_to_end/` |
-| Retrieval root | `outputs/final_results/manuscript_retrieval_results_hard_pair_v2/` |
-| Release manifest | `release_manifests/thesis_final/index.yaml` |
-| Status | Complete frozen; canonical thesis results |
-| Thesis/manuscript | Yes |
-| Caveat | Answer denominator 4,249; Support/Joint denominator 3,509; equal-dataset macro is primary. Historical V1 and hard-pair-v2 retrieval lineage remain distinct. |
+- Protocol: historical `experiments/run_experiments.py` workflow over six reported settings.
+- Results: `outputs/full_results/`.
+- Manifest: `release_manifests/paper_original/index.yaml`.
+- Source caveat: `dbdbb507` is the strongest candidate, but the exact published-result/source binding is not fully proven.
 
-## 2. Thesis baselines
+## 2. Thesis Chapter 7 main results
 
-| Field | Value |
-|---|---|
-| Protocol | Lexical k=1, clean GNN-RAG k=1, and gold-free full context on the frozen ten-dataset TEST cohort |
-| Artifact root | `outputs/final_results/final_manuscript_baselines_test_end_to_end/` |
-| Component root | `outputs/final_results/production_generator_d_v1_test_baselines/` |
-| Release manifest | `release_manifests/thesis_baselines/index.yaml` |
-| Status | Complete frozen thesis baselines |
-| Thesis/manuscript | Yes, as comparisons rather than the main method |
-| Caveat | Failed native attempts were externally preserved and removed; only successful lexical and GNN-RAG children remain in the component root. |
+- Protocol: Generator D, DistilBERT cross-encoder, Text-Chain/Proof, adaptive aggregation, and the support-grounded reader over ten settings.
+- Retrieval: `outputs/final_results/manuscript_retrieval_results_hard_pair_v2/`.
+- End-to-end results: `outputs/final_results/final_manuscript_test_end_to_end/`.
+- Manifest: `release_manifests/thesis_final/index.yaml`.
+- Denominators: 4,249 answer rows; 3,509 rows with defined, non-empty gold support for Support and Joint metrics; equal-dataset macro is primary.
 
-## 3. Thesis graph ablation
+## 3. Thesis Chapter 7 baselines
 
-| Field | Value |
-|---|---|
-| Protocol | Hard-pair GraphSAGE with frozen GNN-only and SAGE-QA adaptive policies |
-| Artifact roots | `outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/`; `outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end/` |
-| Release manifest | `release_manifests/thesis_graph_ablation/index.yaml` |
-| Status | Complete frozen TEST evaluation |
-| Thesis/manuscript | Yes, as graph-model ablation |
-| Caveat | This is a GraphSAGE lineage, not the final cross-encoder checkpoint. |
+- Methods: Lexical Subgraph k=1, clean GNN-RAG k=1, and full context.
+- Results: `outputs/final_results/final_manuscript_baselines_test_end_to_end/` and the successful children under `outputs/final_results/production_generator_d_v1_test_baselines/`.
+- Manifest: `release_manifests/thesis_baselines/index.yaml`.
 
-## 4. Original published results
+## 4. Thesis Chapter 7 graph ablation
 
-| Field | Value |
-|---|---|
-| Protocol | Historical `experiments/run_experiments.py` workflow |
-| Artifact root | `outputs/full_results/` |
-| Release manifest | `release_manifests/paper_original/index.yaml` |
-| Status | Frozen historical results; exact authoritative source revision unresolved |
-| Thesis/manuscript | Published-paper results; not final-thesis results |
-| Caveat | `dbdbb507` is the strongest source candidate but remains `candidate_not_fully_proven`; ignored assets lack a commit-bound top-level manifest. |
+- Protocol: hard-pair GraphSAGE with frozen GNN-only and SAGE-QA adaptive policies.
+- Results: `outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/` and `outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end/`.
+- Manifest: `release_manifests/thesis_graph_ablation/index.yaml`.
+- Boundary: this is a graph-model ablation, not the final cross-encoder checkpoint.
 
-## 5. Superseded thesis results
+## 5. Thesis Chapter 7 complete-support reference
 
-| Field | Value |
-|---|---|
-| Protocol | Earlier Generator-D-v1 GraphSAGE and adaptive-policy thesis stages, plus separately classified A0/A3 submission work |
-| Artifact roots | Restore mappings for `outputs/final_results/production_generator_d_v1_test_retrieval/`, `outputs/final_results/production_generator_d_v1_answer_generation/`, and `outputs/final_results/manuscript_retrieval_results/` |
-| Release manifest | `release_manifests/thesis_superseded/index.yaml`; `archive_manifests/removed/phase_8_final_cleanup.yaml` |
-| Status | Valid historical provenance; externally backed up and removed from the final repository |
-| Thesis/manuscript | Externally preserved for provenance; not the canonical final-thesis result |
-| Caveat | Do not subtract unmatched cohorts or substitute the historical V1 export for hard-pair-v2 retrieval. |
+- Preferred term: **complete ground-truth support reference condition**.
+- Repository artifact name: `gold_support_complete_oracle`.
+- Results: `outputs/final_results/gold_support_complete_oracle/`.
+- Manifest: `release_manifests/oracle/index.yaml`.
+- Cohort: all 3,509 support-bearing rows, using the order-preserving union of persisted gold-support alternatives.
 
-## 6. Complete Gold Support oracle and provenance correction
+## 6. Thesis Chapter 7 stage-wise analysis
 
-| Field | Value |
-|---|---|
-| Protocol | Order-preserving union of all persisted gold-support alternatives followed by support-grounded answer generation |
-| Artifact roots | `outputs/final_results/gold_support_complete_oracle/`; `outputs/final_results/provenance_correction_v1/` |
-| Release manifest | `release_manifests/oracle/index.yaml` |
-| Status | Complete frozen post-publication oracle; additive provenance correction |
-| Thesis/manuscript | Post-publication analysis; does not rewrite historical thesis/manuscript results |
-| Caveat | The complete oracle has 3,509 support-bearing rows. It is not the historical Gold Support condition embedded in the frozen 16,256-row final-thesis prediction bundle. |
-
-Development-only, rejected, diagnostic, exploratory, aborted, and incomplete work is
-externally preserved and indexed in `release_manifests/development_archive/index.yaml`. See
-[`docs/ARTIFACTS.md`](docs/ARTIFACTS.md) and
-[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the reviewer-facing artifact and protocol
-maps.
+- Results: `outputs/final_results/final_manuscript_stagewise_error_analysis/`.
+- Producing analysis: `evaluation/analyze_stagewise_test_errors.py`.
+- Contract test: `tests/test_stagewise_test_errors.py`.
+- Authority: `release_manifests/reported_results_mapping.yaml`.

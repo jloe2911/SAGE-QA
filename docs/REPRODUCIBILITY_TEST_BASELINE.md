@@ -2,14 +2,13 @@
 
 This baseline validates source and artifact contracts only. It does not train, rerank,
 generate answers, call an API, alter evaluation semantics, or rewrite frozen artifacts.
-The thesis-final source revision is `884480be53c554edae70d3b2d8e781847590aa69`.
+The scientific thesis-source baseline is `884480be53c554edae70d3b2d8e781847590aa69`.
 The original-paper source status is `candidate_not_fully_proven` at
 `dbdbb50708bdc6c686ef82518ec71c1d1bf55985`.
 
-Phase 8 final baselines are FAST `27 passed, 1 skipped`, retained STANDARD
-`119 passed, 1 skipped`, original-paper supported `4 passed, 1 skipped`, stage-wise `6 passed`,
-and unfiltered collection `142 tests`. The earlier 28/123/10 counts included assertions
-and tests owned only by removed A0/A3 and candidate-builder families.
+The retained baselines are FAST `27 passed, 1 skipped`, STANDARD
+`119 passed, 1 skipped`, original-paper supported `4 passed, 1 skipped`, and stage-wise
+`6 passed`. The unfiltered retained collection contains `142 tests`.
 
 ## Final retained-test matrix
 
@@ -24,10 +23,6 @@ network access. Torch tests listed as CPU do not require a GPU.
 | Graph ablation | `tests/test_hard_pair_reservation.py`; `tests/test_production_test_answer_generation.py` | Present; CPU Torch | No | Temp in the broader generation fixture | Policy contracts | STANDARD focused |
 | PAPER_ORIGINAL_TEST | `tests/reproducibility/test_original_paper_contracts.py`; `tests/test_evaluate_owl_qa_predictions.py` | Present | No | Temp | Historical/local | FULL / focused paper gate |
 | Shared integration | `tests/test_unified_kg_pipeline.py` | Present | No | Temp | No | FULL |
-
-Tests owned only by removed A0/A3, candidate-builder, listwise, static-hard, diagnostic,
-and superseded V1 families were preserved in the Phase 8 backup and removed with their
-source/output family. They are not repaired through retained scientific code.
 
 ## Isolated Windows commands
 
@@ -117,19 +112,10 @@ Remove-Item Env:SAGEQA_FULL_ARTIFACT_HASHES
 FULL adds retained original-paper/shared integration contracts and byte-hashes all 66
 Generator D members (about 16.9 GB). It never invokes generation or an external service.
 
-## Superseded test evidence
-
-The former A0/A3 submission manifest, archive, source, and tests are preservation-only
-members of the Phase 8 external backup. They are not part of the final repository test
-surface or a scientific release artifact.
-
 ## Original-paper boundary
 
 The historical contract checks Git objects at `dbdbb507`, the original runner, processed
-dataset/checkpoint roots, `outputs/full_results`, evaluator/reader modules, and, when
-present, the optional detached compatibility worktree. The worktree was audited as
-redundant and removed on 2026-09-18; `ffee42c` remains recoverable from the preserved
-`post-submission-development` references. Exact reproduction remains unproven because
-there is no commit-bound manifest for the ignored data, checkpoints, results, environment,
-or hosted reader. Historical checks do not import or route through thesis-final validation
-logic.
+dataset/checkpoint roots, `outputs/full_results`, and evaluator/reader modules. Exact
+reproduction remains unproven because there is no commit-bound manifest for the ignored
+data, checkpoints, results, environment, or hosted reader. Historical checks do not
+import or route through thesis-final validation logic.
