@@ -56,13 +56,11 @@ def test_protected_roots_and_release_indexes_resolve(repo_root: Path):
 
     indexes = sorted((repo_root / "release_manifests").glob("*/index.yaml"))
     assert {path.parent.name for path in indexes} == {
-        "development_archive",
         "oracle",
         "paper_original",
         "thesis_baselines",
         "thesis_final",
         "thesis_graph_ablation",
-        "thesis_superseded",
     }
     for index_path in indexes:
         for bundle in _yaml(index_path)["bundles"]:

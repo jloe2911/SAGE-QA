@@ -1,5 +1,5 @@
 schema_version: sageqa_final_repository_keep_v1
-status: phase_8_final_cleanup_authorized
+status: phase_8_final_cleanup_complete
 authority: release_manifests/reported_results_mapping.yaml
 classification_values: [KEEP_PAPER, KEEP_THESIS, KEEP_BOTH, KEEP_REPRODUCIBILITY]
 retained_paths:
@@ -165,7 +165,6 @@ review_required:
 
 explicit_non_keep_findings:
   paper_era_pizza: BACKUP_AND_REMOVE
-  thesis_superseded_v1_pipeline: BACKUP_AND_REMOVE
   failed_or_incomplete_baseline_attempts: BACKUP_AND_REMOVE
   rejected_diagnostics_and_symbolic_alternatives: BACKUP_AND_REMOVE
   static_hard_listwise_and_a0_a3_families: BACKUP_AND_REMOVE
