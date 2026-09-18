@@ -17,6 +17,17 @@ HISTORICAL_MODULES = (
     "generation/generate_hotpot_answers_with_llm.py",
     "generation/generate_owl_answers_with_llm.py",
 )
+REPORTED_RESULT_ROOTS = [
+    "outputs/full_results/HotpotQA",
+    "outputs/full_results/2WikiMultiHopQA",
+    "outputs/full_results/FamilyOWL_1hop",
+    "outputs/full_results/FamilyOWL_2hop",
+    "outputs/full_results/OWL2Bench_1hop",
+    "outputs/full_results/OWL2Bench_2hop",
+    "outputs/full_results/full_pipeline_results.csv",
+    "outputs/full_results/full_pipeline_results.json",
+    "outputs/full_results/sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv",
+]
 
 
 def _git(repo_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -43,10 +54,6 @@ def test_historical_runner_records_original_roots_without_thesis_routing(repo_ro
         "data/FamilyOWL_2hop",
         "data/OWL2Bench_1hop",
         "data/OWL2Bench_2hop",
-        "data/pizza_100_1hop",
-        "data/pizza_100_2hop",
-        "data/pizza_250_1hop",
-        "data/pizza_250_2hop",
     )
     checkpoint_roots = (
         "checkpoints/gnn_subgraph_ranker_hotpotqa_full",
@@ -55,10 +62,6 @@ def test_historical_runner_records_original_roots_without_thesis_routing(repo_ro
         "checkpoints/gnn_subgraph_ranker_familyowl_2hop_full",
         "checkpoints/gnn_subgraph_ranker_owl2bench_1hop_full",
         "checkpoints/gnn_subgraph_ranker_owl2bench_2hop_full",
-        "checkpoints/gnn_subgraph_ranker_pizza_100_1hop_full",
-        "checkpoints/gnn_subgraph_ranker_pizza_100_2hop_full",
-        "checkpoints/gnn_subgraph_ranker_pizza_250_1hop_full",
-        "checkpoints/gnn_subgraph_ranker_pizza_250_2hop_full",
     )
     for relative in (*data_roots, *checkpoint_roots, "outputs/full_results"):
         assert relative in source
@@ -76,7 +79,7 @@ def test_original_paper_index_fails_closed_on_unproven_lineage(repo_root: Path):
     assert index["known_sha256"] == {}
     assert index["externally_archived"] == "unknown"
     assert index["producing_entry_point"] == HISTORICAL_ENTRY_POINT
-    assert index["result_root"] == "outputs/full_results"
+    assert index["result_root"] == REPORTED_RESULT_ROOTS
     assert "not yet formally proven" in index["notes"]
 
 

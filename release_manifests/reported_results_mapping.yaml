@@ -1,7 +1,7 @@
 schema_version: sageqa_reported_results_mapping_v1
-status: planning_only_audit_complete
-created_for: phase_7c_result_grounded_dependency_closure
-physical_cleanup_authorized: false
+status: phase_8_final_cleanup_complete
+created_for: phase_7c_result_grounded_dependency_closure_and_phase_8_execution
+physical_cleanup_authorized: true
 authority:
   primary: user_supplied_reported_results_mapping_from_original_paper_tables_and_current_thesis_chapter_7
   current_thesis_path_requested: chapters/7_reasoner.tex
@@ -340,5 +340,5 @@ records:
 closure_notes:
   - The hard-pair-v2 export is canonical; outputs/final_results/manuscript_retrieval_results is the superseded V1 export.
   - outputs/development_diagnostics/final_old_vs_cross_encoder_analysis/comparison.json remains a direct READ_INPUT of the canonical exporter; the other files in that diagnostic root are not required.
-  - Paper-era Pizza data, checkpoints, results, raw roots, and archives are outside PAPER and are not used by the thesis Generator-D lineage.
+  - Paper-era Pizza processed data, checkpoints, results, and raw ZIP archives are outside PAPER; the unzipped ontology raw roots remain direct Chapter 7 runtime inputs.
   - Failed and incomplete GNN-RAG attempts are outside the reported baseline closure.

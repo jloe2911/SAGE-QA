@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import zipfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -67,7 +66,10 @@ def test_protected_roots_and_release_indexes_resolve(repo_root: Path):
     }
     for index_path in indexes:
         for bundle in _yaml(index_path)["bundles"]:
-            paths_may_be_absent = bundle.get("status") == "indexed_not_physically_archived"
+            paths_may_be_absent = bundle.get("status") in {
+                "indexed_not_physically_archived",
+                "externally_backed_up_and_removed",
+            }
             for field in ("data_root", "checkpoint_root", "policy_root", "result_root"):
                 for relative in _values(bundle.get(field)):
                     assert _relative(relative), (index_path, field, relative)
@@ -167,39 +169,3 @@ def test_integrity_verification_is_read_only(repo_root: Path):
     _verify_oracle_manifest(repo_root)
     after = {path: (path.stat().st_size, path.stat().st_mtime_ns) for path in protected}
     assert after == before
-
-
-def test_legacy_artifact_manifest_is_classified_as_thesis_superseded(repo_root: Path):
-    classification = _yaml(
-        repo_root / "release_manifests/hidden_untracked_classification.yaml"
-    )
-    artifact_rules = [
-        rule
-        for rule in classification["rules"]
-        if rule.get("match") == "exact" and "artifacts/manifest.json" in rule.get("paths", [])
-    ]
-    assert len(artifact_rules) == 1
-    assert artifact_rules[0]["classification"] == "THESIS_SUPERSEDED"
-    assert not any(rule.get("classification") == "NEEDS_REVIEW" for rule in classification["rules"])
-
-    manifest_path = repo_root / "artifacts/manifest.json"
-    manifest = _json(manifest_path)
-    frozen = _json(repo_root / "experiments/sageqa_final_architecture_frozen.json")
-    assert manifest["architecture_id"] == frozen["architecture_id"] == "sageqa_a0_a3_reader_v1"
-    forbidden_prefixes = (
-        "data/production_generator_d_v1/",
-        "outputs/final_results/",
-        "outputs/full_results/",
-        "checkpoints/gnn_subgraph_ranker_",
-    )
-    assert not any(
-        row["path"].replace("\\", "/").startswith(forbidden_prefixes)
-        for row in manifest["files"]
-    )
-
-    archive = repo_root / "dist/sageqa-submission-artifacts.zip"
-    with zipfile.ZipFile(archive) as bundle:
-        archived_manifest = json.loads(bundle.read("artifacts/manifest.json"))
-        assert archived_manifest == manifest
-        members = set(bundle.namelist())
-    assert {row["path"].replace("\\", "/") for row in manifest["files"]} <= members

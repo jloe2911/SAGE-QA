@@ -112,7 +112,7 @@ selection, cross-encoder, adaptive policy, or reader orchestration.
 The strongest source candidate is
 `dbdbb50708bdc6c686ef82518ec71c1d1bf55985`, but its status is
 `candidate_not_fully_proven`. Exact original reproduction cannot currently be guaranteed:
-the original processed datasets, ten GraphSAGE checkpoint roots, `outputs/full_results/`,
+the six reported original processed datasets, six GraphSAGE checkpoint roots, the retained reported children and aggregate files under `outputs/full_results/`,
 exact environment, and hosted-reader lineage are not bound by a complete commit-specific
 manifest. Details are in
 [`docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`](docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md) and

@@ -11,8 +11,8 @@ reviewer-facing terminology differs.
 | `thesis_final` | Final thesis protocol | Canonical current thesis architecture and results |
 | `thesis_baselines` | Thesis baseline | Matched lexical, clean GNN-RAG, and full-context comparisons |
 | `thesis_graph_ablation` | Graph ablation | Hard-pair GraphSAGE ablation, separate from the cross-encoder |
-| `thesis_superseded` | Superseded thesis experiment | Valid earlier thesis stages retained for provenance |
-| `development_archive` | Development experiment | DEV-only, rejected, exploratory, diagnostic, aborted, or incomplete work |
+| `thesis_superseded` | Superseded thesis experiment | Valid earlier thesis stages externally preserved for provenance |
+| `development_archive` | Development experiment | External preservation records for DEV-only, rejected, exploratory, diagnostic, aborted, or incomplete work |
 | `oracle` | Complete Gold Support oracle | Explicit post-publication oracle, distinct from Historical Gold Support |
 
 ## Published/original-paper protocol
@@ -30,7 +30,7 @@ The final thesis is a different protocol, not regenerated paper numbers:
 5. support-grounded answer generation; and
 6. evaluation only after predictions are frozen and gold is joined.
 
-The final source revision indexed by this phase is `884480be53c554edae70d3b2d8e781847590aa69`. Historical V1 retrieval exports and hard-pair-v2 exports remain distinct. Baselines and graph ablations have separate logical bundles and cannot be substituted for the main method.
+The final source revision indexed by this phase is `884480be53c554edae70d3b2d8e781847590aa69`. Historical V1 retrieval exports are externally preserved and remain distinct from the retained hard-pair-v2 export. Baselines and graph ablations have separate logical bundles and cannot be substituted for the main method.
 
 ## Thesis baselines and graph ablation
 
@@ -41,9 +41,9 @@ not aliases for the final thesis method. Their authoritative roots and manifests
 ## Superseded thesis and development experiments
 
 Superseded thesis experiments are valid historical results that no longer define the
-canonical thesis pipeline. Development experiments include rejected or diagnostic work
-and must not be promoted to final TEST evidence without a separate provenance audit.
-Neither category is disposable, and neither logical index authorizes a physical move.
+canonical thesis pipeline. Development experiments include rejected or diagnostic work.
+Both categories were preserved in verified external backups before removal from the final
+repository and must not be presented as retained release artifacts or final TEST evidence.
 
 ## Post-publication oracle analysis
 

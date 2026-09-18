@@ -26,7 +26,7 @@ linked frozen outputs and machine-readable release indexes.
 | Release manifest | `release_manifests/thesis_baselines/index.yaml` |
 | Status | Complete frozen thesis baselines |
 | Thesis/manuscript | Yes, as comparisons rather than the main method |
-| Caveat | Failed native attempts in the component root are development records, not baseline results. |
+| Caveat | Failed native attempts were externally preserved and removed; only successful lexical and GNN-RAG children remain in the component root. |
 
 ## 3. Thesis graph ablation
 
@@ -55,10 +55,10 @@ linked frozen outputs and machine-readable release indexes.
 | Field | Value |
 |---|---|
 | Protocol | Earlier Generator-D-v1 GraphSAGE and adaptive-policy thesis stages, plus separately classified A0/A3 submission work |
-| Artifact roots | `outputs/final_results/production_generator_d_v1_test_retrieval/`; `outputs/final_results/production_generator_d_v1_answer_generation/`; `outputs/final_results/manuscript_retrieval_results/` |
-| Release manifest | `release_manifests/thesis_superseded/index.yaml` |
-| Status | Valid, frozen, historical, and superseded |
-| Thesis/manuscript | Retained for provenance; not the canonical final-thesis result |
+| Artifact roots | Restore mappings for `outputs/final_results/production_generator_d_v1_test_retrieval/`, `outputs/final_results/production_generator_d_v1_answer_generation/`, and `outputs/final_results/manuscript_retrieval_results/` |
+| Release manifest | `release_manifests/thesis_superseded/index.yaml`; `archive_manifests/removed/phase_8_final_cleanup.yaml` |
+| Status | Valid historical provenance; externally backed up and removed from the final repository |
+| Thesis/manuscript | Externally preserved for provenance; not the canonical final-thesis result |
 | Caveat | Do not subtract unmatched cohorts or substitute the historical V1 export for hard-pair-v2 retrieval. |
 
 ## 6. Complete Gold Support oracle and provenance correction
@@ -73,7 +73,7 @@ linked frozen outputs and machine-readable release indexes.
 | Caveat | The complete oracle has 3,509 support-bearing rows. It is not the historical Gold Support condition embedded in the frozen 16,256-row final-thesis prediction bundle. |
 
 Development-only, rejected, diagnostic, exploratory, aborted, and incomplete work is
-indexed separately in `release_manifests/development_archive/index.yaml`. See
+externally preserved and indexed in `release_manifests/development_archive/index.yaml`. See
 [`docs/ARTIFACTS.md`](docs/ARTIFACTS.md) and
 [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the reviewer-facing artifact and protocol
 maps.

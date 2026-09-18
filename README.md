@@ -12,7 +12,7 @@ The repository contains:
 - the original published SAGE-QA implementation and results;
 - the final thesis pipeline and frozen results;
 - thesis baselines and a graph-model ablation;
-- scientifically meaningful superseded and development experiments; and
+- external preservation records for scientifically meaningful superseded and development experiments; and
 - a post-publication complete Gold Support oracle and provenance correction.
 
 The machine-readable indexes in [`release_manifests/`](release_manifests/) define these
@@ -59,9 +59,9 @@ retrospectively changed. See
 | `paper_original` | Published/original-paper protocol and historical results |
 | `thesis_baselines` | Frozen lexical, clean GNN-RAG, and full-context comparisons |
 | `thesis_graph_ablation` | Frozen hard-pair GraphSAGE ablation lineage |
-| `thesis_superseded` | Valid earlier thesis experiments retained for provenance |
+| `thesis_superseded` | Earlier thesis experiments externally preserved for provenance |
 | `oracle` | Complete Gold Support oracle and additive provenance correction |
-| `development_archive` | Rejected, diagnostic, exploratory, incomplete, or DEV-only work |
+| `development_archive` | External preservation records for rejected, diagnostic, exploratory, incomplete, or DEV-only work |
 
 [`RESULTS.md`](RESULTS.md) maps result groups to their authoritative roots and manifests.
 The release indexes, rather than this summary, are authoritative for exact paths and

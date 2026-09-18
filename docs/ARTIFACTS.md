@@ -14,9 +14,9 @@ permission to regenerate an artifact.
 | Published-paper results | Published/original-paper protocol | `candidate_source_revision_unresolved` | Preserve reported historical results and execution layout | `outputs/full_results/` | `release_manifests/paper_original/index.yaml`; no artifact-bound top-level manifest | Yes, with unresolved source binding |
 | Thesis baselines | Thesis baseline | `complete_frozen` | Lexical, clean GNN-RAG, and full-context comparisons | `outputs/final_results/final_manuscript_baselines_test_end_to_end/` | `release_manifests/thesis_baselines/index.yaml` and root `artifact_manifest.json` | Yes |
 | Hard-pair GraphSAGE | Graph ablation | `complete_frozen_test_evaluation` | Separate graph-model lineage and TEST ablation | `outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/` and associated end-to-end/audit roots | `release_manifests/thesis_graph_ablation/index.yaml` | Yes |
-| Earlier Generator-D-v1 thesis stages | Superseded thesis experiment | `valid_historical_superseded` | Preserve earlier retrieval, policies, and answers for provenance | Listed in `release_manifests/thesis_superseded/index.yaml` | `release_manifests/thesis_superseded/index.yaml` | Yes |
+| Earlier Generator-D-v1 thesis stages | Superseded thesis experiment | `externally_backed_up_and_removed` | Preserve earlier retrieval, policies, and answers for provenance | Restore mappings in `release_manifests/thesis_superseded/index.yaml` | `archive_manifests/removed/phase_8_final_cleanup.yaml` | External preservation only |
 | Complete Gold Support oracle | Oracle | `complete_frozen_post_publication_oracle` | Complete 3,509-row support-bearing oracle analysis | `outputs/final_results/gold_support_complete_oracle/` | `release_manifests/oracle/index.yaml` and root `artifact_manifest.json` | Yes |
-| Development archive | Development experiment | `indexed_not_physically_archived` for the heterogeneous aggregate; verified Phase 7A and 7B batches `externally_backed_up_and_removed` | Index remaining development work and retain cleanup provenance | Current local roots are listed in `release_manifests/development_archive/index.yaml`; eight removed payload roots are absent from the repository | `release_manifests/development_archive/index.yaml` and records under `archive_manifests/removed/` | No, heterogeneous |
+| Development archive | Development experiment | `externally_backed_up_and_removed` | Retain cleanup provenance without presenting rejected payloads as release artifacts | Restore mappings are recorded in Phase 7A, 7B, and 8 removal records | `release_manifests/development_archive/index.yaml` and records under `archive_manifests/removed/` | External preservation only |
 
 ## External restoration status
 
@@ -29,7 +29,7 @@ has been verified for these frozen bundles.
 | Tracked source, release indexes, and reviewer documentation | `AVAILABLE_IN_REPOSITORY` | Present in a fresh clone | Not applicable |
 | Raw public text benchmark inputs | `EXTERNAL_DOWNLOAD` | Obtain the exact dataset/version required by the relevant protocol; verify split semantics before use | `pending` |
 | Frozen Generator D corpus under `data/production_generator_d_v1/` | `EXTERNAL_ARCHIVE`, `CURRENTLY_NOT_PUBLICLY_BOUND` | Restore all 66 manifest-bound members at the indexed path | `pending` |
-| Original processed datasets under the ten paper roots | `EXTERNAL_ARCHIVE`, `CURRENTLY_NOT_PUBLICLY_BOUND` | Restore without substituting thesis-final data | `pending` |
+| Original processed datasets under the six reported paper roots | `EXTERNAL_ARCHIVE`, `CURRENTLY_NOT_PUBLICLY_BOUND` | Restore without substituting thesis-final data | `pending` |
 | Final cross-encoder, GraphSAGE, and clean GNN-RAG checkpoints | `EXTERNAL_ARCHIVE`, `CURRENTLY_NOT_PUBLICLY_BOUND` | Restore to the exact indexed checkpoint roots and verify hashes | `pending` |
 | Pinned DistilBERT base snapshot | `EXTERNAL_ARCHIVE`, `CURRENTLY_NOT_PUBLICLY_BOUND` | Supply through the local cache or `SAGEQA_DISTILBERT_PATH`; fail closed on mismatch | `pending` |
 | Frozen final, baseline, ablation, paper, and oracle output roots | `EXTERNAL_ARCHIVE`, `CURRENTLY_NOT_PUBLICLY_BOUND` | Restore to exact paths; validate embedded and release-manifest identities | `pending` |
@@ -42,7 +42,7 @@ artifact verification or end-to-end scientific reproduction.
 
 ## Published paper
 
-The historical pipeline is `experiments/run_experiments.py` plus its paper-era builders, readers, evaluators, exporters, ten processed dataset roots, ten `checkpoints/gnn_subgraph_ranker_*_full/` roots, raw inputs, and `outputs/full_results/`. Commit `dbdbb507` is the strongest source candidate because it is tagged `conference-submission`, but the exact publication revision is not formally proven. See `docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`.
+The reported historical pipeline is `experiments/run_experiments.py` plus its paper-era builders, readers, evaluators, exporters, six processed dataset roots, six GraphSAGE checkpoint roots, raw inputs, and the six reported children and aggregate files under `outputs/full_results/`. Paper-era Pizza branches were not reported and are not retained. Commit `dbdbb507` is the strongest source candidate because it is tagged `conference-submission`, but the exact publication revision is not formally proven. See `docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`.
 
 ## Final thesis
 
@@ -60,7 +60,7 @@ The hard-pair GraphSAGE architecture is indexed separately under `release_manife
 
 ## Superseded and development results
 
-Valid earlier thesis stages remain scientific provenance and are indexed as `thesis_superseded`. The final repository retains artifacts needed for published-paper or final-thesis reproduction; rejected, diagnostic, exploratory, aborted, or incomplete development work not needed for either may leave only after a separately authorized, verified backup/remove operation. Phase 7A externally backed up and removed the seven-file cross-repository methodology-transfer audit and eleven-file unified evidence-graph comparison. Phase 7B separately backed up, restore-tested, and removed six rejected DEV diagnostic output roots (33 files, 5,039,726 bytes). Their planning, execution, and removal provenance remains under `archive_manifests/`; non-selected development work is unchanged. The preservation backups are not scientific release artifacts, and these records do not authorize further removals.
+Valid earlier thesis stages remain scientific provenance in the Phase 8 preservation backup and `thesis_superseded` restore index. Phase 8 backed up, hash-verified, fully restore-tested, and removed all remaining outside-closure scientific and development families. Planning and removal provenance remains under `archive_manifests/`. Preservation backups are not scientific release artifacts.
 
 ## Complete Gold Support oracle
 

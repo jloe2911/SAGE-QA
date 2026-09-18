@@ -46,4 +46,12 @@ bundles:
           removal_record: archive_manifests/removed/rejected_diagnostics_backup_02.yaml
           preservation_only: true
           scientific_release_artifact: false
-    notes: Includes rejected FamilyOWL selector/compiler v2. Phase 7A removed two archived rejected payload roots after verified preservation backup. Phase 7B removed six rejected DEV diagnostic output roots after a separate verified backup and full restore test. Their planning, execution, and removal provenance remains under archive_manifests; non-selected development results remain at their existing paths.
+        - cleanup_phase: Phase 8
+          families: 20
+          file_count: 887
+          total_bytes: 2421479300
+          backup_ids: [sageqa-phase8-final-cleanup-sha256-751142ba74cddb0407d14b87c52d5b85663bdd37e17547fd84fe173145c6c4da, sageqa-phase8-stale-gnn-test-sha256-091cbe2afdb6d46ae8046fedc0adfea4c873b70083f48380d480afc69e787af8]
+          removal_records: [archive_manifests/removed/phase_8_final_cleanup.yaml, archive_manifests/removed/phase_8_stale_gnn_test.yaml]
+          preservation_only: true
+          scientific_release_artifact: false
+    notes: Phase 7A removed two pilot roots, Phase 7B removed six diagnostic roots, and Phase 8 removed the remaining outside-closure scientific and development families after verified external backups and complete isolated restore tests. Only paper, Chapter 7, and reproducibility dependencies remain live.

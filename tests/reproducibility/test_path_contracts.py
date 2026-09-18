@@ -50,7 +50,7 @@ def test_canonical_defaults_resolve_existing_protected_assets(repo_root: Path):
 
 
 def test_environment_overrides_change_paths_not_logical_identity(repo_root: Path, monkeypatch: pytest.MonkeyPatch):
-    data, checkpoints, outputs = repo_root / "checkpoints", repo_root / "data", repo_root / "artifacts"
+    data, checkpoints, outputs = repo_root / "checkpoints", repo_root / "data", repo_root / "outputs"
     monkeypatch.setenv("SAGEQA_DATA_ROOT", str(data))
     monkeypatch.setenv("SAGEQA_CHECKPOINTS_ROOT", str(checkpoints))
     monkeypatch.setenv("SAGEQA_OUTPUTS_ROOT", str(outputs))

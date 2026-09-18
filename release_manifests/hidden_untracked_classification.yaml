@@ -1,4 +1,5 @@
 schema_version: sageqa_hidden_untracked_classification_v1
+status: historical_pre_phase8_snapshot
 audit_date: 2026-09-14
 source: .git/info/exclude
 source_entry_count: 206
@@ -206,6 +207,7 @@ coverage_assertion:
   multiply_classified_entries: 0
   classifications_used: [PAPER_ORIGINAL_TEST, THESIS_SUPERSEDED, DEVELOPMENT, RELEASE_INFRASTRUCTURE, CACHE, LOCAL_ONLY]
 notes:
+  - Phase 8 externally backed up and removed outside-closure entries that were present in this 2026-09-14 snapshot; this file is retained as historical classification evidence, not a live-path index.
   - State is computed from existence because all 206 source entries are exact root-anchored local excludes and none is tracked at HEAD.
   - TRACK is a recommendation only; this phase does not change tracking.
   - Absent entries are retained in this audit because .git/info/exclude still contains them; REVIEW means decide whether to remove only the stale exclude rule later.

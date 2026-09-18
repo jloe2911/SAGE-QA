@@ -10,7 +10,6 @@ protected_roots:
     - outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k/
     - outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k/
     - outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40/
-    - outputs/final_results/manuscript_retrieval_results/
     - outputs/final_results/manuscript_retrieval_results_hard_pair_v2/
     - outputs/final_results/final_manuscript_test_end_to_end/
   oracle:
@@ -18,7 +17,8 @@ protected_roots:
     - outputs/final_results/provenance_correction_v1/
   thesis_baseline:
     - checkpoints/production_generator_d_v1_gnn_rag_clean/
-    - outputs/final_results/production_generator_d_v1_test_baselines/
+    - outputs/final_results/production_generator_d_v1_test_baselines/lexical_subgraph/
+    - outputs/final_results/production_generator_d_v1_test_baselines/gnn_rag/
     - outputs/final_results/final_manuscript_baselines_test_end_to_end/
   thesis_graph_ablation:
     - checkpoints/production_generator_d_v2_hard_pair/
@@ -35,10 +35,6 @@ protected_roots:
     - data/FamilyOWL_2hop/
     - data/owl2bench_1hop/
     - data/owl2bench_2hop/
-    - data/pizza_100_1hop/
-    - data/pizza_100_2hop/
-    - data/pizza_250_1hop/
-    - data/pizza_250_2hop/
   paper_original_checkpoints:
     - checkpoints/gnn_subgraph_ranker_hotpotqa_full/
     - checkpoints/gnn_subgraph_ranker_2wiki_full/
@@ -46,22 +42,22 @@ protected_roots:
     - checkpoints/gnn_subgraph_ranker_familyowl_2hop_full/
     - checkpoints/gnn_subgraph_ranker_owl2bench_1hop_full/
     - checkpoints/gnn_subgraph_ranker_owl2bench_2hop_full/
-    - checkpoints/gnn_subgraph_ranker_pizza_100_1hop_full/
-    - checkpoints/gnn_subgraph_ranker_pizza_100_2hop_full/
-    - checkpoints/gnn_subgraph_ranker_pizza_250_1hop_full/
-    - checkpoints/gnn_subgraph_ranker_pizza_250_2hop_full/
   paper_original_results_and_raw_sources:
-    - outputs/full_results/
+    - outputs/full_results/HotpotQA/
+    - outputs/full_results/2WikiMultiHopQA/
+    - outputs/full_results/FamilyOWL_1hop/
+    - outputs/full_results/FamilyOWL_2hop/
+    - outputs/full_results/OWL2Bench_1hop/
+    - outputs/full_results/OWL2Bench_2hop/
+    - outputs/full_results/full_pipeline_results.csv
+    - outputs/full_results/full_pipeline_results.json
+    - outputs/full_results/sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv
     - data/raw/hotpot_qa/
     - data/raw/2WikiMultihopQA/
     - data/raw/family/
     - data/raw/owl2bench/
     - data/raw/pizza_100/
     - data/raw/pizza_250/
-    - data/raw/family.zip
-    - data/raw/owl2bench.zip
-    - data/raw/pizza_100.zip
-    - data/raw/pizza_250.zip
 protected_operations: [delete, move, rename, overwrite, recursive_cleanup, tracking_change]
 notes:
   - Paths are physical current-checkout roots; no relocation is implied.
