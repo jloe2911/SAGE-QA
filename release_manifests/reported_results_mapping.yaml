@@ -1,0 +1,344 @@
+schema_version: sageqa_reported_results_mapping_v1
+status: planning_only_audit_complete
+created_for: phase_7c_result_grounded_dependency_closure
+physical_cleanup_authorized: false
+authority:
+  primary: user_supplied_reported_results_mapping_from_original_paper_tables_and_current_thesis_chapter_7
+  current_thesis_path_requested: chapters/7_reasoner.tex
+  current_thesis_path_present_in_workspace: false
+  rule: The supplied result mapping is authoritative; older repository thesis snapshots do not decide retention.
+dataset_sets:
+  PAPER:
+    - HotpotQA
+    - 2WikiMultiHopQA
+    - FamilyOWL_1hop
+    - FamilyOWL_2hop
+    - OWL2Bench_1hop
+    - OWL2Bench_2hop
+  THESIS_CH7:
+    - HotpotQA
+    - 2WikiMultiHopQA
+    - FamilyOWL_1hop
+    - FamilyOWL_2hop
+    - pizza_100_1hop
+    - pizza_100_2hop
+    - pizza_250_1hop
+    - pizza_250_2hop
+    - OWL2Bench_1hop
+    - OWL2Bench_2hop
+records:
+  - document: PAPER
+    result_identifier: retrieval_results
+    datasets: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    methods: [Lexical_Subgraph, GNN_Subgraph, SAGE_QA_Text_Chain, SAGE_QA_Proof, GNN_RAG]
+    producing_output_root:
+      - outputs/full_results/HotpotQA
+      - outputs/full_results/2WikiMultiHopQA
+      - outputs/full_results/FamilyOWL_1hop
+      - outputs/full_results/FamilyOWL_2hop
+      - outputs/full_results/OWL2Bench_1hop
+      - outputs/full_results/OWL2Bench_2hop
+      - outputs/full_results/sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv
+    required_data_root:
+      - data/HotpotQA
+      - data/2WikiMultiHopQA
+      - data/FamilyOWL_1hop
+      - data/FamilyOWL_2hop
+      - data/OWL2Bench_1hop
+      - data/OWL2Bench_2hop
+    required_checkpoint:
+      - checkpoints/gnn_subgraph_ranker_hotpotqa_full
+      - checkpoints/gnn_subgraph_ranker_2wiki_full
+      - checkpoints/gnn_subgraph_ranker_familyowl_1hop_full
+      - checkpoints/gnn_subgraph_ranker_familyowl_2hop_full
+      - checkpoints/gnn_subgraph_ranker_owl2bench_1hop_full
+      - checkpoints/gnn_subgraph_ranker_owl2bench_2hop_full
+    required_policy: null
+    required_source:
+      - experiments/run_experiments.py
+      - training/train_gnn_subgraph_retriever.py
+      - evaluation/eval_gnn_subgraph_retriever.py
+      - evaluation/eval_lexical_hotpot_subgraph.py
+      - data_processing/retrieval_contracts.py
+    required_evaluator:
+      - evaluation/hotpot_official_eval.py
+      - evaluation/evaluate_owl_qa_predictions.py
+      - evaluation/collect_final_results.py
+    required_baseline_implementation:
+      - third_party/GNN-RAG
+      - data_processing/prepare_text_gnn_rag.py
+      - data_processing/prepare_familyowl_gnn_rag.py
+      - evaluation/convert_gnn_rag_predictions.py
+    dependency_hashes_manifests:
+      source_revision: dbdbb50708bdc6c686ef82518ec71c1d1bf55985
+      source_revision_status: candidate_not_fully_proven
+      top_level_artifact_manifest: unavailable
+    final_KEEP_paths: paper_original_six_setting_closure
+
+  - document: PAPER
+    result_identifier: end_to_end_results
+    datasets: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    methods: [Lexical_Subgraph, GNN_Subgraph, SAGE_QA_Text_Chain, SAGE_QA_Proof, GNN_RAG]
+    producing_output_root:
+      - outputs/full_results/full_pipeline_results.csv
+      - outputs/full_results/full_pipeline_results.json
+      - outputs/full_results/HotpotQA
+      - outputs/full_results/2WikiMultiHopQA
+      - outputs/full_results/FamilyOWL_1hop
+      - outputs/full_results/FamilyOWL_2hop
+      - outputs/full_results/OWL2Bench_1hop
+      - outputs/full_results/OWL2Bench_2hop
+    required_data_root: paper_original_six_setting_data
+    required_checkpoint: paper_original_six_setting_graphsage_checkpoints
+    required_policy: null
+    required_source:
+      - experiments/run_experiments.py
+      - generation/generate_hotpot_answers_with_llm.py
+      - generation/generate_owl_answers_with_llm.py
+      - utils/llm_client.py
+    required_evaluator:
+      - evaluation/hotpot_official_eval.py
+      - evaluation/evaluate_owl_qa_predictions.py
+      - evaluation/collect_final_results.py
+    required_baseline_implementation: third_party/GNN-RAG
+    dependency_hashes_manifests: {top_level_artifact_manifest: unavailable}
+    final_KEEP_paths: paper_original_six_setting_closure
+
+  - document: PAPER
+    result_identifier: k_sensitivity
+    datasets: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    methods: [SAGE_QA_Text_Chain, SAGE_QA_Proof]
+    k_values: [1, 2, 3, 5]
+    producing_output_root: outputs/full_results/sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv
+    required_data_root: paper_original_six_setting_data
+    required_checkpoint: paper_original_six_setting_graphsage_checkpoints
+    required_policy: fixed_prefix_k
+    required_source: [experiments/run_experiments.py, training/train_gnn_subgraph_retriever.py]
+    required_evaluator: [evaluation/eval_gnn_subgraph_retriever.py, evaluation/evaluate_owl_qa_predictions.py]
+    required_baseline_implementation: null
+    dependency_hashes_manifests: {top_level_artifact_manifest: unavailable}
+    final_KEEP_paths: paper_original_six_setting_closure
+
+  - document: PAPER
+    result_identifier: appendix_error_analysis
+    datasets: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    methods: [SAGE_QA_Text_Chain, SAGE_QA_Proof]
+    producing_output_root:
+      - outputs/full_results/HotpotQA/gnn_sageqa_text_chain/error_analysis_top3.csv
+      - outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/error_analysis_top3.csv
+      - outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/error_analysis_top3.csv
+      - outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/error_analysis_top3.csv
+      - outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/error_analysis_top3.csv
+      - outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/error_analysis_top3.csv
+    required_data_root: paper_original_six_setting_data
+    required_checkpoint: paper_original_six_setting_graphsage_checkpoints
+    required_policy: fixed_k_3
+    required_source: evaluation/error_analysis_support_qa.py
+    required_evaluator: [evaluation/hotpot_official_eval.py, evaluation/evaluate_owl_qa_predictions.py]
+    required_baseline_implementation: null
+    dependency_hashes_manifests: {top_level_artifact_manifest: unavailable}
+    final_KEEP_paths: paper_original_six_setting_closure
+
+  - document: THESIS_CH7
+    result_identifier: retrieval_text
+    datasets: [HotpotQA, 2WikiMultiHopQA]
+    methods: [Lexical_Subgraph_k1, GNN_RAG_top1_EvidenceUnit, GNN_Subgraph_k1, Cross_Encoder_k1, SAGE_QA_Text_Chain_k1, SAGE_QA_Text_Chain_adaptive]
+    producing_output_root: outputs/final_results/manuscript_retrieval_results_hard_pair_v2
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint:
+      - outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final
+      - checkpoints/production_generator_d_v2_hard_pair
+      - checkpoints/production_generator_d_v1_gnn_rag_clean
+    required_policy:
+      - outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k
+      - outputs/development_runs/production_generator_d_v2_hard_pair_gnn_only_adaptive_k
+      - outputs/development_runs/production_generator_d_v2_hard_pair_sageqa_final_adaptive_k
+    required_source:
+      - evaluation/export_manuscript_retrieval_results.py
+      - evaluation/run_cross_encoder_test_retrieval.py
+      - evaluation/run_production_test_retrieval.py
+      - training/train_gnn_subgraph_retriever.py
+    required_evaluator: evaluation/export_manuscript_retrieval_results.py
+    required_baseline_implementation: [evaluation/run_production_test_baselines.py, third_party/GNN-RAG]
+    dependency_hashes_manifests:
+      artifact_manifest_sha256: b4ff31b88821e65284814b707309075fbe1bd76aec0c7ee26aac63bb4acf69e9
+      hard_pair_test_rows_sha256: 1575240aa4e2f0cf53e34b793d91181b3f75b87c06ef9849da13506488fc12c5
+    final_KEEP_paths: thesis_retrieval_closure
+
+  - document: THESIS_CH7
+    result_identifier: retrieval_ontology
+    datasets: [FamilyOWL_1hop, FamilyOWL_2hop, pizza_100_1hop, pizza_100_2hop, pizza_250_1hop, pizza_250_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    methods: [Lexical_Subgraph_k1, GNN_RAG_top1_EvidenceUnit, GNN_Subgraph_k1, Cross_Encoder_k1, SAGE_QA_Proof_k1, SAGE_QA_Proof_adaptive]
+    producing_output_root: outputs/final_results/manuscript_retrieval_results_hard_pair_v2
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint:
+      - outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final
+      - checkpoints/production_generator_d_v2_hard_pair
+      - checkpoints/production_generator_d_v1_gnn_rag_clean
+    required_policy:
+      - outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k
+      - outputs/development_runs/production_generator_d_v2_hard_pair_gnn_only_adaptive_k
+      - outputs/development_runs/production_generator_d_v2_hard_pair_sageqa_final_adaptive_k
+    required_source:
+      - evaluation/export_manuscript_retrieval_results.py
+      - evaluation/run_cross_encoder_test_retrieval.py
+      - evaluation/run_production_test_retrieval.py
+      - training/train_gnn_subgraph_retriever.py
+    required_evaluator: evaluation/export_manuscript_retrieval_results.py
+    required_baseline_implementation: [evaluation/run_production_test_baselines.py, third_party/GNN-RAG]
+    dependency_hashes_manifests:
+      artifact_manifest_sha256: b4ff31b88821e65284814b707309075fbe1bd76aec0c7ee26aac63bb4acf69e9
+    final_KEEP_paths: thesis_retrieval_closure
+
+  - document: THESIS_CH7
+    result_identifier: end_to_end_all_ten_settings
+    datasets: [HotpotQA, 2WikiMultiHopQA, FamilyOWL_1hop, FamilyOWL_2hop, pizza_100_1hop, pizza_100_2hop, pizza_250_1hop, pizza_250_2hop, OWL2Bench_1hop, OWL2Bench_2hop]
+    methods: [Lexical_Subgraph, GNN_RAG, GNN_Subgraph, Cross_Encoder, SAGE_QA_k1, SAGE_QA_adaptive]
+    producing_output_root: outputs/final_results/final_manuscript_test_end_to_end
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint:
+      - outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final
+      - checkpoints/production_generator_d_v2_hard_pair
+      - checkpoints/production_generator_d_v1_gnn_rag_clean
+    required_policy:
+      - outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k
+      - outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k
+      - outputs/development_runs/production_generator_d_v2_hard_pair_gnn_only_adaptive_k
+      - outputs/development_runs/production_generator_d_v2_hard_pair_sageqa_final_adaptive_k
+    required_source:
+      - generation/run_final_manuscript_answer_generation.py
+      - generation/run_production_test_answer_generation.py
+      - evaluation/finalize_final_manuscript_end_to_end.py
+      - generation/generate_hotpot_answers_with_llm.py
+      - generation/generate_owl_answers_with_llm.py
+    required_evaluator: [evaluation/hotpot_official_eval.py, evaluation/evaluate_owl_qa_predictions.py, evaluation/finalize_final_manuscript_end_to_end.py]
+    required_baseline_implementation: [generation/run_final_manuscript_baselines.py, third_party/GNN-RAG]
+    dependency_hashes_manifests:
+      artifact_manifest_sha256: abae2deee3430a0f5ba1b6fe1c5ea5f4a533f739638e03f3178fb0cead9c0811
+      reader_predictions_sha256: 03e391ed697fb25a07439ec7664544cd6582d2a2dffc868bb9f972c1ae9236d3
+      canonical_metrics_sha256: 8cc472c49cd4ab4dca55a57d97fb6560557f2cf846c5d445e35775a07ba54c43
+    final_KEEP_paths: thesis_end_to_end_closure
+
+  - document: THESIS_CH7
+    result_identifier: adaptive_aggregation
+    datasets: ten_dataset_suite
+    methods: [Cross_Encoder_adaptive, SAGE_QA_Text_Chain_adaptive, SAGE_QA_Proof_adaptive]
+    producing_output_root: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40
+    required_data_root:
+      - data/production_generator_d_v1
+      - outputs/development_runs/question_candidate_cross_encoder_v1_adaptive_input
+    required_checkpoint: outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final
+    required_policy:
+      - path: outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k
+        thresholds: {text: 0.85, ontology: 0.79}
+      - path: outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k
+        thresholds: {text: 0.81, ontology: 0.87}
+    required_source:
+      - evaluation/adaptive_support_aggregation.py
+      - evaluation/adaptive_support_aggregation_v2.py
+      - evaluation/evaluate_adaptive_support_aggregation_v2.py
+      - evaluation/fit_production_dev_adaptive_k.py
+      - evaluation/prepare_cross_encoder_adaptive_dev.py
+      - evaluation/run_cross_encoder_test_retrieval.py
+    required_evaluator: evaluation/run_cross_encoder_test_retrieval.py
+    required_baseline_implementation: null
+    dependency_hashes_manifests:
+      test_artifact_manifest_sha256: 358a5ad1f9284b3a6c4ddad1537b78cabaa7db64f09bf32543010e1236af600a
+      frozen_predictions_sha256: 0251c2d28bf251a7ba6c83dd0ebfa8b3afb8c88bb917fa4331bcbf118cf5b7ac
+    final_KEEP_paths: thesis_adaptive_closure
+
+  - document: THESIS_CH7
+    result_identifier: full_context_reference
+    datasets: ten_dataset_suite
+    methods: [Full_Context]
+    reported_values:
+      all_4249_equal_dataset_macro: {answer_em: 0.7504275593761106, answer_f1: 0.8119872617465529}
+      matched_3509_equal_dataset_macro: {answer_em: 0.7181955723735219, answer_f1: 0.7981051050186795}
+    producing_output_root: outputs/final_results/final_manuscript_baselines_test_end_to_end
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint: null
+    required_policy: full_context
+    required_source: [generation/run_final_manuscript_baselines.py, evaluation/run_production_test_baselines.py]
+    required_evaluator: evaluation/finalize_final_manuscript_end_to_end.py
+    required_baseline_implementation: generation/run_final_manuscript_baselines.py
+    dependency_hashes_manifests:
+      artifact_manifest_sha256: 9332ba07abb42af1c40400ce29bf5d929ff8d537e52c09ad21d08515d069cc45
+      metrics_sha256: 626b18315aa5aa64fd455a6471baffb97e774a2a81b47e107a52e44fcbc36e43
+    final_KEEP_paths: thesis_baseline_closure
+
+  - document: THESIS_CH7
+    result_identifier: complete_support_reference
+    classification: THESIS_REFERENCE_CONDITION
+    datasets: ten_dataset_suite_support_bearing_cohort
+    methods: [Complete_Ground_Truth_Support]
+    reported_values:
+      cohort_examples: 3509
+      equal_dataset_macro: {answer_em: 0.7893030276608592, answer_f1: 0.8967069548772757}
+    producing_output_root:
+      - outputs/final_results/gold_support_complete_oracle
+      - outputs/final_results/provenance_correction_v1
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint: null
+    required_policy: complete_persisted_gold_support_union
+    required_source: [generation/run_gold_support_complete_oracle.py, evaluation/finalize_provenance_correction.py]
+    required_evaluator: [generation/run_production_test_answer_generation.py, evaluation/finalize_provenance_correction.py]
+    required_baseline_implementation: null
+    dependency_hashes_manifests:
+      oracle_manifest_sha256: a07952efce24d9f7014c6b51da59d520d9cad625f8ac67d8d9073c40a5fb53a0
+      provenance_manifest_sha256: 099ba56d9611ed2766b37bdd116c887bd42eb07eaba360914a5033eea97a8150
+      predictions_sha256: 27dcdbd6c4cdac8388502a24d6d2d0cb6ce422a95b8cac09a9c364cd45630dae
+    final_KEEP_paths: thesis_complete_support_closure
+
+  - document: THESIS_CH7
+    result_identifier: stagewise_errors_and_conditional_rates
+    classification: THESIS_FINAL_ANALYSIS
+    datasets: ten_dataset_suite_support_bearing_cohort
+    methods: [Cross_Encoder_k1, SAGE_QA_k1, SAGE_QA_adaptive]
+    producing_output_root: outputs/final_results/final_manuscript_stagewise_error_analysis
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint: null
+    required_policy: outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k
+    required_source: evaluation/analyze_stagewise_test_errors.py
+    required_evaluator: evaluation/analyze_stagewise_test_errors.py
+    required_baseline_implementation: null
+    dependency_hashes_manifests:
+      artifact_manifest_sha256: 0b3e67e77f39b92182608b804580326e635e7537576b20a216a11ea0a5cd672d
+      answer_predictions_sha256: 03e391ed697fb25a07439ec7664544cd6582d2a2dffc868bb9f972c1ae9236d3
+      selection_predictions_sha256: 0251c2d28bf251a7ba6c83dd0ebfa8b3afb8c88bb917fa4331bcbf118cf5b7ac
+      gold_retrieval_rows_sha256: 1575240aa4e2f0cf53e34b793d91181b3f75b87c06ef9849da13506488fc12c5
+    final_KEEP_paths:
+      - evaluation/analyze_stagewise_test_errors.py
+      - tests/test_stagewise_test_errors.py
+      - outputs/final_results/final_manuscript_stagewise_error_analysis
+
+  - document: THESIS_CH7
+    result_identifier: lexical_and_gnn_rag_baselines
+    datasets: ten_dataset_suite
+    methods: [Lexical_Subgraph_k1, GNN_RAG_top1_EvidenceUnit]
+    producing_output_root:
+      - outputs/final_results/production_generator_d_v1_test_baselines/lexical_subgraph
+      - outputs/final_results/production_generator_d_v1_test_baselines/gnn_rag
+      - outputs/final_results/final_manuscript_baselines_test_end_to_end
+    required_data_root: data/production_generator_d_v1
+    required_checkpoint: checkpoints/production_generator_d_v1_gnn_rag_clean
+    required_policy: null
+    required_source:
+      - data_processing/prepare_production_gnn_rag_clean.py
+      - training/train_production_gnn_rag_clean.py
+      - evaluation/run_production_gnn_rag_final_test.py
+      - evaluation/finalize_production_gnn_rag_final_test.py
+      - evaluation/run_production_test_baselines.py
+      - generation/run_final_manuscript_baselines.py
+    required_evaluator: [evaluation/finalize_production_gnn_rag_final_test.py, evaluation/finalize_final_manuscript_end_to_end.py]
+    required_baseline_implementation: [third_party/GNN-RAG, patches/GNN-RAG-local-changes.patch]
+    dependency_hashes_manifests:
+      baseline_bundle_manifest_sha256: 9332ba07abb42af1c40400ce29bf5d929ff8d537e52c09ad21d08515d069cc45
+      gnn_rag_predictions_sha256: 6b343bd8ae1728847e3379e53b1755e853eef71d2cdb080d286b3335d994bee6
+      lexical_retrieval_sha256: f7f12d4729ca3815aef7f222a46668ff870e8ec44aebb1dc3b425b925470236f
+    final_KEEP_paths: thesis_baseline_closure
+
+closure_notes:
+  - The hard-pair-v2 export is canonical; outputs/final_results/manuscript_retrieval_results is the superseded V1 export.
+  - outputs/development_diagnostics/final_old_vs_cross_encoder_analysis/comparison.json remains a direct READ_INPUT of the canonical exporter; the other files in that diagnostic root are not required.
+  - Paper-era Pizza data, checkpoints, results, raw roots, and archives are outside PAPER and are not used by the thesis Generator-D lineage.
+  - Failed and incomplete GNN-RAG attempts are outside the reported baseline closure.
