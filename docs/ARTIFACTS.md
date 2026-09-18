@@ -7,7 +7,7 @@ Machine-readable paths and hashes remain authoritative in `release_manifests/`.
 
 | Required component | Expected path | Authority |
 |---|---|---|
-| Six processed datasets | `data/{HotpotQA,2WikiMultiHopQA,FamilyOWL_1hop,FamilyOWL_2hop,owl2bench_1hop,owl2bench_2hop}/` | `release_manifests/paper_original/index.yaml` |
+| Six processed datasets | `data/{HotpotQA,2WikiMultiHopQA,FamilyOWL_1hop,FamilyOWL_2hop,OWL2Bench_1hop,OWL2Bench_2hop}/` | `release_manifests/paper_original/index.yaml` |
 | Six GraphSAGE checkpoints | `checkpoints/gnn_subgraph_ranker_*_full/` for the six reported settings | `release_manifests/paper_original/index.yaml` |
 | Raw benchmark/ontology inputs | `data/raw/{hotpot_qa,2WikiMultihopQA,family,owl2bench}/` | `release_manifests/protection_rules.yaml` |
 | Frozen paper results | Six reported children and aggregate files under `outputs/full_results/` | `release_manifests/paper_original/index.yaml` |
