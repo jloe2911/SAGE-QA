@@ -1,0 +1,86 @@
+schema_version: sageqa_payload_removal_plan_v1
+plan_id: phase_7d_aborted_non_a40_cross_encoder_test
+cleanup_phase: Phase 7D
+created_at: 2026-09-18T08:58:10.6459050+02:00
+pre_removal_head: 4706c39b72739f02fb896ea9dc6324739a25f1c3
+scope: aborted_local_non_a40_cross_encoder_test_result_only
+execute: true
+selected_roots:
+  - outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test
+aggregate:
+  root_count: 1
+  file_count: 1
+  total_bytes: 499
+classification:
+  protocol: local_test_attempt
+  status: incomplete_aborted
+  paper_dependency: none
+  thesis_chapter_7_dependency: none
+  frozen_reference_dependency: none
+  release_manifest_dependency: none
+  scientific_classification: non_scientific_aborted_local_test_attempt
+  reason_for_removal: aborted before evaluation; no TEST metrics, frozen predictions, or scientific decision were produced
+keep_manifest_exclusion:
+  manifest: release_manifests/final_repository_keep.yaml
+  result: PASS
+  exact_root_present: false
+  descendant_present: false
+  retained_path_count_before_removal: 136
+  canonical_a40_root_present: true
+  canonical_a40_root: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40
+reported_results_exclusion:
+  manifest: release_manifests/reported_results_mapping.yaml
+  result: PASS
+  record_count: 12
+  exact_non_a40_root_referenced: false
+  all_required_artifacts_resolved_before_removal: true
+  canonical_a40_result:
+    record: THESIS_CH7/adaptive_aggregation
+    producing_output_root: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40
+reference_audit:
+  result: PASS
+  selected_payload_read_by_retained_paper_or_thesis_code: false
+  active_runtime: []
+  current_metadata: []
+  frozen_reference: []
+  historical_record:
+    - path: docs/repository_cleanup_v2/FINAL_REMOVAL_FAMILIES.md
+      line: 45
+      classification: HISTORICAL_RECORD
+      semantics: authoritative Phase 7C removal-family listing
+  none:
+    - release_manifests/final_repository_keep.yaml
+    - release_manifests/reported_results_mapping.yaml
+  a40_substring_matches_excluded_from_non_a40_classification: true
+external_backup:
+  authorized_root: 'C:\Users\julie\github\PhD\SAGE-QA-backups'
+  logical_backup_id: sageqa-phase7d-aborted-non-a40-cross-encoder-test-sha256-abbdbe8e3c6e2a335f92092bb14a39f67e0cfacbc4d7c72149e470b6333b2982
+  backup_relative_root: abbdbe8e3c6e2a335f92092bb14a39f67e0cfacbc4d7c72149e470b6333b2982
+  preservation_only: true
+  scientific_release_artifact: false
+content_inventory:
+  algorithm: sha256
+  canonical_format: "sorted lines: sha256 two-spaces bytes two-spaces repository-relative-path LF"
+  digest: abbdbe8e3c6e2a335f92092bb14a39f67e0cfacbc4d7c72149e470b6333b2982
+files:
+  - repository_relative_path: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md
+    size: 499
+    sha256: 5bb0880352b1d6ed72d0fe61bcc1b01bbeb6bcd8edf2d5dd60fc61a6844e0690
+    file_type: text/markdown
+    git_state: ignored_untracked
+    producing_source: not_identifiable_from_payload_or_exact_reference_audit
+    status: incomplete_aborted
+    incomplete_reason: aborted before evaluation for hardware-throughput reasons; no partial predictions were preserved
+    external_backup_relative_path: payload/outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md
+    restore_path: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md
+restore_mapping:
+  from_backup_relative_path: payload/outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md
+  to_repository_path: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md
+expected_validation_baselines:
+  keep_closure: 136_of_136_retained_paths_exist
+  reported_results: 12_of_12_records_resolve
+  fast: 28_passed_1_skipped
+  standard: 123_passed_1_skipped
+  original_paper_supported: 10_passed
+  stagewise_analysis: tests/test_stagewise_test_errors.py_passes
+  protected_artifacts: PASS

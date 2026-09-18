@@ -1,0 +1,79 @@
+schema_version: sageqa_payload_removal_record_v1
+record_id: aborted_non_a40_cross_encoder_test_backup_03
+cleanup_phase: Phase 7D
+pre_removal_head: 4706c39b72739f02fb896ea9dc6324739a25f1c3
+removed_at: 2026-09-18T09:41:55.4279128+02:00
+planning_manifest: archive_manifests/removal_plans/phase_7d_aborted_non_a40_cross_encoder_test.yaml
+planning_manifest_sha256: eab1caea8772011d563893d18a0507705992fd02bb76486206b9edc4103a4db3
+removed_root: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test
+member_count: 1
+total_bytes: 499
+members:
+  - path: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md
+    size: 499
+    sha256: 5bb0880352b1d6ed72d0fe61bcc1b01bbeb6bcd8edf2d5dd60fc61a6844e0690
+external_backup:
+  logical_backup_id: sageqa-phase7d-aborted-non-a40-cross-encoder-test-sha256-abbdbe8e3c6e2a335f92092bb14a39f67e0cfacbc4d7c72149e470b6333b2982
+  path_representation: logical_id_and_content_digest_only
+  backup_manifest_name: backup_manifest.json
+  backup_manifest_sha256: c51cec26bdeeb63c819380bb23b003ce95079fd2d2c266269b34ca4a9b860451
+  preservation_only: true
+  scientific_release_artifact: false
+content_inventory:
+  algorithm: sha256
+  canonical_format: "sorted lines: sha256 two-spaces bytes two-spaces repository-relative-path LF"
+  digest: abbdbe8e3c6e2a335f92092bb14a39f67e0cfacbc4d7c72149e470b6333b2982
+keep_manifest_exclusion:
+  result: PASS
+  retained_path_count: 136
+  exact_root_present: false
+  descendant_present: false
+  canonical_a40_root_retained: true
+reported_results_exclusion:
+  result: PASS
+  record_count: 12
+  exact_non_a40_root_referenced: false
+  canonical_a40_result: THESIS_CH7/adaptive_aggregation
+reference_audit:
+  result: PASS
+  active_runtime: 0
+  current_metadata: 0
+  frozen_reference: 0
+  historical_record: 1
+  historical_record_path: docs/repository_cleanup_v2/FINAL_REMOVAL_FAMILIES.md
+verification:
+  repository_source_count_size_hash: PASS
+  planning_manifest_count_size_hash: PASS
+  backup_count_size_hash: PASS
+  isolated_full_restore: PASS
+  restored_count_size_hash: PASS
+  exact_manifested_removal: PASS
+  temporary_restore_removed: PASS
+  restore_environment_note: two sandbox-local attempts were blocked by Windows ACLs before copying payload; their empty temporary roots were removed, and the out-of-sandbox isolated restore passed
+post_removal_gates:
+  keep_closure: 136_of_136_retained_paths_exist
+  reported_results: 12_of_12_records_resolve
+  fast: 28_passed_1_skipped
+  standard: 123_passed_1_skipped
+  original_paper_supported: 10_passed
+  stagewise_analysis: 6_passed
+  protected_artifacts: PASS
+integrity:
+  backup_integrity: PASS
+  restore_integrity: PASS
+  removal_integrity: PASS
+  keep_closure_integrity: PASS
+  reported_results_integrity: PASS
+  scientific_integrity: PASS
+  test_integrity: PASS
+reason: aborted local non-A40 TEST attempt is outside the PAPER and THESIS_CH7 dependency closure
+restore_test_result: PASS
+status: COMPLETE
+restore_procedure:
+  - Resolve the machine-local location for external_backup.logical_backup_id using content_inventory.digest.
+  - Verify backup_manifest.json against external_backup.backup_manifest_sha256.
+  - Verify the manifest records 1 payload file, 499 bytes, and the content inventory digest above.
+  - Verify the payload size and SHA-256 against backup_manifest.json and the planning manifest.
+  - Copy payload/outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md to outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test/ABORTED_LOCAL_GTX.md without changing bytes.
+  - Reverify 1 file, 499 bytes, and SHA-256 5bb0880352b1d6ed72d0fe61bcc1b01bbeb6bcd8edf2d5dd60fc61a6844e0690 at the restored repository path.
+  - Do not modify outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40.
