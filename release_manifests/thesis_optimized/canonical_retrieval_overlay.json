@@ -1,0 +1,75 @@
+{
+  "schema_version": "sageqa_optimized_canonical_retrieval_overlay_v1",
+  "status": "verified_derived_overlay_raw_selection_bundle_missing",
+  "split": "test",
+  "cohort": {
+    "definition": "examples with defined, non-empty ground-truth support",
+    "included": 3509,
+    "excluded": 740,
+    "prediction_population": 4249
+  },
+  "aggregation": {
+    "primary": "equal_dataset_macro: unweighted mean of ten dataset-level per-example means",
+    "secondary": "pooled_per_example_mean: unweighted mean over all 3509 eligible examples"
+  },
+  "base_export": {
+    "path": "outputs/final_results/manuscript_retrieval_results_hard_pair_v2/canonical_metrics.json",
+    "sha256": "b6e293275af51ee473f2084b50647fe5e3aba8527b0ec6ce50b1c62e962b86f8",
+    "historical_export_preserved": "outputs/final_results/manuscript_retrieval_results"
+  },
+  "source_artifacts": {
+    "frozen_reader_inputs": {
+      "path": "outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end/frozen_reader_inputs.jsonl",
+      "sha256": "08e493b2780ccef60f0e2b35574bf7075510255e690af79909ae72244c18f992"
+    },
+    "support_gold": {
+      "path": "outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval/per_example_test_retrieval.jsonl",
+      "sha256": "1575240aa4e2f0cf53e34b793d91181b3f75b87c06ef9849da13506488fc12c5"
+    },
+    "optimized_end_to_end_metrics": {
+      "path": "outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end/metrics.json",
+      "sha256": "ea9888f607e8784742b5493678f95e12f590badafd57b0cdd128c2145654665e"
+    },
+    "missing_original_selection_predictions_sha256": "770ef934fca43279b875a5c711765d7771f600fdcfd382590070d2d166293264"
+  },
+  "derivation": "Join frozen reader inputs by example_id and setting to the frozen hard-pair-v2 gold alternatives, apply best_support_scores to each selected support, average per example within dataset, then average the ten dataset means. This reproduces every persisted optimized support F1 in metrics.json. It does not reconstruct the missing raw TEST ranking file.",
+  "methods": {
+    "sageqa_optimized": {
+      "k1": {
+        "equal_dataset_macro": {"precision": 0.7181336900621217, "recall": 0.7495449451646314, "f1": 0.6976593565548725},
+        "pooled_per_example_mean": {"precision": 0.7147715398499097, "recall": 0.7237966317903622, "f1": 0.6957503833679382},
+        "by_dataset": {
+          "HotpotQA": {"n": 1000, "precision": 0.7276666666666667, "recall": 0.7021690476190476, "f1": 0.7029658730158731},
+          "2WikiMultiHopQA": {"n": 1000, "precision": 0.7181333333333333, "recall": 0.6915333333333333, "f1": 0.6908246031746033},
+          "FamilyOWL_1hop": {"n": 314, "precision": 0.6985138004246285, "recall": 0.8190021231422506, "f1": 0.740552016985138},
+          "FamilyOWL_2hop": {"n": 314, "precision": 0.6762208067940553, "recall": 0.5191082802547771, "f1": 0.5567940552016986},
+          "pizza_100_1hop": {"n": 82, "precision": 0.7825203252032521, "recall": 0.8569105691056911, "f1": 0.7828977932636468},
+          "pizza_100_2hop": {"n": 81, "precision": 0.7181069958847737, "recall": 0.7000000000000001, "f1": 0.6506466784244561},
+          "pizza_250_1hop": {"n": 105, "precision": 0.7253968253968255, "recall": 0.848095238095238, "f1": 0.7438775510204082},
+          "pizza_250_2hop": {"n": 105, "precision": 0.7396825396825397, "recall": 0.5952380952380952, "f1": 0.6050793650793651},
+          "OWL2Bench_1hop": {"n": 250, "precision": 0.6793333333333333, "recall": 0.9423333333333334, "f1": 0.7590095238095238},
+          "OWL2Bench_2hop": {"n": 258, "precision": 0.7157622739018088, "recall": 0.8210594315245479, "f1": 0.7439461055740125}
+        }
+      },
+      "adaptive": {
+        "equal_dataset_macro": {"precision": 0.6949230561736173, "recall": 0.7734137566975144, "f1": 0.697455332849901},
+        "pooled_per_example_mean": {"precision": 0.6857759273119775, "recall": 0.7644919865923, "f1": 0.697691300498368},
+        "by_dataset": {
+          "HotpotQA": {"n": 1000, "precision": 0.7019, "recall": 0.7538523809523809, "f1": 0.7092555555555556},
+          "2WikiMultiHopQA": {"n": 1000, "precision": 0.6836952380952381, "recall": 0.7552833333333333, "f1": 0.6986994227994228},
+          "FamilyOWL_1hop": {"n": 314, "precision": 0.6723828188796342, "recall": 0.8190021231422506, "f1": 0.7200106157112527},
+          "FamilyOWL_2hop": {"n": 314, "precision": 0.6229071883530483, "recall": 0.5573248407643312, "f1": 0.5616115660701648},
+          "pizza_100_1hop": {"n": 82, "precision": 0.7784552845528455, "recall": 0.8589430894308944, "f1": 0.783855981416957},
+          "pizza_100_2hop": {"n": 81, "precision": 0.7026748971193415, "recall": 0.7123456790123457, "f1": 0.6538800705467372},
+          "pizza_250_1hop": {"n": 105, "precision": 0.7301587301587302, "recall": 0.861904761904762, "f1": 0.7573407544836116},
+          "pizza_250_2hop": {"n": 105, "precision": 0.7114285714285714, "recall": 0.6071428571428571, "f1": 0.602517006802721},
+          "OWL2Bench_1hop": {"n": 250, "precision": 0.6521523809523809, "recall": 0.9543333333333334, "f1": 0.7444698412698413},
+          "OWL2Bench_2hop": {"n": 258, "precision": 0.6934754521963824, "recall": 0.8540051679586563, "f1": 0.7429125138427465}
+        }
+      }
+    }
+  },
+  "protected_sources_modified": false,
+  "inference_invoked": false,
+  "predictions_regenerated": false
+}

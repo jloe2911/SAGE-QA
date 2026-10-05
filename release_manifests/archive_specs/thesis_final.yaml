@@ -1,0 +1,144 @@
+schema_version: sageqa_archive_spec_v1
+logical_name: thesis_final_artifacts
+research_version: final_leakage_free_thesis_including_hard_pair_v2_and_optimized_sageqa
+publication_status: specification_only_not_published
+download_url: null
+archive_sha256: null
+estimated_uncompressed_bytes: 18756382015
+estimate_basis: accessible required roots measured 2026-10-05; before archive overhead or compression
+source_revisions:
+  preservation_baseline: 884480be53c554edae70d3b2d8e781847590aa69
+  optimized_source_snapshot: 75010ef4dffde3fcbd89cc8669da3d63423924b0
+environment:
+  requirement_files: [requirements.txt, requirements-dev.txt, third_party/GNN-RAG/gnn/requirements.txt, third_party/GNN-RAG/llm/requirements.txt]
+  status: present_locally_hash_inventory_required
+  missing: [complete_lock, cuda_driver_inventory, hosted_reader_snapshot]
+components:
+  - path: data/production_generator_d_v1
+    kind: dataset_66_member_corpus
+    status: recovered_hash_verified
+    sha256: 27a4c149181e96df1fa9aca581eaeee17e354755f6a034ce93f2021b496296e5
+  - path: outputs/development_runs/question_candidate_cross_encoder_v1
+    kind: cross_encoder_checkpoint_and_dev_inputs
+    status: recovered_hash_verified
+    model_sha256: 02b06c91fa422369a0b0adbab3b33bfcf80f335b7c8a5911084c3b82af117ba9
+  - path: outputs/development_runs/question_candidate_cross_encoder_v1_cross_encoder_adaptive_k
+    kind: adaptive_policy
+    status: recovered_hash_verified
+  - path: outputs/development_runs/question_candidate_cross_encoder_v1_final_sageqa_adaptive_k
+    kind: adaptive_policy
+    status: recovered_hash_verified
+  - path: outputs/development_runs/question_candidate_cross_encoder_v1_adaptive_input
+    kind: adaptive_policy_input
+    status: recovered_hash_verified
+  - path: outputs/final_results/question_candidate_cross_encoder_v1_adaptive_test_a40
+    kind: frozen_cross_encoder_test_ranking
+    status: recovered_hash_verified
+    predictions_sha256: 0251c2d28bf251a7ba6c83dd0ebfa8b3afb8c88bb917fa4331bcbf118cf5b7ac
+  - path: checkpoints/production_generator_d_v2_hard_pair
+    kind: hard_pair_v2_checkpoint
+    status: recovered_hash_verified
+  - path: outputs/final_results/manuscript_retrieval_results_hard_pair_v2
+    kind: historical_thesis_retrieval_export
+    status: recovered_hash_verified
+    manifest_sha256: b4ff31b88821e65284814b707309075fbe1bd76aec0c7ee26aac63bb4acf69e9
+  - path: outputs/final_results/final_manuscript_test_end_to_end
+    kind: main_end_to_end_results
+    status: recovered_hash_verified
+    predictions_sha256: 03e391ed697fb25a07439ec7664544cd6582d2a2dffc868bb9f972c1ae9236d3
+  - path: checkpoints/production_generator_d_v1_gnn_rag_clean
+    kind: baseline_checkpoint
+    status: recovered_hash_verified
+  - path: outputs/final_results/final_manuscript_baselines_test_end_to_end
+    kind: baseline_predictions_and_results
+    status: recovered_hash_verified
+  - path: outputs/final_results/production_generator_d_v1_test_baselines/lexical_subgraph
+    kind: baseline_retrieval
+    status: recovered_hash_verified
+  - path: outputs/final_results/production_generator_d_v1_test_baselines/gnn_rag
+    kind: baseline_retrieval
+    status: recovered_hash_verified
+  - path: outputs/final_results/gold_support_complete_oracle
+    kind: complete_support_reference_results
+    status: recovered_hash_verified
+  - path: outputs/final_results/provenance_correction_v1
+    kind: complete_support_reference_finalizer_output
+    status: recovered_hash_verified
+  - path: outputs/final_results/final_manuscript_stagewise_error_analysis
+    kind: standard_stagewise_diagnostics
+    status: recovered_hash_verified
+  - path: outputs/development_runs/production_generator_d_v2_hard_pair_gnn_only_adaptive_k
+    kind: hard_pair_v2_policy
+    status: recovered_hash_verified
+  - path: outputs/development_runs/production_generator_d_v2_hard_pair_k_sensitivity_merged
+    kind: hard_pair_v2_policy_diagnostics
+    status: recovered_hash_verified
+  - path: outputs/development_runs/production_generator_d_v2_hard_pair_sageqa_final_adaptive_k
+    kind: hard_pair_v2_policy
+    status: recovered_hash_verified
+  - path: outputs/final_results/production_generator_d_v2_hard_pair_test_retrieval
+    kind: hard_pair_v2_predictions_and_support_references
+    status: recovered_hash_verified
+    predictions_sha256: 1575240aa4e2f0cf53e34b793d91181b3f75b87c06ef9849da13506488fc12c5
+  - path: outputs/final_results/production_generator_d_v2_hard_pair_test_end_to_end
+    kind: hard_pair_v2_end_to_end_results
+    status: recovered_hash_verified
+    predictions_sha256: 751d9aac2ee19f0fe5c9191bb4c6df3c9160790c1fdea32d41a4c08d07406b4b
+  - path: outputs/audits/final_test_evaluation_audit
+    kind: final_test_audit
+    status: recovered_hash_verified
+  - path: outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end
+    kind: optimized_selected_supports_predictions_and_metrics
+    status: recovered_hash_verified
+    selected_supports_sha256: 08e493b2780ccef60f0e2b35574bf7075510255e690af79909ae72244c18f992
+    predictions_sha256: 712fce04ed8d25bbee55e34a3d71927b70af252101a0c742c62a537cdc8c4dc6
+  - path: outputs/final_results/symbolic_coefficients_original_v1_stagewise_error_analysis
+    kind: optimized_stagewise_diagnostics
+    status: recovered_hash_verified
+    manifest_sha256: a8d6cf73d016059c9cd002d6d227fd28cefeae595e11ab853a6b00695c507f97
+  - path: release_manifests/thesis_optimized/canonical_retrieval_overlay.json
+    kind: optimized_official_metric_overlay
+    status: verified_derived_result
+  - path: outputs/final_results/symbolic_coefficients_original_v1_test/test_predictions_frozen.jsonl
+    kind: optimized_raw_test_ranking
+    status: missing_recorded_hash_preserved
+    sha256: 770ef934fca43279b875a5c711765d7771f600fdcfd382590070d2d166293264
+  - path: outputs/development_runs/symbolic_coefficients_original_v1/selected_coefficients.json
+    kind: optimized_selected_coefficients
+    status: missing_recorded_hash_preserved
+    sha256: 9cc3d4b870721964d335c21605aeaf1134650aa53fc07397f467654a68e74f8b
+  - path: outputs/development_runs/symbolic_coefficients_original_v1/adaptive_policy_manifest.json
+    kind: optimized_adaptive_policy
+    status: missing_recorded_hash_preserved
+    sha256: 45f771a36c4b1dd1d9115ec909058a6a97dbe2e074ca35d8f746b2143606ce16
+  - path: outputs/development_runs/symbolic_coefficients_original_v1/original_vs_selected_dev.json
+    kind: optimized_dev_comparison
+    status: missing_recorded_hash_preserved
+    sha256: 0c08b16fe3793429aaa0e04ab35c062c224c08de9a629a65950b36179fb634c0
+  - path: generation/run_final_manuscript_answer_generation.py
+    kind: producing_source
+    status: tracked_source
+  - path: generation/run_optimized_sageqa_answer_generation.py
+    kind: optimized_producing_source
+    status: tracked_source
+  - path: evaluation/finalize_final_manuscript_end_to_end.py
+    kind: evaluator_source
+    status: tracked_source
+  - path: evaluation/analyze_stagewise_test_errors.py
+    kind: diagnostic_evaluator_source
+    status: tracked_source
+  - path: evaluation/analyze_optimized_stagewise_test_errors.py
+    kind: optimized_diagnostic_evaluator_source
+    status: tracked_source
+  - path: evaluation/verify_canonical_retrieval_overlay.py
+    kind: evaluator_source
+    status: tracked_source
+required_archive_files: [MANIFEST.sha256, ARCHIVE_METADATA.json, ENVIRONMENT.txt, LICENSES.txt]
+verification:
+  source_only: tests/ci/test_reviewer_contracts.py
+  artifact_dependent: evaluation/verify_canonical_retrieval_overlay.py
+blockers:
+  - optimized raw TEST ranking is missing although its hash is preserved
+  - selected coefficients adaptive-policy manifest and derived DEV comparison are missing
+  - complete environment/provider identity is not frozen
+  - per-file final archive inventory and archive hash have not been created

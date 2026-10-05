@@ -227,3 +227,5 @@ third_party/GNN-RAG/llm/results/
 third_party/GNN-RAG.git-backup/
 
 .tmp/
+reproduced_tables/
+release/reviewer_artifacts/

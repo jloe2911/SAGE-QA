@@ -45,3 +45,17 @@ release manifests.
 - Producing analysis: `evaluation/analyze_stagewise_test_errors.py`.
 - Contract test: `tests/test_stagewise_test_errors.py`.
 - Authority: `release_manifests/reported_results_mapping.yaml`.
+
+## 7. Optimized thesis correction
+
+- Protocol: DEV-selected original-v1 symbolic coefficients and adaptive policy, with TEST
+  ranking and reader inputs frozen before evaluation gold access.
+- Retained downstream results:
+  `outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end/` and
+  `outputs/final_results/symbolic_coefficients_original_v1_stagewise_error_analysis/`.
+- Manifest: `release_manifests/thesis_optimized/index.yaml`.
+- Official retrieval view:
+  `release_manifests/thesis_optimized/canonical_retrieval_overlay.json`.
+- Provenance boundary: the overlay is independently reconstructed from retained frozen
+  selected supports. The original raw TEST ranking (`770ef934...`) and derived DEV
+  coefficient/policy bundle remain missing; neither is claimed recovered.

@@ -1,0 +1,1064 @@
+{
+  "schema_version": "sageqa_reviewer_table_artifacts_v1",
+  "package": "paper_table_artifacts.zip",
+  "lineage": "original_published_paper_historical_protocol",
+  "purpose": "frozen_artifacts_required_to_reproduce_reported_result_tables",
+  "file_count": 209,
+  "uncompressed_bytes": 246499230,
+  "files": [
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/2wiki_predictions_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 404785,
+      "sha256": "99a3f25b400ed6c5040b8cbb3a3177fdbd262545cdb6b464bf926474d986c64b"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/dev_details.json",
+      "size_bytes": 3447973,
+      "sha256": "a7261f221b564ef53ca852f98046b44210f35b852f9c9352f2d415f61933ed09"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/dev_metrics.json",
+      "size_bytes": 927,
+      "sha256": "cba1bd27aade5490c4a4825c4475e7527fcac20de9721c7d4ce9250fc639bb1b"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/dev_split_metrics.json",
+      "size_bytes": 1462,
+      "sha256": "7f8992aca9829c1234941855f5b9ff7fae6868cb672aa39135539b15e0a503a5"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/llm_answers_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 1552440,
+      "sha256": "04950ef8a8310b336de33bc5a7074f96aa4bd56bd9b5a5181f5063f1970eca4e"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/metrics.json",
+      "size_bytes": 1489,
+      "sha256": "f73a88e528b6e419aba9dbb6317cab44dd96e419f38300fb219fb2de792e4e0b"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/metrics_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 352,
+      "sha256": "79c6250398129956c152f488f3dea55b134b858a192ce11c60884eb3b7772ead"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/test_details.json",
+      "size_bytes": 6908513,
+      "sha256": "8645e12675ec3a20905211fa7c30b6eb1e564ee5b5e9e4e214cd4a838c8f6947"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/test_metrics.json",
+      "size_bytes": 927,
+      "sha256": "451e4488e40e57704b9e3c08f1ff0da7a4360fa83c22f42ee2711ee00fba9359"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/test_split_metrics.json",
+      "size_bytes": 1489,
+      "sha256": "f73a88e528b6e419aba9dbb6317cab44dd96e419f38300fb219fb2de792e4e0b"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/train_details.json",
+      "size_bytes": 20455211,
+      "sha256": "214abeb46c96c8367fd3cbc02144fdc4ddf7e4fc71e80a2c81b8c3aa9fd5e63d"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/train_metrics.json",
+      "size_bytes": 1025,
+      "sha256": "91455657c1d1b542791318ab88a7ac361ce9024d26cb5d8e2bb0d6ee78d1475f"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_neural/train_split_metrics.json",
+      "size_bytes": 1493,
+      "sha256": "4932f7158e61a721cef8ceebc5266fe4fe6577137dc2f6d684d9859cfd9f377f"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_rag/2wiki_predictions_gnn_rag_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 344834,
+      "sha256": "b55ac0cdb0337894329657a78fbf293600efa32447091ba4cd2960c3c54f4a4f"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_rag/llm_answers_gnn_rag_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 2104816,
+      "sha256": "958ac96548427a4f45370473d3fee119a615338f073d0a232474389719b46b8c"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_rag/metrics_gnn_rag_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 364,
+      "sha256": "b8b2508e4b837cb3913162c0bbba5c550f9721228c931b137f6b65a2e9dec64e"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_rag/test_details.json",
+      "size_bytes": 2012976,
+      "sha256": "955bc2637bc417f3f6a22fb0e89a9473d797392d122beb8d8d37534a78e9c55d"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/2wiki_predictions_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 404244,
+      "sha256": "0604e6b1bd468026556e4b689c7cf46841407a8a19805dda7ba29ea37965f458"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/dev_details.json",
+      "size_bytes": 3456029,
+      "sha256": "386a34e11b10b2f230819c3805f6ff78a64000c22e8b5bd2a438cedc251cd526"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/dev_metrics.json",
+      "size_bytes": 940,
+      "sha256": "8c880e3d6875a94ea6e871aa02963fa8300112d2ce7687a33d05548acf556234"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/dev_split_metrics.json",
+      "size_bytes": 1460,
+      "sha256": "b80e419faab8b78fdb0f2d4b367b779aabdeab123e618bbd2da70d357eb3b0cc"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/error_analysis_top3.csv",
+      "size_bytes": 450501,
+      "sha256": "b29ecd192eeddd3abefadfdd3a6241278a60fd2f156d7cacc76674b4ff89eced"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/error_analysis_top3_summary.json",
+      "size_bytes": 656,
+      "sha256": "803169d77e282053e3ff6cd2f985a357766aab2d1afb572132a2ff96fd20b0c7"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/llm_answers_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 1561614,
+      "sha256": "dd0f5b28395c2df7f3ca8705cb98549f68a4e3daf99df1ddae746224386a7686"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/metrics.json",
+      "size_bytes": 1486,
+      "sha256": "d8013ef16e56c4595fd48432aa6172207a074bd546d6cfb42422c493226bc08d"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/metrics_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 349,
+      "sha256": "bf9b4c658ad7b16a0f25fc41bbec0be2f7bb617fe16a3fd9a9f53ad067c1c9d1"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/test_details.json",
+      "size_bytes": 6918981,
+      "sha256": "b298ed8e94a86ae3e6943a9f801727aaf95e08b5cb226cf8f5551cfb0ca503ea"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/test_metrics.json",
+      "size_bytes": 939,
+      "sha256": "043d3fbb8eced1299e78e77b7d043baa1cdafc4a1c6b9844226f71a5e763da08"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/test_split_metrics.json",
+      "size_bytes": 1486,
+      "sha256": "d8013ef16e56c4595fd48432aa6172207a074bd546d6cfb42422c493226bc08d"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/train_details.json",
+      "size_bytes": 20473959,
+      "sha256": "b1e710c4aaa524c30939eb01eca7ddc7535f5cad9747dde8745096e2bc1d6f9c"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/train_metrics.json",
+      "size_bytes": 1047,
+      "sha256": "e32e2b445df5037c21dc53ed54d6634d27840d0f4c14325c9354872df47ffb1f"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/gnn_sageqa_text_chain/train_split_metrics.json",
+      "size_bytes": 1493,
+      "sha256": "94374181d2e3ebd0f2747ede5c9d0e72691a784bd253bd86bcfee0db8c531117"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/lexical_subgraph/2wiki_predictions_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 391682,
+      "sha256": "87d94db1e45ea4e816582a1b2dc83947c38d1cbb532989305c87fec04c5a5ba9"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/lexical_subgraph/llm_answers_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 1541053,
+      "sha256": "d0abd03fc97f9ce2f4091932dcf57f8a3912ae5bb5937fe1b3797255d10ec3a3"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/lexical_subgraph/metrics_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 366,
+      "sha256": "b6b54d3f5d6b916cf9637e9546948225d804c1f1176b6b840be7bf3f474f98cf"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/lexical_subgraph/test_details.json",
+      "size_bytes": 8555375,
+      "sha256": "1d12d2d4e18ac1577d1f50bb8b2a8d10274c7093ba58043d7de9039795b7a384"
+    },
+    {
+      "path": "outputs/full_results/2WikiMultiHopQA/lexical_subgraph/test_split_metrics.json",
+      "size_bytes": 1079,
+      "sha256": "7e861da4d7b51992d3e6b7cccdf3415649d43cf51518cfba3fd31cb8e654e0fb"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/dev_details.json",
+      "size_bytes": 521712,
+      "sha256": "3a29a6de9b72b90b18b3c2618468fa551b6bd41c575ef1c17f56d569f7763e70"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/dev_metrics.json",
+      "size_bytes": 1102,
+      "sha256": "880be2d6add9b3f3772e66c5143bc0c768f0fe9590c1c4a9b1161400cdad14eb"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/dev_split_metrics.json",
+      "size_bytes": 1244,
+      "sha256": "4c0b09aedfcd26adf564e2f8ab3e63defb1e1d99d0c1ab7398c69cd108929a1c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 706831,
+      "sha256": "752f27c2f9c5683d1f50bb6dcee28db92881a652dee2a2dfae026157387c3cc7"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/metrics.json",
+      "size_bytes": 1291,
+      "sha256": "be48f5fa260bfaafa75ea6c707334d6acebd9acbe36461470a70a6b78aba485b"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 654484,
+      "sha256": "3a4cfd6db6ffc5700ffaed5400046198eedb8d28603cef9bc6caa63a39ea209c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/test_details.json",
+      "size_bytes": 1442968,
+      "sha256": "45d08c0fe8ffa95933d4c89c13dbdb21348c675865d763769b93d778abb390dd"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/test_metrics.json",
+      "size_bytes": 1160,
+      "sha256": "f4a336ff7f9d505f3addda85581ac50d6df7b23aeddc14eed40f14cfec02e8f7"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/test_split_metrics.json",
+      "size_bytes": 1291,
+      "sha256": "be48f5fa260bfaafa75ea6c707334d6acebd9acbe36461470a70a6b78aba485b"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/train_details.json",
+      "size_bytes": 3497535,
+      "sha256": "389dce8cf1818a38c1899c62d325ff7a7ba11f4f8ca9c7581defebee15b91492"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/train_metrics.json",
+      "size_bytes": 1041,
+      "sha256": "7dc5c485c98bd12cb9eb2ac2f9605ad50fd1ded0c8be635bdcad9a8aacefb537"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_neural/train_split_metrics.json",
+      "size_bytes": 1210,
+      "sha256": "0c0e10c7f78fbeff4fabf7c6c6de3e4fb6e0968a8bc81a8c544b36c3ed9e5932"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_rag/llm_answers_gnn_rag_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 1061492,
+      "sha256": "d6648573c5f2a7eee327aa4a275cca1886c12acd5eb3e9bf16c7a9aa2056392e"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_rag/metrics_gnn_rag_top3_gpt_4_1_mini.json",
+      "size_bytes": 575158,
+      "sha256": "4c8404bd91156f2366b6c605720dda9bd4ab56fe2cf922ec8a01479491e7e63f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_rag/test_details.json",
+      "size_bytes": 498735,
+      "sha256": "e2051fda8ab2a1fefc89b67502d55e5c62ae4a8ded9d9018ffb971d11695e7f4"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/dev_details.json",
+      "size_bytes": 466694,
+      "sha256": "c62813c39e8649bc7111b3cedad76602f0086e3c0d6a0b697812eed3bb7de72d"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/dev_metrics.json",
+      "size_bytes": 817,
+      "sha256": "4b322945e120391b4f112b0447c73396b27d964529437e58ad3db003e72cf411"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/dev_split_metrics.json",
+      "size_bytes": 1230,
+      "sha256": "7247fba4db68d312baba5d5826bfda885dff0325bd9e8465f56ac73acf95861e"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/error_analysis_top3.csv",
+      "size_bytes": 270716,
+      "sha256": "d2d1d5950afc9f69478782f729a91ac77f4e8de8a90b0f4a6c105c86ed13cb89"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/error_analysis_top3_summary.json",
+      "size_bytes": 667,
+      "sha256": "958a6d4af54baf795f06995a50d9bec4bd4db81eebee495e32832c9b3fb81cc6"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 706218,
+      "sha256": "d8f228254154cf79241ec7a1329d4d7fd51800e544ae0dc2b11d02b8e05230c8"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/metrics.json",
+      "size_bytes": 1362,
+      "sha256": "95c64e0b334e497938cf4e652cdd22ce990a6fb786284a78f43283c37372129f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 593152,
+      "sha256": "5cfde68c45491d4ba9f6931e8cb6275bbfd10708100da89adefaab6c620831a9"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/test_details.json",
+      "size_bytes": 1291892,
+      "sha256": "54cec9588e85e6455142e6588935ea0a2b968146cd037acc0e6a813c67fde7a4"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/test_metrics.json",
+      "size_bytes": 904,
+      "sha256": "1d2a65fe9a3e4de72fb3458586174449a1401eec426cfe395597cfb6948af15e"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/test_split_metrics.json",
+      "size_bytes": 1362,
+      "sha256": "95c64e0b334e497938cf4e652cdd22ce990a6fb786284a78f43283c37372129f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/train_details.json",
+      "size_bytes": 3135149,
+      "sha256": "418b2181cb0521e6b9838c6d5e4ff9fbd3bfad933bdc2e5a5ae34947f48001a1"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/train_metrics.json",
+      "size_bytes": 903,
+      "sha256": "bd75e0ed3e2d158e9ed78447028c3a3f8bb47b02057071915dbdeb5d258da28e"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/gnn_sageqa_proof/train_split_metrics.json",
+      "size_bytes": 1366,
+      "sha256": "fd94690a6af41d48eeef544e91071c928f484f2ece0cf3d3d078dab05987e3b3"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/lexical_subgraph/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 711931,
+      "sha256": "4be51cfa88f0c8d80133b5e92b9c3b6432c3cdadcc42d9a2c5889452f24d201c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/lexical_subgraph/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 582509,
+      "sha256": "536770d4877f95195fbd103b85b64ea002c1207f02d28b5110cbcbabdd643285"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/lexical_subgraph/test_details.json",
+      "size_bytes": 1437154,
+      "sha256": "f07e023381dc35bea0bf9c904276a589fc51981e9c5246e62553525973dd949f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_1hop/lexical_subgraph/test_split_metrics.json",
+      "size_bytes": 837,
+      "sha256": "7a4069e3a47e095ce32cd36f22ada18bc3cc62822da43429333d6d809638d3e9"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/dev_details.json",
+      "size_bytes": 804886,
+      "sha256": "36c159d6646ef0043e77d7e16a2207714c111845f0d3fd4459bfa5ba3268dc81"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/dev_metrics.json",
+      "size_bytes": 912,
+      "sha256": "12f152cf4a39aa3db17605c29e346688d1c47740388f96d6e0caa60f57b1cf34"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/dev_split_metrics.json",
+      "size_bytes": 1408,
+      "sha256": "7cf692b1bf54c37b4ee0343c984c5ab6288839bf2d3d0c26f8da3a5712132c92"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 1059740,
+      "sha256": "370ec2f8b79bc65f46b759b8b87fa087d9fd1b9aa8cab64fb86e0911e1a77b59"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/metrics.json",
+      "size_bytes": 1528,
+      "sha256": "7df8e5ea5cf8adfa8acfa18e210f652e6668d5793213746ab96ec9b3897d1e1f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 812714,
+      "sha256": "bb257934c3cff19a761368da6b0c0c1def90da7627477c9fc52804b290712b1c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/test_details.json",
+      "size_bytes": 2176832,
+      "sha256": "09a43706bffbf93ff867dba75591f9b096ee702b3b2acfcc65590402277afad4"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/test_metrics.json",
+      "size_bytes": 941,
+      "sha256": "101f4e7bd36fdf3d2b09b70ff1a558a7df295a15ae5ea4cb1984b79951ae0e6c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/test_split_metrics.json",
+      "size_bytes": 1528,
+      "sha256": "7df8e5ea5cf8adfa8acfa18e210f652e6668d5793213746ab96ec9b3897d1e1f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/train_details.json",
+      "size_bytes": 5023406,
+      "sha256": "c1ecb87d3c27cd73b8cfa30b8e743301944a67c088bae4dd42a2e7dfc89509a0"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/train_metrics.json",
+      "size_bytes": 945,
+      "sha256": "ae9c3a5e8f33f50bd85e6c4374e3868cb75a7ee82a1ae45a105affe221b6735f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_neural/train_split_metrics.json",
+      "size_bytes": 1541,
+      "sha256": "bcfb5023700ed05924ac81793e7b9491040d0b5092b82395f2dc0d793671b431"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_rag/llm_answers_gnn_rag_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 2464010,
+      "sha256": "c9d2c01143808f75bd9bd67053be66c41cfc39973fd67b1e6e0ff56ba4129c80"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_rag/metrics_gnn_rag_top3_gpt_4_1_mini.json",
+      "size_bytes": 766820,
+      "sha256": "e8c9d76c933afec1acd5649f62d1ce9433a9c831313df5dd2d9b173a02441aee"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_rag/test_details.json",
+      "size_bytes": 679767,
+      "sha256": "8914218cd0136c8dc7069b2e92b620e7f2700f745caac61e23502fdf1084a3af"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/dev_details.json",
+      "size_bytes": 795605,
+      "sha256": "08f792076980d3331ca499636007fec03ceeeb657f5c2fa929fc87618687a361"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/dev_metrics.json",
+      "size_bytes": 637,
+      "sha256": "1bb168bbaa0e6c9a14990ecff30ed6758f0259e77c61527aad73655b045bb2b2"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/dev_split_metrics.json",
+      "size_bytes": 1034,
+      "sha256": "a4c452867473b96e38a32522903272c3322021f235c5f16512d0150ce406c900"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/error_analysis_top3.csv",
+      "size_bytes": 462923,
+      "sha256": "f842977ee53d59c9c7e07b3c253ca5975a1f112d14531452856eb96b517b4bdd"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/error_analysis_top3_summary.json",
+      "size_bytes": 667,
+      "sha256": "73856e676d06fffca761707634e2e5bddaa13b0785c5e6365ffe53a6811f4f3c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 1059033,
+      "sha256": "707770249288c3dc5eec4678eff3b4088793d7101c8b7ea655a44788d7fb185b"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/metrics.json",
+      "size_bytes": 1261,
+      "sha256": "6ffe4095a606c316980d0d3d6477b6bab5b3efc9396c87e11d42763587dd652c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 809020,
+      "sha256": "c98580ef9c9f2ac0f0cd642d68acbe7e57a8b5d86749bfdf022aed3edcf57e39"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/test_details.json",
+      "size_bytes": 2157311,
+      "sha256": "b71b6e16c2bdb56ec28262c00b791be785dc620e0c0fdf79e0c3452b84f57f49"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/test_metrics.json",
+      "size_bytes": 831,
+      "sha256": "201dca2d06c1fe6c4a64a8792e62ccdd855a67d701f0b4e117d77594d960027f"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/test_split_metrics.json",
+      "size_bytes": 1261,
+      "sha256": "6ffe4095a606c316980d0d3d6477b6bab5b3efc9396c87e11d42763587dd652c"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/train_details.json",
+      "size_bytes": 4982374,
+      "sha256": "6099a90a738aea0f054616888c72b298a13af1381a92fcc9293729c7e6aa3f03"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/train_metrics.json",
+      "size_bytes": 937,
+      "sha256": "8e824329ca913ceb005d3534d803da793955fb71e07c3ac4575e7c05aea46505"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/gnn_sageqa_proof/train_split_metrics.json",
+      "size_bytes": 1395,
+      "sha256": "7535be81663810e4130821d82373a264615034c1092b8a6d6609347a72249377"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/lexical_subgraph/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 1055503,
+      "sha256": "7ff27d6d42f11b402aa582581123bd17be7cc709255052b582f009f5cfa2a4e5"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/lexical_subgraph/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 806252,
+      "sha256": "377e4cd69c0dbbaa99a17efd9eb1f1d51f6ad801d444aa43e915949d037caa52"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/lexical_subgraph/test_details.json",
+      "size_bytes": 2418670,
+      "sha256": "75bc84fb766f7f28609145713f12cd99ae02734e9b663b7d41e499c115bb6a43"
+    },
+    {
+      "path": "outputs/full_results/FamilyOWL_2hop/lexical_subgraph/test_split_metrics.json",
+      "size_bytes": 839,
+      "sha256": "ab83ee3da0a5cd5991cdd7573332c1c8915671c77523ff9f65927a526bb5ab55"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/dev_details.json",
+      "size_bytes": 3457908,
+      "sha256": "4500339494409688fcee52eb7026e5f5cf79564e9c93e89a0bfd16679788db04"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/dev_metrics.json",
+      "size_bytes": 942,
+      "sha256": "a4af3bec160c4745dc2433eec9057c283ff3aa879686387c543038d6d7d8dc49"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/dev_split_metrics.json",
+      "size_bytes": 609,
+      "sha256": "058e40b8a622382e5a83c12f812c2715b31fa6e45ba243add88c831373f2ba24"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/hotpotqa_predictions_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 393334,
+      "sha256": "07daa08767d5add20e088eef2e9bc85ff764337638f0ff37691374741c37e388"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/llm_answers_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 1617285,
+      "sha256": "60e074cd1e4de2ba318e5d5a71ca340affe9d6fb182b542806aa2b77679a945d"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/metrics.json",
+      "size_bytes": 623,
+      "sha256": "50cc1fd991c7688efd91663251aca31402d1cdfa2a96b57fb9487eeb4691c27d"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/metrics_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 366,
+      "sha256": "fcd7b14329597a0f32370aa6c2f2bc74de24073cbe596e500eac02443515b397"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/test_details.json",
+      "size_bytes": 6869547,
+      "sha256": "fa1266bcfecac4145adb2f82de30ac994c0eefce0b5cfb69fe0d681156da3531"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/test_metrics.json",
+      "size_bytes": 956,
+      "sha256": "434c2eef3ec0dcd42497275bf15a72c0d60df40f14bf1b29c43c353b0e7f284f"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/test_split_metrics.json",
+      "size_bytes": 623,
+      "sha256": "50cc1fd991c7688efd91663251aca31402d1cdfa2a96b57fb9487eeb4691c27d"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/train_details.json",
+      "size_bytes": 20736827,
+      "sha256": "8a20edfd007e7985035320781cea04e1fcb978b26f6d00956b2c7931b252e563"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/train_metrics.json",
+      "size_bytes": 1023,
+      "sha256": "2c965682666ee9d20bba91bdcdc6ffb939f1d52680ae94b6b09d3f8616eb7a9e"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_neural/train_split_metrics.json",
+      "size_bytes": 689,
+      "sha256": "33712c1ec8e67b95dd626fce0b2e86df1223b675770e451857a2721ce4d22b21"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_rag/hotpotqa_predictions_gnn_rag_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 452559,
+      "sha256": "faa51bce36a6a1cc4e7642c86df707c4725abab5e727aee8121fd6d1b02fdedc"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_rag/llm_answers_gnn_rag_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 3195259,
+      "sha256": "c4a610b6112400a06016902e374d306541e57bfd04064e63e820e5b514d577c8"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_rag/metrics_gnn_rag_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 351,
+      "sha256": "b6aad8d2a37a508546b702b062319156c762d985dd26dcc06f80c44285ae559e"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_rag/test_details.json",
+      "size_bytes": 2355861,
+      "sha256": "c756ad98ae50303f62ca69b8ad91b488ee078de1f332cf377c04ab3b0e746645"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/dev_details.json",
+      "size_bytes": 3467625,
+      "sha256": "458e613ec4ef49e5f3c92bf934341595fc2965a904941fe2e886f3ab9bd22cfc"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/dev_metrics.json",
+      "size_bytes": 949,
+      "sha256": "e8cbd781d1be39271e9763ce7390dfb7b6a6ff6c37998a5c1192e678f349d1a1"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/dev_split_metrics.json",
+      "size_bytes": 607,
+      "sha256": "d2af999788b33a8e41a9541b4fd0e3853e9c407361ac4a29634cce605ba413c1"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/error_analysis_top3.csv",
+      "size_bytes": 472336,
+      "sha256": "8bbbc482fb8ac253a8ab994f794bb4e446bd6dad8ac1f1ce039030ad924e6938"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/error_analysis_top3_summary.json",
+      "size_bytes": 855,
+      "sha256": "4cc59966887ded2c7df069567f20478dba14f4f7cb9924cbac6dcd13d741f15b"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/hotpotqa_predictions_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 394314,
+      "sha256": "5869f41aca89fb497ecbf7caf2b526bbea374eb0764edeed1d5c9ded03272bb9"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/llm_answers_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 1625786,
+      "sha256": "8f1e6b8059ff8fa867f77a36bd299be244bc94b3c58b7a15443a03046fe6ae69"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/metrics.json",
+      "size_bytes": 622,
+      "sha256": "34435dd002d97c1780b416568109576bc648389d6046e10edf4adfc7d287cff5"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/metrics_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 366,
+      "sha256": "9c9d119cf6c8f71c055df3be5962274ab196774fd292f5cdcfa91cbb0738e146"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/test_details.json",
+      "size_bytes": 6894018,
+      "sha256": "5913462c1fd5a30462f34ae1b860fd560b1929d859e88ff64c1e6c234ef1234b"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/test_metrics.json",
+      "size_bytes": 944,
+      "sha256": "0c1800879184a1134653efa69d881c06d995adb58c35fd13a19d2e4ffc527695"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/test_split_metrics.json",
+      "size_bytes": 622,
+      "sha256": "34435dd002d97c1780b416568109576bc648389d6046e10edf4adfc7d287cff5"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/train_details.json",
+      "size_bytes": 20819709,
+      "sha256": "57200a106640c79637824d07f6ca4d77bbaae76c1e86a5e21908d44c2ed3a3c3"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/train_metrics.json",
+      "size_bytes": 1060,
+      "sha256": "1a79b12e27f55831494e1e7514e976101903c1ed8aaf47c56cd19df8961baa31"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/gnn_sageqa_text_chain/train_split_metrics.json",
+      "size_bytes": 714,
+      "sha256": "a007335ab2784085a95b234882686c6531aa53caab8ac0fb58945ad7dbec2497"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/lexical_subgraph/hotpotqa_predictions_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 365277,
+      "sha256": "0875fa30a048918656a011e60437dc13518aeb62b0f5a92f8eb91b6040b2e8dd"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/lexical_subgraph/llm_answers_top3_openai_gpt_4_1_mini.jsonl",
+      "size_bytes": 1642515,
+      "sha256": "abfbf6b9fbbf7c93b99c997bae20abe18c16caa929a775232a01a1ec0a3e5084"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/lexical_subgraph/metrics_top3_openai_gpt_4_1_mini.json",
+      "size_bytes": 368,
+      "sha256": "179b32fedf2b586b5b4729850dec31fd67fae8fb73919f66868ef17646883094"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/lexical_subgraph/test_details.json",
+      "size_bytes": 9140197,
+      "sha256": "05194f47d077b4de87d8b169e7d8a461215d6485c736cff9066745bf86b433d4"
+    },
+    {
+      "path": "outputs/full_results/HotpotQA/lexical_subgraph/test_split_metrics.json",
+      "size_bytes": 1083,
+      "sha256": "5a7286935cf0377943010f4314b247d4ef8fffc8b97a11be621afcc3e38668c9"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/dev_details.json",
+      "size_bytes": 504693,
+      "sha256": "45072c7315878f14a29ab98f1c02d2c7857f2fa06738e277bd90321f861c09d4"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/dev_metrics.json",
+      "size_bytes": 941,
+      "sha256": "bb47fc69db51ecb6d0b8f37990ffdbc7bec98fa6c665329c322fef61e7631390"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/dev_split_metrics.json",
+      "size_bytes": 1384,
+      "sha256": "47f26cdca746524927eee1a0ccad121689471cf8c1642e041097e772e4fa9875"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 573274,
+      "sha256": "0bbdc0b64e5fa29d2e23e2fe35d86bd6033464ea17ed9e031a3373a1839adb10"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/metrics.json",
+      "size_bytes": 1542,
+      "sha256": "52c04354f012092a6cd18c153efc05d37592b8547ba4833521659ef5ca1ebf17"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 485641,
+      "sha256": "124df44a4173fe34c0b32b068bccf8f83e6b68bbc75dbecf7d6f5e7a5c7ad789"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/test_details.json",
+      "size_bytes": 1027242,
+      "sha256": "d5a7249913ac2bc795666e507e97cdcff86590c2359a50c01152a16035f16088"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/test_metrics.json",
+      "size_bytes": 760,
+      "sha256": "aa6e762935be9d56270605a734885f26a1a582f12b231759d1a60440aa2463c7"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/test_split_metrics.json",
+      "size_bytes": 1542,
+      "sha256": "52c04354f012092a6cd18c153efc05d37592b8547ba4833521659ef5ca1ebf17"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/train_details.json",
+      "size_bytes": 2622008,
+      "sha256": "35a1cac20e3476865c59ba900f21eb1745af21afc57e1070b6c174d0f684a695"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/train_metrics.json",
+      "size_bytes": 823,
+      "sha256": "8d7e77a06e1e3025ba9533218eaf9454a44f97bf3f82fa5d1ca62794f369ced0"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_neural/train_split_metrics.json",
+      "size_bytes": 1533,
+      "sha256": "fe4f451e9f4cc81d3fe456d032d02347a840bfe4baefbafdcea702b9ddf2f917"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_rag/llm_answers_gnn_rag_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 889663,
+      "sha256": "7aa322c788cec0bc683e5d0748167615aa404dceead4e6a54a24641134dd3df6"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_rag/metrics_gnn_rag_top3_gpt_4_1_mini.json",
+      "size_bytes": 496892,
+      "sha256": "34fc8a7429f0b39e420de036c672d3fe6e03cd2a0d51c6990355daa3daf407ba"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_rag/test_details.json",
+      "size_bytes": 445809,
+      "sha256": "e53f8be1bf22e62ecfd67760daef2c21dfd8aa948f51bbe240ea2003689caf4f"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/dev_details.json",
+      "size_bytes": 507250,
+      "sha256": "d2bfbbe0f8f44dc0d4369b749d73257fa84e301c160327b278350e8ca0346b61"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/dev_metrics.json",
+      "size_bytes": 742,
+      "sha256": "a68efc1cbcc0299b3c45f6b8188f43b56c36c6791cb68aaf26d19c81075e5189"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/dev_split_metrics.json",
+      "size_bytes": 1166,
+      "sha256": "fe674cd26d5da473587bdeee7ef7bed3b0a7bd92ae4135c6fef1eb4748963ac6"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/error_analysis_top3.csv",
+      "size_bytes": 219905,
+      "sha256": "9cc714c0c3dfa23280a07e4ef121dbeea9fd76f69e0a82b97b79189ac103a910"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/error_analysis_top3_summary.json",
+      "size_bytes": 484,
+      "sha256": "742cb7025feb0a62526dbf40196c45812b36103f1af9f085994ddbfa297cc68e"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 576593,
+      "sha256": "5f904ac17d09c9e0c156d54c1a1615d136b29407198025c3de82d5ff6e792923"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/metrics.json",
+      "size_bytes": 1200,
+      "sha256": "1ec24770063b790de12e6cfbe715b822c4bcd18c2a24861264d23b1363362658"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 487601,
+      "sha256": "bd62cbf0d0d7c1d67c92538a33cbecc016e3224d1348174f3ee3980a1b57a0c9"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/test_details.json",
+      "size_bytes": 1028392,
+      "sha256": "cbc9aa0c4310b315488568bb699f6a9aeb957635fbb71395ead8a4cd4ec18269"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/test_metrics.json",
+      "size_bytes": 674,
+      "sha256": "9f391de56bfafce1d8379c45ac2fdee3b82af6a5aa6fbd107e80cef7b28448c2"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/test_split_metrics.json",
+      "size_bytes": 1200,
+      "sha256": "1ec24770063b790de12e6cfbe715b822c4bcd18c2a24861264d23b1363362658"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/train_details.json",
+      "size_bytes": 2608529,
+      "sha256": "2edbf120b8d999d4e4ff1b296ecf2428361607cb0b3a6f8c4c80a7a014670ecf"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/train_metrics.json",
+      "size_bytes": 694,
+      "sha256": "078d03534cc076c8783c2eb70a12e8c0f7a55359331a28d0ace91f81d5fcac22"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/gnn_sageqa_proof/train_split_metrics.json",
+      "size_bytes": 1200,
+      "sha256": "e32e79f6326500243d3d8324465eeb35fcc74259c4c253b3b2311d951083f441"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/lexical_subgraph/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 571482,
+      "sha256": "092e86d8ecc4f8d26275e119276396e3470e9168888332dd22255ab07b577c1e"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/lexical_subgraph/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 481200,
+      "sha256": "405fa156da477d8ea2d404ebb3113de77d45dfc5e1d76b3dc1d377a1f43a82e2"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/lexical_subgraph/test_details.json",
+      "size_bytes": 1188177,
+      "sha256": "bf9a70393a33ad2c49a1e97b582c30e100a89606f03fe9e4727525489209f954"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_1hop/lexical_subgraph/test_split_metrics.json",
+      "size_bytes": 710,
+      "sha256": "10381eecfae8e2f439b919ad8bb2a844a2d2fba003a784d04c5d88321f791297"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/dev_details.json",
+      "size_bytes": 672398,
+      "sha256": "44834e43031fec74a668f5e087d6ff601e8ccf6c2d5b31f0fc752aacac6741e5"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/dev_metrics.json",
+      "size_bytes": 837,
+      "sha256": "c73633b34474745420e91d2cf9436232f5309f97f143468464947d0df0f99bf0"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/dev_split_metrics.json",
+      "size_bytes": 1375,
+      "sha256": "06dace4bc114fee218b5f9e9f10ff4ba2a59c2607f272cda0013230b5def354f"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 746998,
+      "sha256": "91d06181de48cefba8fe163bd75eba0e57253987d9cdc0168ca7f8f8778e96f4"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/metrics.json",
+      "size_bytes": 1544,
+      "sha256": "fb53a88f98a7c596238cb342fd1778a92f96a0bcd87d7d2dacc621a444b6a542"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 601695,
+      "sha256": "e6dae3d457b7f4b873eb0c0f880bc07aa5223a9523c93151edd0209bbec561c2"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/test_details.json",
+      "size_bytes": 1427848,
+      "sha256": "f5fe31adec676fb0e223f6ce209d9c64074e33c116f7a25e00f4ade9dafeb8b9"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/test_metrics.json",
+      "size_bytes": 942,
+      "sha256": "3d84e565be5ba1e3bbb4df11d4a7a50ae217e466c1344fe114d1fbff6db17b9c"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/test_split_metrics.json",
+      "size_bytes": 1544,
+      "sha256": "fb53a88f98a7c596238cb342fd1778a92f96a0bcd87d7d2dacc621a444b6a542"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/train_details.json",
+      "size_bytes": 3901953,
+      "sha256": "31a49f0779f60c7249ae539d4dd8f7921c8e3147fc86c978d8c0488c8bc4c97d"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/train_metrics.json",
+      "size_bytes": 944,
+      "sha256": "4c66f092e1c200da12638d8312364cf5887bad28df342d527d50f9b753de6a9f"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_neural/train_split_metrics.json",
+      "size_bytes": 1540,
+      "sha256": "e5c0c8ef20b76db6e51f889f56d9dbbc43a7da93bfecbab3fc4ac20fd6194951"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_rag/llm_answers_gnn_rag_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 1336713,
+      "sha256": "47b7e971a5d3195011cd6d8f4e7dee1d763669d0c12004feb7a5bc79848296b9"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_rag/metrics_gnn_rag_top3_gpt_4_1_mini.json",
+      "size_bytes": 580233,
+      "sha256": "65703630dbaf772609105d30d52ce4b2bfcfecb92182768be71f650518f7036c"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_rag/test_details.json",
+      "size_bytes": 551717,
+      "sha256": "8fd247ee8e48f3d8aaab9e35f65bde3149acf1e04d24c589116ecfbea7a628f5"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/dev_details.json",
+      "size_bytes": 659295,
+      "sha256": "0c0e1bd56b58141d944ea11bda97059079aa19f73844c27eba602a7f3c1f3c66"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/dev_metrics.json",
+      "size_bytes": 831,
+      "sha256": "5d4f28cf6cbdf7e3b7039fbaad2aa916e8e77d7c427b481fcf5ac878d4423f41"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/dev_split_metrics.json",
+      "size_bytes": 1212,
+      "sha256": "11dbcb5c6458b6b641cab78507d1fe84c49b311e8384a85aaa7095970c6e092a"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/error_analysis_top3.csv",
+      "size_bytes": 295538,
+      "sha256": "8eb464f80ae1febca831f10db4616a287c63c2fcc6d9080758c5b752fde65408"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/error_analysis_top3_summary.json",
+      "size_bytes": 689,
+      "sha256": "49f4e05f6fdc1f36782fa2f6773f68f34c22bc2e773d28a7ccbd3ff75444a2d2"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 741518,
+      "sha256": "1ade21e5af8963058240f5c52854700034b54a0e6e73b80a55378538bd34aeb7"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/metrics.json",
+      "size_bytes": 1216,
+      "sha256": "fe31e530177cc1bb92f6d16f16bd8929c09ff0ef8b54ec04d48e5eaa1546a76f"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 596120,
+      "sha256": "a75c1e65a56ad937c141fc641fa07faf95c715654dff16f24206cdcbe92c5fea"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/test_details.json",
+      "size_bytes": 1402468,
+      "sha256": "ad62ef994cd8589befbf889b3b48f0b685c90c4af4d45a4983ca0919a9026aee"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/test_metrics.json",
+      "size_bytes": 832,
+      "sha256": "4908fd0081155ebd1440d6293ed24d8b17fc121e77c1fbabbd309d66c86eda4f"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/test_split_metrics.json",
+      "size_bytes": 1216,
+      "sha256": "fe31e530177cc1bb92f6d16f16bd8929c09ff0ef8b54ec04d48e5eaa1546a76f"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/train_details.json",
+      "size_bytes": 3827777,
+      "sha256": "c51768fcaa1bb3fbfab75868bf34b24e3ce4f5633fcf998f0b076359f9ef0613"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/train_metrics.json",
+      "size_bytes": 828,
+      "sha256": "2f14d2d09a6855f19ad2e9a56d04b61e2c2a148b40c4bdf7268ccc45c74f5ef7"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/gnn_sageqa_proof/train_split_metrics.json",
+      "size_bytes": 1215,
+      "sha256": "ca661244ee475ef45183e771f120ccbcd49fff0538a4396bd389e7da68d22a4c"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/lexical_subgraph/llm_answers_top3_gpt_4_1_mini.jsonl",
+      "size_bytes": 738426,
+      "sha256": "872192afa6c7537d2e361e341f5c7d0c830ea3b724b6f5f5b0460f5c54da7bec"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/lexical_subgraph/metrics_top3_gpt_4_1_mini.json",
+      "size_bytes": 594962,
+      "sha256": "020256355a817fccf370fd05754d5dc61605b2332a7ce80bab1af053cb2ba3f9"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/lexical_subgraph/test_details.json",
+      "size_bytes": 1622582,
+      "sha256": "cd240bcbcca5c2002d83dfc672f94fb058d840cdb5e338350b62142a6f433bbe"
+    },
+    {
+      "path": "outputs/full_results/OWL2Bench_2hop/lexical_subgraph/test_split_metrics.json",
+      "size_bytes": 840,
+      "sha256": "d3160a2f7d451f8bd6bbb2d6349ab9f7f9c71323bacdaa5997230a128e7716c3"
+    },
+    {
+      "path": "outputs/full_results/full_pipeline_results.csv",
+      "size_bytes": 1595,
+      "sha256": "df3c6292d71341ee9e8873528e908a0dea846cb8f29d6fa08542f41dc6b62473"
+    },
+    {
+      "path": "outputs/full_results/full_pipeline_results.json",
+      "size_bytes": 3864,
+      "sha256": "8c81730ad8fa273c03d41d6e91dbe275f493d10d27aa4006ea6683f74a186e7c"
+    },
+    {
+      "path": "outputs/full_results/sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv",
+      "size_bytes": 1787,
+      "sha256": "7b51af85cbdf5108beeb7ebad2da7d1ffe238c7ab6079674ebedd545aa575012"
+    }
+  ],
+  "limitations": [
+    "Exact historical source, environment, and hosted-reader binding remains unverified.",
+    "The historical candidate-generation protocol was gold-informed and is not the thesis protocol."
+  ],
+  "archive_path": "release/reviewer_artifacts/paper_table_artifacts.zip",
+  "archive_size_bytes": 24797197,
+  "archive_sha256": "7e776628d2988222ce0f7770bda868d94ee49fec6ffc705e7b30b1bea76a1b48",
+  "publication_status": "local_supplied_artifact_not_uploaded",
+  "download_url": null
+}

@@ -1,0 +1,106 @@
+schema_version: sageqa_archive_spec_v1
+logical_name: paper_original_artifacts
+research_version: original_published_workshop_paper
+publication_status: specification_only_not_published
+download_url: null
+archive_sha256: null
+estimated_uncompressed_bytes: 10239231608
+estimate_basis: accessible local roots measured 2026-10-05; before archive overhead or compression
+source_revision:
+  value: dbdbb50708bdc6c686ef82518ec71c1d1bf55985
+  status: unverified_historical_provenance
+environment:
+  requirement_files: [requirements.txt, third_party/GNN-RAG/gnn/requirements.txt, third_party/GNN-RAG/llm/requirements.txt]
+  status: unverified_historical_provenance
+  missing: [complete_lock, cuda_driver_inventory, hosted_reader_snapshot]
+components:
+  - path: data/HotpotQA
+    kind: processed_dataset
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: data/2WikiMultiHopQA
+    kind: processed_dataset
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: data/FamilyOWL_1hop
+    kind: processed_dataset
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: data/FamilyOWL_2hop
+    kind: processed_dataset
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: data/owl2bench_1hop
+    kind: processed_dataset
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: data/owl2bench_2hop
+    kind: processed_dataset
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: data/raw/hotpot_qa
+    kind: raw_dataset_source
+    status: present_locally_hash_inventory_required
+  - path: data/raw/2WikiMultihopQA
+    kind: raw_dataset_source
+    status: present_locally_hash_inventory_required
+  - path: data/raw/family
+    kind: raw_dataset_source
+    status: present_locally_hash_inventory_required
+  - path: data/raw/owl2bench
+    kind: raw_dataset_source
+    status: present_locally_hash_inventory_required
+  - path: checkpoints/gnn_subgraph_ranker_hotpotqa_full
+    kind: checkpoint_group
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: checkpoints/gnn_subgraph_ranker_2wiki_full
+    kind: checkpoint_group
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: checkpoints/gnn_subgraph_ranker_familyowl_1hop_full
+    kind: checkpoint_group
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: checkpoints/gnn_subgraph_ranker_familyowl_2hop_full
+    kind: checkpoint_group
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: checkpoints/gnn_subgraph_ranker_owl2bench_1hop_full
+    kind: checkpoint_group
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: checkpoints/gnn_subgraph_ranker_owl2bench_2hop_full
+    kind: checkpoint_group
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: outputs/full_results
+    kind: predictions_and_results
+    status: recovered_hash_verified
+    checksum_authority: docs/PHASE2_REPRODUCIBILITY_GATE.md
+  - path: experiments/run_experiments.py
+    kind: producing_source
+    status: tracked_source
+  - path: evaluation/evaluate_owl_qa_predictions.py
+    kind: evaluator_source
+    status: tracked_source
+  - path: evaluation/hotpot_official_eval.py
+    kind: evaluator_source
+    status: tracked_source
+  - path: evaluation/collect_final_results.py
+    kind: finalizer_source
+    status: tracked_source
+  - path: generation/generate_hotpot_answers_with_llm.py
+    kind: reader_source
+    status: tracked_source
+  - path: generation/generate_owl_answers_with_llm.py
+    kind: reader_source
+    status: tracked_source
+required_archive_files: [MANIFEST.sha256, ARCHIVE_METADATA.json, ENVIRONMENT.txt, LICENSES.txt]
+verification:
+  source_only: tests/reproducibility/test_original_paper_contracts.py
+  artifact_dependent: tests/reproducibility/test_original_paper_contracts.py
+blockers:
+  - exact source-to-results binding remains unverified
+  - complete historical environment and hosted-reader identity are absent
+  - per-file final archive inventory and archive hash have not been created
