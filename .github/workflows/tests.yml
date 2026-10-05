@@ -18,7 +18,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install source-verification dependencies
-        run: python -m pip install pytest==9.0.2 PyYAML==6.0.2
+        run: python -m pip install pytest==9.0.2 PyYAML==6.0.2 joblib
       - name: Compile tracked first-party Python
         run: >-
           python -m compileall -q
