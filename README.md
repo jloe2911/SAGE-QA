@@ -12,7 +12,7 @@ protocols must not be interchanged.
 
 ## Reviewer quick start: reproduce both result-table families
 
-Download the two frozen artifact packages from the [SAGE-QA reproducibility release]([RELEASE_URL](https://github.com/jloe2911/SAGE-QA/releases/tag/v1.0-reproducible):
+Download the two frozen artifact packages from the [SAGE-QA reproducibility release](https://github.com/jloe2911/SAGE-QA/releases/tag/v1.0-reproducible)
 
 - `paper_table_artifacts.zip`  
   SHA-256: `7e776628d2988222ce0f7770bda868d94ee49fec6ffc705e7b30b1bea76a1b48`
