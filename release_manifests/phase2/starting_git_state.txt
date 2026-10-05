@@ -1,0 +1,254 @@
+captured_at_local=2026-09-26 Europe/Luxembourg
+capture_basis=pre-action original-checkout state; the subsequently created .worktrees/phase2-reproducibility-cleanup path is recorded separately in the gate report and intentionally omitted below
+head=75010ef4dffde3fcbd89cc8669da3d63423924b0
+branch=feature/symbolic-coefficients-original-v1
+upstream=origin/feature/symbolic-coefficients-original-v1
+
+[status_porcelain_v2]
+warning: could not open directory '.pytest-tmp-optimized-answer/': Permission denied
+warning: could not open directory 'pytest-of-julie/': Permission denied
+# branch.oid 75010ef4dffde3fcbd89cc8669da3d63423924b0
+# branch.head feature/symbolic-coefficients-original-v1
+# branch.upstream origin/feature/symbolic-coefficients-original-v1
+# branch.ab +0 -0
+1 .M N... 100644 100644 100644 6f145b63d26509a37a29bec93416a066b121b5aa 6f145b63d26509a37a29bec93416a066b121b5aa data/build_subgraph_training_data.py
+1 .M N... 100644 100644 100644 3bd9bb2444ade28f5f86e7c141a06e623716c29e 3bd9bb2444ade28f5f86e7c141a06e623716c29e data_processing/evidence_graph_candidates.py
+1 .M N... 100644 100644 100644 f35f2eafa42eb5ae3015d36931bcea31155ad519 f35f2eafa42eb5ae3015d36931bcea31155ad519 data_processing/prepare_familyowl_gnn_rag.py
+1 .M N... 100644 100644 100644 a8d6de192f25aaf17d3206f790db67d08bfbda85 a8d6de192f25aaf17d3206f790db67d08bfbda85 data_processing/prepare_production_gnn_rag_clean.py
+1 .M N... 100644 100644 100644 53aa94170767f33e966cfd0fac24bd5d9ebcf22c 53aa94170767f33e966cfd0fac24bd5d9ebcf22c evaluation/analyze_stagewise_test_errors.py
+1 .M N... 100644 100644 100644 ce236ddadb4d5c99c6f04be77bd320690809097e ce236ddadb4d5c99c6f04be77bd320690809097e evaluation/evaluate_owl_qa_predictions.py
+1 .M N... 100644 100644 100644 7ec65bfcc293c5139887dc59d0686fc96f10a032 7ec65bfcc293c5139887dc59d0686fc96f10a032 evaluation/fit_production_dev_adaptive_k.py
+1 .M N... 100644 100644 100644 0db32fe71e152966e2191b9eaac3666de548d503 0db32fe71e152966e2191b9eaac3666de548d503 evaluation/prepare_cross_encoder_adaptive_dev.py
+1 .M N... 100644 100644 100644 a0c3231d4c1660cce3ff50840242c2249b187b34 a0c3231d4c1660cce3ff50840242c2249b187b34 evaluation/run_production_gnn_rag_final_test.py
+1 .M N... 100644 100644 100644 211f026bc821dbf53b53c2de2374872feec875f9 211f026bc821dbf53b53c2de2374872feec875f9 evaluation/run_production_test_baselines.py
+1 .M N... 100644 100644 100644 3105bfa5509cea42234422593338215a525772a9 3105bfa5509cea42234422593338215a525772a9 evaluation/run_production_test_retrieval.py
+1 .M N... 100644 100644 100644 448a75219b4a591fc332890d88b633fc4327184b 448a75219b4a591fc332890d88b633fc4327184b evaluation/test_generator_d_production_smoke.py
+1 .M N... 100644 100644 100644 4e88acf8bcf68cc62490532d0b8c89b0f44cbca2 4e88acf8bcf68cc62490532d0b8c89b0f44cbca2 evaluation/validate_gold_free_candidate_pools.py
+1 .M N... 100644 100644 100644 4888d6d56ec4215a0eeede9895d36a646b3c81c1 4888d6d56ec4215a0eeede9895d36a646b3c81c1 experiments/cross_encoder_reranking_dev_v1/run_experiment.py
+1 M. N... 100644 100755 100755 d192da61f97b4e125d9538e0c01d092c3cb6e684 d192da61f97b4e125d9538e0c01d092c3cb6e684 experiments/symbolic_coefficients_original_v1/run_test_on_gpu.sh
+1 .M N... 100644 100644 100644 d3a5792fe5cfd1f135585e9165c39f627ecbc6bc d3a5792fe5cfd1f135585e9165c39f627ecbc6bc experiments/symbolic_coefficients_original_v1/test_pipeline.py
+1 .M N... 100644 100644 100644 7d59a7f4c5dafafdddd21b006e9d5eb7e31e92d5 7d59a7f4c5dafafdddd21b006e9d5eb7e31e92d5 generation/run_gold_support_complete_oracle.py
+1 .M N... 100644 100644 100644 7fa1d208db58f87c8be14f0e9fe3f1469ed0b687 7fa1d208db58f87c8be14f0e9fe3f1469ed0b687 generation/run_production_test_answer_generation.py
+1 .M N... 100644 100644 100644 acbbd719ba304f73b52aa8a3dbedd4e607770c59 acbbd719ba304f73b52aa8a3dbedd4e607770c59 tests/test_gold_free_retrieval.py
+1 .M N... 100644 100644 100644 b8ec2bfe7ef968d2a95ef1717ae3072781aed36d b8ec2bfe7ef968d2a95ef1717ae3072781aed36d tests/test_gold_support_complete_oracle.py
+1 .M N... 100644 100644 100644 c009347a26b0a3c9a15905ea556b4b15300ab460 c009347a26b0a3c9a15905ea556b4b15300ab460 tests/test_prepare_production_gnn_rag_clean.py
+1 .M N... 100644 100644 100644 dc5804e7d0d61d2e1749f9b80bafc6945d1553b3 dc5804e7d0d61d2e1749f9b80bafc6945d1553b3 tests/test_symbolic_coefficients_original_v1_test_pipeline.py
+1 .M N... 100644 100644 100644 6506368102175276b48524c59494edca5c8f031c 6506368102175276b48524c59494edca5c8f031c tests/test_unified_evidence_graph_candidates.py
+1 .M N... 100644 100644 100644 0da6fd142196ddfed2d2a392e5a27440d55f6918 0da6fd142196ddfed2d2a392e5a27440d55f6918 training/train_gnn_subgraph_retriever.py
+? data/production_generator_d_v1_1/FamilyOWL_1hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_1hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_1hop/metadata.json
+? data/production_generator_d_v1_1/FamilyOWL_1hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_1hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_1hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_1hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_2hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_2hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_2hop/metadata.json
+? data/production_generator_d_v1_1/FamilyOWL_2hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_2hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_2hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/FamilyOWL_2hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_1hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_1hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_1hop/metadata.json
+? data/production_generator_d_v1_1/OWL2Bench_1hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_1hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_1hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_1hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_2hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_2hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_2hop/metadata.json
+? data/production_generator_d_v1_1/OWL2Bench_2hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_2hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_2hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/OWL2Bench_2hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza100_1hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza100_1hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza100_1hop/metadata.json
+? data/production_generator_d_v1_1/Pizza100_1hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza100_1hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza100_1hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza100_1hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza100_2hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza100_2hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza100_2hop/metadata.json
+? data/production_generator_d_v1_1/Pizza100_2hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza100_2hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza100_2hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza100_2hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza250_1hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza250_1hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza250_1hop/metadata.json
+? data/production_generator_d_v1_1/Pizza250_1hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza250_1hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza250_1hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza250_1hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza250_2hop/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza250_2hop/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza250_2hop/metadata.json
+? data/production_generator_d_v1_1/Pizza250_2hop/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza250_2hop/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/Pizza250_2hop/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/Pizza250_2hop/train_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/dev_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/dev_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/test_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/test_subgraph_retrieval.jsonl
+? data/production_generator_d_v1_1/train_answer_only_no_explanation.jsonl
+? data/production_generator_d_v1_1/train_subgraph_retrieval.jsonl
+? data_processing/ontology_benchmark_schema.py
+? docs/GENERATOR_D_V1_1_BOUNDED_PREDICATE_CONNECTIVITY.md
+? evaluation/analyze_optimized_stagewise_test_errors.py
+? evaluation/compare_generator_d_v1_1_dev.py
+? evaluation/smoke_owl_v1_1_compatibility.py
+? generation/run_optimized_sageqa_answer_generation.py
+? tests/test_ontology_v1_1_compatibility.py
+? tests/test_optimized_sageqa_answer_generation.py
+? tests/test_optimized_stagewise_test_errors.py
+
+[staged_summary]
+ mode change 100644 => 100755 experiments/symbolic_coefficients_original_v1/run_test_on_gpu.sh
+
+[staged_name_status]
+M	experiments/symbolic_coefficients_original_v1/run_test_on_gpu.sh
+
+[unstaged_name_status]
+warning: LF will be replaced by CRLF in data/build_subgraph_training_data.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in data_processing/evidence_graph_candidates.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in data_processing/prepare_familyowl_gnn_rag.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in data_processing/prepare_production_gnn_rag_clean.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/analyze_stagewise_test_errors.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/evaluate_owl_qa_predictions.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/fit_production_dev_adaptive_k.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/prepare_cross_encoder_adaptive_dev.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/run_production_gnn_rag_final_test.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/run_production_test_baselines.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/run_production_test_retrieval.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/test_generator_d_production_smoke.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in evaluation/validate_gold_free_candidate_pools.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in experiments/cross_encoder_reranking_dev_v1/run_experiment.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in generation/run_gold_support_complete_oracle.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in generation/run_production_test_answer_generation.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in tests/test_gold_free_retrieval.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in tests/test_gold_support_complete_oracle.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in tests/test_prepare_production_gnn_rag_clean.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in tests/test_unified_evidence_graph_candidates.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in training/train_gnn_subgraph_retriever.py.
+The file will have its original line endings in your working directory
+M	data/build_subgraph_training_data.py
+M	data_processing/evidence_graph_candidates.py
+M	data_processing/prepare_familyowl_gnn_rag.py
+M	data_processing/prepare_production_gnn_rag_clean.py
+M	evaluation/analyze_stagewise_test_errors.py
+M	evaluation/evaluate_owl_qa_predictions.py
+M	evaluation/fit_production_dev_adaptive_k.py
+M	evaluation/prepare_cross_encoder_adaptive_dev.py
+M	evaluation/run_production_gnn_rag_final_test.py
+M	evaluation/run_production_test_baselines.py
+M	evaluation/run_production_test_retrieval.py
+M	evaluation/test_generator_d_production_smoke.py
+M	evaluation/validate_gold_free_candidate_pools.py
+M	experiments/cross_encoder_reranking_dev_v1/run_experiment.py
+M	generation/run_gold_support_complete_oracle.py
+M	generation/run_production_test_answer_generation.py
+M	tests/test_gold_free_retrieval.py
+M	tests/test_gold_support_complete_oracle.py
+M	tests/test_prepare_production_gnn_rag_clean.py
+M	tests/test_unified_evidence_graph_candidates.py
+M	training/train_gnn_subgraph_retriever.py
+
+[untracked_files]
+warning: could not open directory '.pytest-tmp-optimized-answer/': Permission denied
+warning: could not open directory 'pytest-of-julie/': Permission denied
+data/production_generator_d_v1_1/FamilyOWL_1hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/FamilyOWL_1hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/FamilyOWL_1hop/metadata.json
+data/production_generator_d_v1_1/FamilyOWL_1hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/FamilyOWL_1hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/FamilyOWL_1hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/FamilyOWL_1hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/FamilyOWL_2hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/FamilyOWL_2hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/FamilyOWL_2hop/metadata.json
+data/production_generator_d_v1_1/FamilyOWL_2hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/FamilyOWL_2hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/FamilyOWL_2hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/FamilyOWL_2hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/OWL2Bench_1hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/OWL2Bench_1hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/OWL2Bench_1hop/metadata.json
+data/production_generator_d_v1_1/OWL2Bench_1hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/OWL2Bench_1hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/OWL2Bench_1hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/OWL2Bench_1hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/OWL2Bench_2hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/OWL2Bench_2hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/OWL2Bench_2hop/metadata.json
+data/production_generator_d_v1_1/OWL2Bench_2hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/OWL2Bench_2hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/OWL2Bench_2hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/OWL2Bench_2hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza100_1hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza100_1hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza100_1hop/metadata.json
+data/production_generator_d_v1_1/Pizza100_1hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza100_1hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza100_1hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza100_1hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza100_2hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza100_2hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza100_2hop/metadata.json
+data/production_generator_d_v1_1/Pizza100_2hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza100_2hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza100_2hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza100_2hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza250_1hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza250_1hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza250_1hop/metadata.json
+data/production_generator_d_v1_1/Pizza250_1hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza250_1hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza250_1hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza250_1hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza250_2hop/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza250_2hop/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza250_2hop/metadata.json
+data/production_generator_d_v1_1/Pizza250_2hop/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza250_2hop/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/Pizza250_2hop/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/Pizza250_2hop/train_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/dev_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/dev_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/test_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/test_subgraph_retrieval.jsonl
+data/production_generator_d_v1_1/train_answer_only_no_explanation.jsonl
+data/production_generator_d_v1_1/train_subgraph_retrieval.jsonl
+data_processing/ontology_benchmark_schema.py
+docs/GENERATOR_D_V1_1_BOUNDED_PREDICATE_CONNECTIVITY.md
+evaluation/analyze_optimized_stagewise_test_errors.py
+evaluation/compare_generator_d_v1_1_dev.py
+evaluation/smoke_owl_v1_1_compatibility.py
+generation/run_optimized_sageqa_answer_generation.py
+tests/test_ontology_v1_1_compatibility.py
+tests/test_optimized_sageqa_answer_generation.py
+tests/test_optimized_stagewise_test_errors.py

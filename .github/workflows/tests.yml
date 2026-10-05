@@ -1,0 +1,39 @@
+name: reproducibility-contracts
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  source-verification:
+    name: Source-only verification (not artifact reproduction)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install source-verification dependencies
+        run: python -m pip install pytest==9.0.2 PyYAML==6.0.2
+      - name: Compile tracked first-party Python
+        run: >-
+          python -m compileall -q
+          data data_processing evaluation experiments generation models training utils
+      - name: Import lightweight evaluator and path contracts
+        run: >-
+          python -c "import evaluation.evaluate_owl_qa_predictions;
+          import evaluation.verify_canonical_retrieval_overlay; import utils.paths"
+      - name: Run existing source-only reproducibility contracts
+        run: >-
+          python -m pytest -q -p no:cacheprovider
+          tests/reproducibility/test_original_paper_contracts.py::test_original_paper_candidate_and_historical_modules_exist_in_git
+          tests/reproducibility/test_original_paper_contracts.py::test_original_paper_index_fails_closed_on_unproven_lineage
+      - name: Run reviewer and manifest contracts
+        run: >-
+          python -m pytest -q -p no:cacheprovider
+          tests/ci/test_reviewer_contracts.py
+          tests/ci/test_reviewer_artifact_tools.py

@@ -1,90 +1,85 @@
 # SAGE-QA
 
-SAGE-QA is a retrieval-augmented question-answering system for multi-hop reasoning over
-text benchmarks and OWL-style datasets. This repository contains the published-paper
-workflow and the current Thesis Chapter 7 workflow as two distinct, reproducible
-protocols.
+SAGE-QA is a retrieval-augmented question-answering system for multi-hop text and
+OWL-style benchmarks. This repository preserves two scientifically distinct research
+versions. They share infrastructure, but their candidate-generation and evaluation
+protocols must not be interchanged.
 
-## Reproduce the published paper
+| Reproduction path | Scientific status | What a fresh clone can do now |
+|---|---|---|
+| [Original published paper](docs/REPRODUCIBILITY.md#path-a-original-published-paper) | Historical, gold-informed candidate generation; source revision is the strongest candidate, not proven authoritative | Inspect and test source contracts; full replay is blocked until the unpublished artifact package is restored |
+| [Revised thesis experiments](docs/REPRODUCIBILITY.md#path-b-revised-thesis-experiments) | TEST retrieval and reader inputs frozen before gold evaluation; includes hard-pair-v2 and the later optimized SAGE-QA correction | Inspect and test source/manifests; verify frozen outputs after restoring the unpublished thesis package |
 
-The paper reports six settings: HotpotQA, 2WikiMultiHopQA, FamilyOWL 1-hop and 2-hop,
-and OWL2Bench 1-hop and 2-hop. The historical pipeline combines lexical retrieval,
-GraphSAGE ranking, SAGE-QA Text-Chain or Proof reasoning, and GNN-RAG through
-[`experiments/run_experiments.py`](experiments/run_experiments.py).
+## Reviewer quick start: reproduce both result-table families
 
-Restore the six processed dataset roots, six GraphSAGE checkpoint roots, raw inputs,
-and `outputs/full_results/` described by
-[`release_manifests/paper_original/index.yaml`](release_manifests/paper_original/index.yaml).
-Verify the supported historical contracts without an API call:
+The review package supplies these two files separately from Git:
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider `
-  --basetemp .tmp/reproducibility/paper `
-  tests/reproducibility/test_original_paper_contracts.py `
-  tests/test_evaluate_owl_qa_predictions.py
-```
+- `paper_table_artifacts.zip` — SHA-256
+  `7e776628d2988222ce0f7770bda868d94ee49fec6ffc705e7b30b1bea76a1b48`
+- `thesis_table_artifacts.zip` — SHA-256
+  `18d9faf7b483f59a2ba6367e28db20d2ef7071bd6bb8ca06da4464376f7e7ea1`
 
-The reproduction entry point for exactly the six reported settings is:
+Place them under `release/reviewer_artifacts/` in a fresh clone, then run:
 
 ```powershell
-.\.venv\Scripts\python.exe experiments/run_experiments.py `
-  --datasets hotpotqa,2wiki,familyowl_1hop,familyowl_2hop,owl2bench_1hop,owl2bench_2hop `
-  --methods auto --top-k 3
+python scripts/restore_reviewer_artifacts.py release/reviewer_artifacts/paper_table_artifacts.zip
+python scripts/restore_reviewer_artifacts.py release/reviewer_artifacts/thesis_table_artifacts.zip
+python scripts/reproduce_reported_tables.py --output-dir reproduced_tables
 ```
 
-This scientific run may train or load GPU models and may call a hosted reader. Commit
-`dbdbb50708bdc6c686ef82518ec71c1d1bf55985` is the strongest paper-source candidate,
-but the exact published-result/source binding remains unproven. See
-[`REPRODUCE.md`](REPRODUCE.md) and
-[`docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md`](docs/ORIGINAL_PAPER_SOURCE_REVISIONS.md).
+The restore commands validate every file against the embedded per-file manifest. The
+reproduction command materializes the hash-verified frozen paper tables, independently
+reruns the thesis retrieval and end-to-end finalizers,
+requires byte-identical agreement with the retained hard-pair-v2 tables, and replays the
+optimized overlay from the frozen selected supports. Outputs and hashes are written to
+`reproduced_tables/REPRODUCTION_MANIFEST.json`.
 
-## Reproduce Thesis Chapter 7
+## Source-only verification
 
-Chapter 7 reports ten settings: the six above plus Pizza 100 and Pizza 250 at 1-hop and
-2-hop. Its main pipeline is:
-
-```text
-Generator D -> DistilBERT cross-encoder -> Text-Chain / Proof
-            -> adaptive support aggregation -> support-grounded reader
-```
-
-The retained release also covers lexical, clean GNN-RAG, and full-context baselines;
-the hard-pair GraphSAGE ablation; the complete ground-truth support reference condition;
-and stage-wise error analysis. Restore the paths indexed by `thesis_final`,
-`thesis_baselines`, `thesis_graph_ablation`, and `oracle`, then run:
+These commands use only tracked files and do not train models, call an API, or claim
+artifact reproduction:
 
 ```powershell
-.\.venv\Scripts\python.exe evaluation/check_thesis_final_paths.py
-.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider `
-  --basetemp .tmp/reproducibility/thesis-fast `
-  tests/reproducibility --ignore=tests/reproducibility/test_original_paper_contracts.py
+python -m pip install pytest==9.0.2 PyYAML==6.0.2
+python -m compileall -q data data_processing evaluation experiments generation models training utils
+python -m pytest -q -p no:cacheprovider tests/ci/test_reviewer_contracts.py
+python -m pytest -q -p no:cacheprovider `
+  tests/reproducibility/test_original_paper_contracts.py::test_original_paper_candidate_and_historical_modules_exist_in_git `
+  tests/reproducibility/test_original_paper_contracts.py::test_original_paper_index_fails_closed_on_unproven_lineage
 ```
 
-Exact stage commands and GPU/API boundaries are in [`REPRODUCE.md`](REPRODUCE.md).
-Frozen retrieval, predictions, metrics, and manifests can be verified without calling an
-external API. The indexed `884480be53c554edae70d3b2d8e781847590aa69` revision is the
-scientific thesis-source baseline; later documentation-only commits do not redefine it.
+Full model training and hosted-reader regeneration remain outside this table-replay
+acceptance path. See [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) for that boundary.
 
-## Results
+## Evidence states
 
-[`RESULTS.md`](RESULTS.md) maps the published-paper results and each reported Chapter 7
-result family to its frozen artifact root and release manifest.
+- **Recovered and hash-verified:** original bytes are present and match recorded hashes.
+- **Independently reconstructed result:** a metric was recomputed from retained frozen
+  supports; this is not recovery of its missing upstream artifact.
+- **Missing raw artifact:** only the expected path/hash or downstream binding survives.
+- **Unverified historical provenance:** surviving files are associated by paths and
+  protocol, but no contemporaneous manifest proves the exact source/result binding.
 
-## Artifact download
+The optimized retrieval overlay is an independently reconstructed metric view. It
+matches the retained selected supports and canonical annotated-reference evaluator, but
+the original optimized TEST ranking file with SHA-256 `770ef934...` remains missing.
 
-**REVIEWER_REPRODUCTION_BLOCKER:** no verified public download URL is currently bound to
-the required paper or Chapter 7 artifact bundles. A fresh clone therefore cannot perform
-complete artifact verification or scientific reproduction.
+## Documentation map
 
-The required publication units are `paper_original_artifacts` and
-`thesis_ch7_artifacts`, with checksums and extraction paths matching
-[`docs/ARTIFACTS.md`](docs/ARTIFACTS.md). No URL is claimed until it has been published
-and verified.
+- [Reproduction procedures](docs/REPRODUCIBILITY.md)
+- [Experiment lineage and hashes](docs/EXPERIMENT_LINEAGE.md)
+- [Official and diagnostic evaluation](docs/EVALUATION_PROTOCOL.md)
+- [Archival package specifications](docs/ARCHIVAL_PACKAGES.md)
+- [Phase 2 evidence gate](docs/PHASE2_REPRODUCIBILITY_GATE.md)
+- [Machine-readable release manifests](release_manifests/)
 
-## Citation / License
+## Availability boundary
 
-Citation metadata is in [`CITATION.cff`](CITATION.cff). First-party code is released
-under the [`MIT License`](LICENSE). The adapted GNN-RAG baseline is third-party code;
-consult its upstream terms and
-[`patches/GNN-RAG-local-changes.md`](patches/GNN-RAG-local-changes.md) before use or
-redistribution.
+The two compact table-reproduction packages are built and hash-bound but supplied
+separately because frozen predictions do not belong in normal Git history. The larger
+training/checkpoint archives remain specifications only. Hosted-reader regeneration is
+nondeterministic and requires external credentials; table reproduction and verification
+of frozen answers do not.
+
+Citation metadata is in [CITATION.cff](CITATION.cff). First-party code is MIT-licensed;
+the vendored GNN-RAG components retain their upstream licensing constraints.

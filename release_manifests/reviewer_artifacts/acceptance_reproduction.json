@@ -1,0 +1,150 @@
+{
+  "schema_version": "sageqa_reproduced_tables_v1",
+  "reports": {
+    "paper": {
+      "status": "paper_reported_tables_materialized_from_verified_frozen_outputs",
+      "files": [
+        "full_pipeline_results.csv",
+        "full_pipeline_results.json",
+        "sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv"
+      ],
+      "historical_protocol": "gold_informed_candidate_generation"
+    },
+    "thesis": {
+      "status": "thesis_tables_reproduced_and_matched_frozen_outputs",
+      "hard_pair_v2_products_byte_identical": true,
+      "optimized_overlay": {
+        "status": "verified_derived_overlay",
+        "eligible_examples": 3509,
+        "settings": [
+          "adaptive",
+          "k1"
+        ],
+        "checked_setting_rows": 7018,
+        "raw_selection_artifact_recovered": false
+      }
+    }
+  },
+  "files": [
+    {
+      "path": "paper/full_pipeline_results.csv",
+      "size_bytes": 1595,
+      "sha256": "df3c6292d71341ee9e8873528e908a0dea846cb8f29d6fa08542f41dc6b62473"
+    },
+    {
+      "path": "paper/full_pipeline_results.json",
+      "size_bytes": 3864,
+      "sha256": "8c81730ad8fa273c03d41d6e91dbe275f493d10d27aa4006ea6683f74a186e7c"
+    },
+    {
+      "path": "paper/sageqa_retrieval_prf_deduplicated_union_k1_k2_k3_k5.csv",
+      "size_bytes": 1787,
+      "sha256": "7b51af85cbdf5108beeb7ebad2da7d1ffe238c7ab6079674ebedd545aa575012"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/ablation_table.tex",
+      "size_bytes": 739,
+      "sha256": "df48ec1d0424e1582adc2f7c777a0846324521612ab83e117f907d5d0b20fe64"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/artifact_manifest.json",
+      "size_bytes": 2567,
+      "sha256": "abae2deee3430a0f5ba1b6fe1c5ea5f4a533f739638e03f3178fb0cead9c0811"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/canonical_metrics.json",
+      "size_bytes": 8779,
+      "sha256": "8cc472c49cd4ab4dca55a57d97fb6560557f2cf846c5d445e35775a07ba54c43"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/evaluation_protocol.md",
+      "size_bytes": 1456,
+      "sha256": "40207620b769bdac2b70649b24686fe4d11b9d28887424d1a3d0c9a1e23f72bb"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/main_table.tex",
+      "size_bytes": 911,
+      "sha256": "5ebcd4fba22a679aa87a45be7be19f2c12e19e8d36b1d3adb02d2142afeb2a12"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/metrics.json",
+      "size_bytes": 15413,
+      "sha256": "11cb2e5b1c4d118d8178946e44b614c28a749080287ce9820be66eceb35c3a37"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/per_dataset.csv",
+      "size_bytes": 12885,
+      "sha256": "7e69922bfe0f8522f8b2bc1d5df6a984f44aa581d504b4dee19a43dcc77b173a"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/per_example_end_to_end.jsonl",
+      "size_bytes": 7585496,
+      "sha256": "f946e51059352eb700d8e49e0de70b4e288acf8f15bf384dc611c650773fea42"
+    },
+    {
+      "path": "thesis/end_to_end_hard_pair_v2/SUMMARY.md",
+      "size_bytes": 1267,
+      "sha256": "d007a2042c5b75468edbedb12900c59bfaf7c3745ea7d8203703ea2681b44728"
+    },
+    {
+      "path": "thesis/optimized_overlay/end_to_end_metrics.json",
+      "size_bytes": 7465,
+      "sha256": "ea9888f607e8784742b5493678f95e12f590badafd57b0cdd128c2145654665e"
+    },
+    {
+      "path": "thesis/optimized_overlay/retrieval_overall.csv",
+      "size_bytes": 380,
+      "sha256": "64a086b5fe02b6b367dbaccfb63fb7c48d2915b8b2dfb8ccea2b6d661face50c"
+    },
+    {
+      "path": "thesis/optimized_overlay/retrieval_per_dataset.csv",
+      "size_bytes": 1672,
+      "sha256": "97a2d05f4c3b2b04a10be727f04d83aa18ba3121a0b6b236db3cd2fa18cb35da"
+    },
+    {
+      "path": "thesis/optimized_overlay/verification.json",
+      "size_bytes": 205,
+      "sha256": "e1e6b0747121cbc716afeef448a3ea82e3cec54bb12ea75e5a9c44b1062d7b59"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/ablation_table.tex",
+      "size_bytes": 8457,
+      "sha256": "e13507097e01bf9900e7dc493ec867c22d4cb03af52bb3d3585cce5c80820621"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/artifact_manifest.json",
+      "size_bytes": 4456,
+      "sha256": "c372892f9497bd9b43d1ba0e9ebcd6841fffc1661c6682aee8bb356b3c99d2ef"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/canonical_metrics.json",
+      "size_bytes": 10348,
+      "sha256": "b6e293275af51ee473f2084b50647fe5e3aba8527b0ec6ce50b1c62e962b86f8"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/cohort_audit.csv",
+      "size_bytes": 1742,
+      "sha256": "992e828de44e829fa134f6b2818c321ad3fde65b90c7cd08a5e24c81bfe6d55d"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/comparison_summary.md",
+      "size_bytes": 725,
+      "sha256": "41df1e7bd4ec671cdf77678d2896ebef3bc2bbb888ed98523e14c4c3a26bfc60"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/evaluation_protocol.md",
+      "size_bytes": 1346,
+      "sha256": "03c29344d43ff88cfddc6d5a6fb0ebb080208934b9a4a180ea9d116072a000f1"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/main_table.tex",
+      "size_bytes": 4025,
+      "sha256": "23d5c24c14d5820452fe77a18f2ce7acb3a902be8ba0e39cac8c4e72c71f172c"
+    },
+    {
+      "path": "thesis/retrieval_hard_pair_v2/per_dataset.csv",
+      "size_bytes": 17363,
+      "sha256": "962bf20d7dd4a4f3ff19c9f0c2c953f03a646a71d0f4440949bb4a05fa7c2123"
+    }
+  ]
+}

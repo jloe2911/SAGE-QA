@@ -1,0 +1,90 @@
+schema_version: sageqa_logical_release_index_v1
+category: thesis_optimized_symbolic_coefficients
+status: prepared_phase2_missing_upstream_frozen_bundle
+base_source_revision: 75010ef4dffde3fcbd89cc8669da3d63423924b0
+protocol: frozen Generator D v1 candidates -> frozen DistilBERT logits -> DEV-selected original-v1 symbolic coefficients -> DEV-fitted adaptive policy -> TEST ranking frozen before gold join -> support-grounded answer generation
+scientific_status:
+  completed: true
+  raw_test_selection_bundle_recovered: false
+  downstream_outputs_hash_verified: true
+  regeneration_performed_in_phase2: false
+git_text_hash_mode: sha256_utf8_lf
+git_sources:
+  - path: experiments/symbolic_coefficients_original_v1
+    status: tracked_at_source_revision
+  - path: generation/run_optimized_sageqa_answer_generation.py
+    sha256: 541383a9cf9320ebdd549be6c31f15ecb85a03bb6f9ff542576ee08efab83681
+  - path: evaluation/analyze_optimized_stagewise_test_errors.py
+    sha256: a2bcf72c3d7183f507345608c77776e5d27e04a1161ae8b7c61ba88ee43b9a2e
+  - path: tests/test_optimized_sageqa_answer_generation.py
+    sha256: 7fbd7e188b49e9c6ab703074f60d2dfead86341a584d5f238a725f1c50edb5a5
+  - path: tests/test_optimized_stagewise_test_errors.py
+    sha256: 4252c436b3c0644a3d7322c05f182ea0152f8945a4ebc8e02f0ebc2e4a82884b
+recovered_dev_inputs:
+  predictions:
+    path: outputs/development_runs/question_candidate_cross_encoder_v1/dev_predictions_frozen.jsonl
+    sha256: 7d5a6e9c0afbc9b7e13669da27c51fdff559c35b64781e8f0fdbc52f68172e34
+  prediction_freeze:
+    path: outputs/development_runs/question_candidate_cross_encoder_v1/prediction_freeze.json
+    sha256: 92b1b94886408e2b510d106de795de36cf48e2dec481a99db44b4632810f69d7
+  preflight_manifest:
+    path: outputs/development_runs/question_candidate_cross_encoder_v1/preflight_manifest.json
+    sha256: 624d5941d96115aadbc4d23a11f4d65d14d4cb29e0acdd1a65653a4039754bf1
+  checkpoint:
+    path: outputs/development_runs/question_candidate_cross_encoder_v1/checkpoint_final/model.safetensors
+    sha256: 02b06c91fa422369a0b0adbab3b33bfcf80f335b7c8a5911084c3b82af117ba9
+  candidate_validation: passed_all_ten_dev_files
+missing_upstream_bundle:
+  expected_location: outputs/development_runs/symbolic_coefficients_original_v1
+  selected_coefficients_sha256: 9cc3d4b870721964d335c21605aeaf1134650aa53fc07397f467654a68e74f8b
+  adaptive_policy_manifest_sha256: 45f771a36c4b1dd1d9115ec909058a6a97dbe2e074ca35d8f746b2143606ce16
+  original_vs_selected_dev_sha256: 0c08b16fe3793429aaa0e04ab35c062c224c08de9a629a65950b36179fb634c0
+  note: Exact expected per-file hashes remain pinned in experiments/symbolic_coefficients_original_v1/test_pipeline.py. No substitute was generated.
+missing_test_selection_bundle:
+  expected_location: outputs/final_results/symbolic_coefficients_original_v1_test
+  predictions_sha256: 770ef934fca43279b875a5c711765d7771f600fdcfd382590070d2d166293264
+  generation_freeze_sha256: 64da149fa9c4952928679c55d81cc544a7d732e46bc33b50c41d37ed353e9212
+  artifact_manifest_sha256: d985b4af748dea7ccbdc1f90c81169410ba9d8b537b6168dafb279894936cd40
+  preflight_manifest_sha256: 3b554541578e486b4df3e6fc1a63438b2825f2b1de4d40c881402e67181da46b
+verified_completed_outputs:
+  answer_bundle:
+    root: outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end
+    status: complete_frozen
+    files:
+      frozen_reader_inputs.jsonl: 08e493b2780ccef60f0e2b35574bf7075510255e690af79909ae72244c18f992
+      reuse_plan.jsonl: 0b3ee3643e886f7465a328cc28b4eb01ed44706220bf426fbcf9e3de3298bec2
+      preflight_report.json: 4da3dc065983b07acdcd12556ee4c5ea17cd27a60d476f4c45a723fe7e84ffca
+      predictions.jsonl: 712fce04ed8d25bbee55e34a3d71927b70af252101a0c742c62a537cdc8c4dc6
+      per_example_end_to_end.jsonl: 3d5e244c681277d42d3451cb101bae5d2e7bebd602c658e8ac45c6104c6661c1
+      metrics.json: ea9888f607e8784742b5493678f95e12f590badafd57b0cdd128c2145654665e
+      generation_freeze.json: d7285e44c2e6401270bb3a6f5b3bef30bd95f2fe7bcbde870e49349f04b7d3ba
+    stale_preflight_manifest:
+      path: outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end/artifact_manifest.json
+      sha256: 2e676344625e0d55ef727d8c073a3f8ce783b06d81c4c8239eaf09044f36577e
+      disposition: preserve_as_historical_but_do_not_use_as_completion_inventory
+  stagewise_bundle:
+    root: outputs/final_results/symbolic_coefficients_original_v1_stagewise_error_analysis
+    status: complete_evaluation_only
+    artifact_manifest_sha256: a8d6cf73d016059c9cd002d6d227fd28cefeae595e11ab853a6b00695c507f97
+    summary_sha256: 12006adeffba7029a0eb2a9e326b1f79391326c1a2e275fd76e16193030104ad
+    per_example_stagewise_sha256: c1ba4c93bc7ff99ccd21a3c625cb6183dcbf53b68075a301a4fba92f1f180290
+canonical_retrieval_overlay:
+  path: release_manifests/thesis_optimized/canonical_retrieval_overlay.json
+  sha256: eaf45f961cb898513571aabc6172597633e281b458b4764efd53c3cc38c1e28e
+  base_export: outputs/final_results/manuscript_retrieval_results_hard_pair_v2/canonical_metrics.json
+  base_export_sha256: b6e293275af51ee473f2084b50647fe5e3aba8527b0ec6ce50b1c62e962b86f8
+storage:
+  track_in_git:
+    - experiments/symbolic_coefficients_original_v1
+    - generation/run_optimized_sageqa_answer_generation.py
+    - evaluation/analyze_optimized_stagewise_test_errors.py
+    - tests/test_optimized_sageqa_answer_generation.py
+    - tests/test_optimized_stagewise_test_errors.py
+    - release_manifests/thesis_optimized
+  external_checksummed_archive:
+    - outputs/development_runs/question_candidate_cross_encoder_v1
+    - outputs/development_runs/symbolic_coefficients_original_v1
+    - outputs/final_results/symbolic_coefficients_original_v1_test
+    - outputs/final_results/symbolic_coefficients_original_v1_test_end_to_end
+    - outputs/final_results/symbolic_coefficients_original_v1_stagewise_error_analysis
+    - data/production_generator_d_v1

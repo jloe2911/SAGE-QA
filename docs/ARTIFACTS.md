@@ -53,3 +53,17 @@ Until both bundles have verified locations, a fresh clone supports source inspec
 not complete artifact verification or end-to-end reproduction. Hosted-reader answer
 generation additionally requires provider credentials and availability; frozen answers
 can be verified locally without an API call.
+
+Phase 3 package specifications supersede the informal bundle lists above:
+
+- `release_manifests/archive_specs/paper_original.yaml`
+- `release_manifests/archive_specs/thesis_final.yaml`
+
+The thesis specification retains hard-pair-v2 as a separate historical thesis artifact
+and identifies the optimized retrieval overlay as a derived result. It preserves the
+recorded hashes of missing optimized upstream artifacts without claiming recovery.
+
+For reviewer table reproduction, use the compact, hash-bound packages recorded in
+`release_manifests/reviewer_artifacts/`. They contain only the frozen outputs consumed by
+the table replay scripts; they do not claim to support retraining or hosted-reader
+regeneration.
